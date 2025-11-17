@@ -1,9 +1,5 @@
-# syntax=docker/dockerfile:1.7
+FROM python:3.12.9-slim
 
-############################
-# 0) 通用基础层（环境与目录）
-############################
-FROM python:3.12.9-slim AS base
 ENV TZ=Etc/UTC \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
@@ -12,43 +8,37 @@ ENV TZ=Etc/UTC \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple \
     PIP_NO_CACHE_DIR=1
+
 WORKDIR /app
 
-############################
-# 1) 依赖构建阶段（仅用于产出 wheels）
-############################
-FROM base AS deps
-# 如果你的依赖里含有需要编译的包（如 uvloop、psycopg2、lxml 等），
-# 这里安装最小化的编译工具链。按需添加其它 -dev 包。
-RUN apt-get update && apt-get install -y --no-install-recommends build-essential \
-    && rm -rf /var/lib/apt/lists/*
+# 安装 curl 和 bash，以便后续使用
+RUN apt-get update && apt-get install -y curl bash && rm -rf /var/lib/apt/lists/*
 
-# 只拷贝依赖清单以利用缓存
-COPY requirements.txt ./
+# 安装 uv 并将其添加到 PATH
+RUN curl -LsSf https://astral.sh/uv/install.sh | bash && \
+    echo "UV_PATH=/root/.local/bin" >> /etc/environment && \
+    ln -s /root/.local/bin/uv /usr/local/bin/uv
 
-# 利用 BuildKit 缓存加速 pip；把依赖构建为 wheels，离线可重用
-RUN --mount=type=cache,target=/root/.cache/pip \
-    python -m pip install --upgrade pip setuptools wheel && \
-    pip wheel --wheel-dir /wheels -r requirements.txt
+# 更新 PATH 环境变量，使得 uv 可以被访问
+ENV PATH="/root/.local/bin:$PATH"
 
-############################
-# 2) 运行阶段（瘦身）
-############################
-FROM base AS runtime
-WORKDIR /app
+# 确认 uv 安装是否成功
+RUN uv --version
 
-# 先把 wheels 与清单放进来，离线安装，避免携带编译工具
-COPY --from=deps /wheels /wheels
-COPY requirements.txt ./
-RUN pip install --no-index --find-links=/wheels -r requirements.txt && \
-    rm -rf /wheels
-
-# 再拷贝业务代码（放在后面，改代码不破坏前面的缓存）
+# 拷贝业务代码（放在后面，改代码不破坏前面的缓存）
 COPY . .
 
-# 根据你的程序暴露端口（FastAPI/Uvicorn 常用 8000）
+# 使用 uv 来同步并安装依赖
+RUN uv venv
+
+RUN bash -c "source .venv/bin/activate"
+
+# 暴露端口
 EXPOSE 8000
 
-# 运行 FastAPI 应用——保持与你原始配置一致
-# 注意：--loop uvloop 与 --http httptools 需要在 requirements.txt 中包含 uvicorn[standard] 或相应依赖
-ENTRYPOINT ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--loop", "uvloop", "--http", "httptools", "--access-log"]
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD ss -lnt | grep -q 8000 || exit 1
+
+# 运行 FastAPI 应用
+ENTRYPOINT ["bash", "-c", "source .venv/bin/activate && uvicorn main:app --host 0.0.0.0 --port 8000 --loop uvloop --http httptools --access-log"]

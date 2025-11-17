@@ -49,5 +49,6 @@ dependencies = [
     "tzdata",
     "tzlocal",
     "typing-extensions",
-    "typing-inspection"
+    "typing-inspection",
+    "xxhash"
 ]

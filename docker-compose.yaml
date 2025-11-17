@@ -1,11 +1,9 @@
-version: "3.9"
 services:
   pydev:
     build: .
     container_name: pydev
-    # 仅监听 127.0.0.1 的 2222，避免同网段机器能扫到
     ports:
-      - "127.0.0.1:2222:22"
+      - "12222:8080"
     volumes:
       - ./:/app
     restart: unless-stopped
