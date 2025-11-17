@@ -3,7 +3,7 @@
 
 > 统一开发与部署流程的现代 Python 环境管理方案  
 > 适用于个人开发、团队协作、Docker 构建与 CI/CD 场景
-
+> 需要手动维护pyproject.toml
 ---
 
 ## 🧩 一、环境初始化
@@ -11,7 +11,7 @@
 ```bash
 # 创建虚拟环境（指定 Python 版本）
 uv venv .venv --python 3.12
-
+uv pip install pip setuptools wheel
 # 激活环境
 source .venv/bin/activate     # Linux / macOS
 .venv\Scripts\activate        # Windows
@@ -110,4 +110,3 @@ uv sync --locked
 
 *维护环境时不需要魔法，只需要一个好习惯：
 锁定、同步、重现。*
-
