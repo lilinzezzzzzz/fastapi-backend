@@ -50,4 +50,5 @@ dependencies = [
     "tzlocal",
     "typing-extensions",
     "typing-inspection",
+    "requests"
 ]
