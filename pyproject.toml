@@ -50,5 +50,7 @@ dependencies = [
     "tzlocal",
     "typing-extensions",
     "typing-inspection",
-    "xxhash"
+    "xxhash",
+    "uvloop",
+    "httptools"
 ]
