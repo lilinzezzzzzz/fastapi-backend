@@ -8,7 +8,7 @@ import time
 import uuid
 from pathlib import Path
 from urllib.parse import urlencode, urlunparse
-
+from string import Template
 import orjson
 import pytz
 import shortuuid
@@ -299,20 +299,28 @@ def build_url(
     return urlunparse((scheme, netloc, path, "", query_string, fragment))
 
 
-def string_template(template: str, **kwargs) -> str:
+def template_substitute(template: Template | str, safe: bool = False, **kwargs) -> str:
     """
     使用字符串模板替换变量。
 
     :param template: 字符串模板，包含变量占位符
     :param kwargs: 替换变量的字典
+    :param safe: 是否使用安全模式
     :return: 替换后的字符串
     
     使用示例：
-        >>> result = string_template("Hello {name}, you are {age} years old", name="Alice", age=25)
+        >>> result = template_substitute(Template("Hello {name}, you are {age} years old"), name="Alice", age=25)
         >>> print(result)
         Hello Alice, you are 25 years old
     """
-    return template.format(**kwargs)
+    if isinstance(template, str):
+        template = Template(template)
+
+    if safe:
+        return template.safe_substitute(**kwargs)
+
+    return template.substitute(**kwargs)
+
 
 BASE_DIR: Path = get_base_dir()
 SYS_ENV: str = get_sys_env()
