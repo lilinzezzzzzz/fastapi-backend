@@ -80,6 +80,30 @@ def register_middleware(app: FastAPI):
     app.add_middleware(RecordMiddleware)
 
 
+async def start_scheduler(pid: int):
+    scheduler_lock_key = f"{REDIS_KEY_LOCK_PREFIX}:scheduler:master"
+    # 只有一个 worker 能获得锁，成为 scheduler master
+    lock_id = await cache.acquire_lock(
+        scheduler_lock_key,
+        expire_ms=180000,  # 3 分钟, 避免锁死
+        timeout_ms=1000,  # 最多等 1 秒获取锁
+        retry_interval_ms=200  # 可略调
+    )
+    if lock_id:
+        logger.info(f"Current process {pid} acquired scheduler master lock, starting APScheduler")
+        apscheduler_manager.start()
+        return True
+    else:
+        logger.info(f"Current process {pid} did not acquire scheduler master lock, skipping scheduler")
+        return False
+
+
+async def shutdown_scheduler(pid: int):
+    logger.info("Shutting down APScheduler...")
+    await apscheduler_manager.shutdown()
+    logger.info("Shutting down APScheduler successfully")
+
+
 # 定义 lifespan 事件处理器
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
@@ -93,30 +117,18 @@ async def lifespan(_app: FastAPI):
 
     is_scheduler_master = False
     if SYS_NAMESPACE in ["dev", "test", "canary", "prod"]:
-        scheduler_lock_key = f"{REDIS_KEY_LOCK_PREFIX}:scheduler:master"
-        # 只有一个 worker 能获得锁，成为 scheduler master
-        lock_id = await cache.acquire_lock(
-            scheduler_lock_key,
-            expire_ms=180000,  # 3 分钟, 避免锁死
-            timeout_ms=1000,  # 最多等 1 秒获取锁
-            retry_interval_ms=200  # 可略调
-        )
-        if lock_id:
-            logger.info(f"Current process {cur_pid} acquired scheduler master lock, starting APScheduler")
-            is_scheduler_master = True
-            apscheduler_manager.start()
-        else:
-            logger.info(f"Current process {cur_pid} did not acquire scheduler master lock, skipping scheduler")
+        ...
+        # is_scheduler_master = await start_scheduler(cur_pid)
     else:
         # dump_routes_and_middleware(app)
         ...
 
     logger.info("Check completed, Application will start.")
 
-    # 进入应用生命周期
     yield
+
     if is_scheduler_master:
-        logger.info("Shutting down APScheduler")
-        await apscheduler_manager.shutdown()
+        ...
+        # await shutdown_scheduler(cur_pid)
     # 关闭时的清理逻辑
     logger.warning("Application is about to close.")
