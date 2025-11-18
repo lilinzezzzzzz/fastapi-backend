@@ -48,6 +48,9 @@ uv run <命令>
 
 锁定依赖
 uv pip compile pyproject.toml -o requirements.txt
+
+Pycharm识别虚拟环境
+uv pip install pip setuptools wheel
 ```
 
 ---
