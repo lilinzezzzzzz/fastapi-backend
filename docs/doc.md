@@ -18,6 +18,11 @@ uv sync --locked --active
 添加新依赖(会自动执行uv lock && uv sync)
 uv add <包名>
 
+删除依赖
+uv remove <包名>
+
+升级依赖
+uv lock --upgrade-package <包名>
 
 同步新依赖(团队中其他成员修改了依赖，相当于go mod tidy)
 uv lock && uv sync
@@ -30,18 +35,16 @@ uv pip list
 清理缓存
 uv clean
 
-导出到requirements.txt
-uv export --output-file requirements.txt
---output-file：指定输出文件路径。
---no-header（可选）：不写入uv的注释头信息。
---frozen（可选）：生成带哈希值的冻结格式。
---dev（可选）：包含开发依赖。
-
 重建环境
 rm -rf .venv && uv sync
 
 激活环境
 source .venv/bin/activate
+
+运行命令
+uv sync
+source .venv/bin/activate
+uv run <命令>
 ```
 
 ---
