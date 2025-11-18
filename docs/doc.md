@@ -45,6 +45,9 @@ source .venv/bin/activate
 uv sync
 source .venv/bin/activate
 uv run <命令>
+
+锁定依赖
+uv pip compile pyproject.toml -o requirements.txt
 ```
 
 ---
