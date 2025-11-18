@@ -11,14 +11,9 @@ ENV TZ=Etc/UTC \
 
 WORKDIR /app
 
-# 安装基础工具
-RUN apt-get update && apt-get install -y curl bash && rm -rf /var/lib/apt/lists/*
-
 # 安装 uv
-RUN curl -LsSf https://astral.sh/uv/install.sh | bash && \
-    ln -s /root/.local/bin/uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# 确保 uv 在 PATH 中
 ENV PATH="/root/.local/bin:$PATH" \
     UV_PROJECT_ENVIRONMENT=".venv"
 
@@ -27,7 +22,7 @@ ENV PATH="/root/.local/bin:$PATH" \
 COPY pyproject.toml uv.lock ./
 
 # 使用 uv 安装依赖到项目本地虚拟环境 .venv
-RUN uv sync --no-cache
+RUN uv sync --frozen --no-cache
 
 # 再拷贝业务代码（避免改代码就重新装依赖）
 COPY . .
