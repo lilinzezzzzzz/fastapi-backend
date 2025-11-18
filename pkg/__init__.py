@@ -299,6 +299,21 @@ def build_url(
     return urlunparse((scheme, netloc, path, "", query_string, fragment))
 
 
+def string_template(template: str, **kwargs) -> str:
+    """
+    使用字符串模板替换变量。
+
+    :param template: 字符串模板，包含变量占位符
+    :param kwargs: 替换变量的字典
+    :return: 替换后的字符串
+    
+    使用示例：
+        >>> result = string_template("Hello {name}, you are {age} years old", name="Alice", age=25)
+        >>> print(result)
+        Hello Alice, you are 25 years old
+    """
+    return template.format(**kwargs)
+
 BASE_DIR: Path = get_base_dir()
 SYS_ENV: str = get_sys_env()
 SYS_NAMESPACE: str = get_sys_namespace()
