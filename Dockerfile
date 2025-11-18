@@ -22,7 +22,7 @@ ENV PATH="/root/.local/bin:$PATH" \
 COPY pyproject.toml uv.lock ./
 
 # 使用 uv 安装依赖到项目本地虚拟环境 .venv
-RUN uv sync --frozen --no-cache
+RUN uv sync --frozen --no-cache --no-default-groups
 
 # 再拷贝业务代码（避免改代码就重新装依赖）
 COPY . .

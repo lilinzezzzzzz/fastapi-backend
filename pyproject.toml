@@ -1,9 +1,18 @@
+[build-system]
+requires = [
+    "setuptools>=79.0.1",
+    "wheel>=0.45.1",
+]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "fastapi-backend"
 version = "0.1.0"
 description = "fastapi-backend"
 readme = "README.md"
 requires-python = ">=3.12"
+
+# 生产运行时依赖：只保留真正业务需要 import 的模块
 dependencies = [
     "fastapi",
     "uvicorn",
@@ -53,7 +62,39 @@ dependencies = [
     "xxhash",
     "uvloop",
     "httptools",
+]
+
+# 分组依赖 —— 开发环境才需要
+[dependency-groups]
+dev = [
+    # 构建工具也放入 dev，方便本地 build（但生产以 build-system 为准）
     "pip>=25.3",
     "setuptools>=79.0.1",
     "wheel>=0.45.1",
+    # 常规开发工具（可根据你需要继续添加）
+    "pytest",
+    "pytest-asyncio",
+    "httpx", # 测试请求常用
+    "black",
+    "ruff",
+    "mypy",
+    "types-redis",
+    "types-pytz",
+    "types-python-dateutil",
+    "ipython",
 ]
+
+# CI 构建相关工具（可选，按需添加）
+build = [
+    "build", # python -m build
+    "twine", # 上传包（如果你发包）
+]
+
+[tool.uv]
+default-groups = []
+
+[[tool.uv.index]]
+name = "aliyun"
+url = "https://mirrors.aliyun.com/pypi/simple"
+default = true
+python-downloads = false

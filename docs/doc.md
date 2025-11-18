@@ -15,8 +15,12 @@ uv venv .venv --python 3.12.9
 激活虚拟环境
 source .venv/bin/activate
 
-同步依赖(团队中其他成员修改了依赖，相当于go mod tidy)
+同步所有依赖(团队中其他成员修改了依赖，相当于go mod tidy)
 uv sync
+同步主依赖
+uv sync --no-default-groups
+同步主依赖+dev依赖
+uv sync --no-default-groups --group dev
 
 同步依赖到当前激活的虚拟环境
 uv sync --active
