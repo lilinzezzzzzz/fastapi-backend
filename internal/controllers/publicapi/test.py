@@ -226,8 +226,7 @@ async def test_dao():
         assert updated_user.username == updated_name
         logger.info(f"test update-2 success")
     except Exception as e:
-        logger.error(f"test dao error: {traceback.format_exc()}")
-        raise AppException(code=500, detail=str(e)) from e
+        raise
     else:
         return response_factory.resp_200()
     finally:
