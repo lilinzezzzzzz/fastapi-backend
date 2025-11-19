@@ -99,9 +99,9 @@ async def start_scheduler(pid: int):
 
 
 async def shutdown_scheduler(pid: int):
-    logger.info("Shutting down APScheduler...")
+    logger.info(f"Current process {pid} Shutting down APScheduler...")
     await apscheduler_manager.shutdown()
-    logger.info("Shutting down APScheduler successfully")
+    logger.info(f"Current process {pid} Shutting down APScheduler successfully")
 
 
 # 定义 lifespan 事件处理器
