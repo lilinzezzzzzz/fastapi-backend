@@ -1,208 +1,238 @@
+`````markdown
 # 程序员常用 Markdown 语法速查（含高频示例）
 
-## 基础排版
+> 💡 **提示**：本文档本身即展示了规范的 Markdown 写法。文中演示了如何在 Markdown 中显示“反引号”包裹的代码块（嵌套技巧）。
+
+## 1. 基础排版
 
 **标题与段落**
 
-```md
-# H1 标题
-## H2 小节
-### H3 小小节
+```markdown
+# H1 一级标题（文档标题）
+## H2 二级标题（章节）
+### H3 三级标题（子章节）
 
-普通段落用空行分隔。  
-行尾两个空格 = 强制换行。
+普通段落之间使用空行分隔。
+如果需要在行尾强制换行，请在行尾添加两个空格。  
+或者使用 HTML 的 <br> 标签。
 ```
 
-**强调与行内**
+**强调与行内样式**
 
-```md
-**加粗**  *斜体*  ~~删除线~~  `行内代码`  
-<sub>下标</sub> 和 <sup>上标</sup>（HTML 支持）
+```markdown
+**加粗 (Bold)**
+*斜体 (Italic)*
+~~删除线 (Strikethrough)~~
+`行内代码 (Inline Code)`
+
+HTML 标签支持：
+<sub>下标</sub> 和 <sup>上标</sup>
+<kbd>Ctrl</kbd> + <kbd>C</kbd>
 ```
 
 **分隔线**
 
-```md
+```markdown
 ---
 ```
 
-## 列表与任务清单
+## 2. 列表与任务清单
 
-```md
-- 无序 1
-- 无序 2
-  - 子项
+```markdown
+无序列表：
+- 项目 A
+- 项目 B
+  - 子项目 B-1（缩进 2 空格）
 
-1. 有序 1
-2. 有序 2
+有序列表：
+1. 第一步
+2. 第二步
 
-- [ ] 待办（任务清单，GFM）
-- [x] 已完成
+任务清单 (Task List)：
+- [ ] 待办事项
+- [x] 已完成事项
 ```
 
-## 链接与图片
+## 3. 链接与图片
 
-```md
-[可读文本](https://example.com "可选标题")
-<https://example.com>  <!-- 自动链接 -->
+```markdown
+[显示的文本](https://example.com "可选的鼠标悬停标题")
 
-[引用式链接][doc]
-[doc]: https://example.com/docs "统一管理链接"
+<https://example.com>
 
-![替代文本](./img/arch.png "可选图注/标题")
+请参考 [官方文档][docs] 和 [API 说明][api]。
+
+[docs]: https://example.com/docs
+[api]: https://example.com/api
+
+![图片替代文本](./img/arch.png)
+
+<img src="./img/arch.png" width="400" alt="架构图" />
 ```
 
-> 需要控制尺寸/对齐时，可用 HTML：
-> `<img src="./img/arch.png" width="480" alt="架构图">`
+## 4. 代码块（含语法高亮）
 
-## 代码块（含语法高亮）
+````markdown
+行内代码：`npm install`
 
-````md
-行内：`pip install fastapi`
-
-多行（标注语言以启用高亮）：
+多行代码块（指定语言）：
 ```python
-from fastapi import FastAPI
-app = FastAPI()
-````
-
-差异高亮（审阅改动很实用）：
-
-```diff
-- old_value = False
-+ old_value = True
+def hello():
+    print("Hello World")
 ```
 
-````
+Diff 代码块（展示修改对比）：
+```diff
+- const isLogin = false;
++ const isLogin = true;
+```
+`````
 
-## 引用与提示块
-```md
-> 这是引用。
-> 可多行。
+## 5\. 引用与提示块 (Callouts)
 
-> [!NOTE]（GitHub Callouts 扩展）
-> 这里是说明/提示。
+GitHub 风格的警告块（Alerts）：
+
+```markdown
+> 普通引用文本
+> 可以换行。
+
+> [!NOTE]
+> 这是提示信息 (Note)。
+
+> [!TIP]
+> 这是技巧建议 (Tip)。
 
 > [!WARNING]
-> 这里是风险/注意事项。
-````
-
-## 表格（GFM）
-
-```md
-| 字段 | 类型    | 说明       |
-| ---- | ------- | ---------- |
-| id   | int     | 主键       |
-| name | string  | 名称       |
-
-对齐：
-| 左对齐 | 居中 | 右对齐 |
-| :----- | :--: | -----: |
-| a      |  b   |      c |
+> 这是警告信息 (Warning)。
 ```
 
-## 脚注（GFM）
+## 6\. 表格 (GFM)
 
-```md
-这是一个带脚注的句子[^ref]。
-[^ref]: 脚注内容放这里。
+```markdown
+| 字段 | 类型   | 必填 | 说明       |
+| :--- | :----- | :--: | ---------- |
+| id   | int    |  是  | 主键 ID    |
+| name | string |  否  | 用户昵称   |
+
 ```
 
-## 公式（平台支持则可用）
+## 7\. 公式 (需平台支持 LaTeX)
 
-* **行内**：`$E = mc^2$`
-* **块级**（常用 KaTeX/MathJax 渲染）：
+```markdown
+行内公式：$E = mc^2$
 
-```md
+块级公式：
 $$
-\int_0^1 x^2\,dx = \tfrac{1}{3}
+f(x) = \int_{-\infty}^\infty \hat f(\xi)\,e^{2\pi i \xi x} \,d\xi
 $$
 ```
 
-## 折叠/详情（HTML）
+## 8\. 折叠/详情 (HTML)
+
+用于收纳长配置或不重要的日志：
 
 ````html
 <details>
-  <summary>展开查看示例配置</summary>
+<summary>点击展开查看详细配置</summary>
 
-  ```yaml
+```yaml
+server:
+  port: 8080
   log_level: INFO
-  retries: 3
-````
-
-</details>
 ```
 
-## 流程图/时序图（Mermaid，GitHub/MkDocs 等支持）
+</details>
+````
+
+## 9\. 流程图 (Mermaid)
+
+需平台（如 GitHub, GitLab, Notion, VS Code）支持：
 
 ```mermaid
 sequenceDiagram
-  participant C as Client
+  participant U as User
   participant S as Server
-  C->>S: GET /items
-  S-->>C: 200 OK (JSON)
+  participant D as DB
+
+  U->>S: 发起请求 /login
+  S->>D: 查询用户信息
+  D-->>S: 返回数据
+  S-->>U: 200 OK (Token)
 ```
 
-## 转义与特殊字符
+## 10\. 文档工程化建议
 
-```md
-要显示字面量 * 或 _ 等符号：使用反斜杠转义，例如 \*literal\*。
-要显示反引号：`` 用两个反引号把 ` 包起来 ``。
-```
+1.  **语义化换行**：建议“一句话占一行”，不要在段落中间硬回车，利于 Git diff 版本对比。
+2.  **相对路径**：引用仓库内图片时始终使用 `./assets/img.png`，确保在 GitHub 和本地都能预览。
+3.  **代码块语言**：务必标注语言（如 `json`, `bash`, `sql`），这不仅是为了高亮，也利于搜索。
+4.  **格式化工具**：推荐在 VS Code 中配置 `Prettier` 或使用 `markdownlint` 保持风格统一。
 
-## 文档工程化建议（写多了更省心）
+-----
 
-* **语义化换行**：一句话一行（便于 Git diff、评审）。
-* **统一风格**：用 Prettier/markdownlint 自动格式化与规则校验。
-* **相对路径**：图片和文档间互链尽量用相对路径，方便跨仓或打包。
-* **标题层级清晰**：每篇文档只用一个 `#` 作为文档标题，内容从 `##` 开始。
-* **代码块标注语言**：利于高亮与复制；终端命令用 `bash`/`sh`。
-* **可维护链接**：多处复用的链接用“引用式链接”集中管理。
-* **图像可访问性**：`alt` 必写；必要时提供图像下的简要说明。
+## 附：可复用文档模板 (Copy & Paste)
 
-## 可复用模板（拿去就能写）
+你可以直接复制下面的代码块内容，作为新文档的起手式：
 
-````md
-# 文档标题
+````markdown
+# [文档标题]
 
-> 简介：一句话说明这篇文档解决什么问题 / 读者是谁。
+> 简介：一句话说明该文档的目标受众与核心价值。
 
-## 背景
-- 场景/痛点
-- 目标和不在范围
+## 1. 背景与目标
+* **背景**：为什么要做这件事？
+* **目标**：预期达成什么效果？
 
-## 快速开始
+## 2. 快速开始 (Quick Start)
+
+### 环境依赖
+* Python >= 3.8
+* Node.js >= 16
+
+### 安装与运行
+
 ```bash
-# 安装
-pip install yourpkg
-# 运行
-yourpkg --help
-````
+# 安装依赖
+npm install
 
-## 使用示例
-
-```python
-from yourpkg import Client
-c = Client()
-print(c.ping())
+# 启动服务
+npm run dev
 ```
 
-## 设计/原理（可选）
-
-* 核心流程（见下方 Mermaid）
+## 3. 架构/流程设计
 
 ```mermaid
 flowchart LR
-  A[输入] --> B[处理] --> C[输出]
+    A[输入] --> B{校验?}
+    B -- Yes --> C[处理业务]
+    B -- No --> D[返回错误]
+    C --> E[落库]
 ```
 
-## 常见问题
+## 4. API 示例
 
-* Q：...
-* A：...
+```python
+import requests
 
-## 参考
+res = requests.get("[https://api.example.com/v1/data](https://api.example.com/v1/data)")
+print(res.json())
+```
 
-* [链接 1](https://example.com)
-* [链接 2](https://example.com)
+## 5. 常见问题 (FAQ)
 
+* **Q: 遇到权限报错怎么办？**
+    * A: 请检查 `.env` 文件中的 token 是否过期。
+
+## 6. 参考资料
+* [需求文档 (Jira)](https://...)
+* [技术方案 (Wiki)](https://...)
+````
+
+```
+
+### 接下来可以做的事
+
+Would you like me to:
+1.  Create a `.prettierrc` configuration file snippet tailored for Markdown to help you maintain this format automatically?
+2.  Convert this guide into a PDF version for distribution?
+3.  Add more complex Mermaid examples (like State Diagrams or Gantt charts)?
+```
