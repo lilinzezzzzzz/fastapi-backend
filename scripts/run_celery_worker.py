@@ -4,16 +4,17 @@ import sys
 
 
 def main() -> None:
-    is_windows = os.name == "nt"
+    # 显式禁止 Windows 环境运行
+    if os.name == "nt":
+        print("Error: This worker script does not support Windows. Please use a POSIX system (Linux/macOS).")
+        sys.exit(1)
 
     # 可用环境变量覆盖，括号内为默认值
     queues = default_queue
     loglevel = "debug"
-    pool = "solo" if is_windows else "prefork"
-    concurrency = "1" if is_windows else "4"
 
-    # Windows 下为避免调试器/多进程的已知问题，默认关掉 gossip/mingle/heartbeat
-    minimal_flags = ["--without-gossip", "--without-mingle", "--without-heartbeat"] if is_windows else []
+    pool = "prefork"
+    concurrency = "4"
 
     # 允许通过命令行追加更多 Celery 参数（优先级最高）
     # 用法示例：python tools/run_celery_worker.py --logfile=worker.log
@@ -25,7 +26,7 @@ def main() -> None:
         "-Q", queues,
         "--pool", pool,
         "--concurrency", str(concurrency),
-        *minimal_flags,
+        # 移除了 minimal_flags (*minimal_flags)，因为 Linux 下通常需要 gossip/heartbeat
         *extra_cli_args,
     ]
 
