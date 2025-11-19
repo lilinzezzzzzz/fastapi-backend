@@ -33,6 +33,8 @@ def init_setting() -> BaseConfig:
     logger.info("==========================")
     for k, v in s.dict().items():
         logger.info(f"{k}: {v}")
+    logger.info(s.sqlalchemy_database_uri)
+    logger.info(s.redis_url)
     logger.info("==========================")
     return s
 

@@ -9,9 +9,3 @@ class User(ModelMixin):
     username = Column(String(64))
     account = Column(String(64))
     phone = Column(String(11))
-
-    @classmethod
-    def init_by_phone(cls, phone):
-        return cls.create(
-            phone=phone,
-        )

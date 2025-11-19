@@ -8,6 +8,8 @@ from decimal import Decimal
 import numpy as np
 from fastapi import APIRouter, Request
 
+from internal.dao.user import user_dao
+from internal.infra.db import get_session
 from internal.models.user import User
 from internal.utils.exception import AppException
 from pkg.orm_tool import new_cls_querier, new_cls_updater, new_counter
@@ -111,17 +113,17 @@ async def test_contextvars_on_asyncio_task():
     return response_factory.resp_200()
 
 
-@router.get("/test_dao")
+@router.get("/test_dao", summary="测试DAO")
 async def test_dao():
     unique_hex = uuid.uuid4().hex[:16]  # 缩短长度
-    test_user = User.init_by_phone(str(random.randint(10000000000, 99999999999)))
+    test_user: User = user_dao.init_by_phone(str(random.randint(10000000000, 99999999999)))
     test_user.account = f"lilinze_{unique_hex}"
     test_user.username = f"lilinze_{unique_hex}"
     await test_user.save()
 
     try:
         # 1. 验证基础查询
-        created_user = await new_cls_querier(User).eq_(User.id, test_user.id).first()
+        created_user = await new_cls_querier(User, session_provider=get_session).eq_(User.id, test_user.id).first()
         assert created_user.id == test_user.id
         logger.info(f"test created success")
 

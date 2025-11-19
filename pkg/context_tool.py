@@ -60,7 +60,7 @@ def get_user_id_context_var() -> int:
         user_id = user_id_context_var.get()
     except LookupError:
         logger.warning("user_id is not set")
-        return -1
+        user_id = -1
 
     if user_id == -1:
         raise AppException(code=400, detail="user_id is unknown")

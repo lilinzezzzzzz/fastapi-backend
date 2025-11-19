@@ -25,36 +25,48 @@ class LogFormat:
     FILE = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {extra[trace_id]} - {message}"
 
 
-def remove_logging_logger():
+def _remove_logging_logger():
     # 清除uvicorn相关日志记录器的默认处理日志处理器
     logging.getLogger("uvicorn.access").handlers = []
     logging.getLogger("uvicorn.error").handlers = []
     logging.getLogger("uvicorn").handlers = []
 
 
-def init_logger(env: str = "local"):
+def _init_logger(write_to_file: bool = False, write_to_console: bool = True):
+    """
+    初始化 Logger
+    :param write_to_file: 是否写入文件 (True/False). 如果为 None，则非 local 环境默认为 True
+    :param write_to_console: 是否写入 stderr (True/False). 如果为 None，则 local 环境默认为 True
+    """
     loguru_logger = loguru.logger
-    loguru_logger.info("Init logger...")
 
-    try:
-        LogConfig.DIR.mkdir(parents=True, exist_ok=True)
-    except OSError as e:
-        loguru_logger.error(f"Failed to create log directory: {e}")
-        sys.exit(1)
+    # 注意：由于还没有配置 sink，这里的 info 可能还只会输出到默认的 stderr，或者被暂时忽略，取决于 loguru 状态
+    # 为了保险，通常建议配置完再打印 info，或者先保留默认 handle
 
-    loguru_logger.remove()
+    loguru_logger.remove()  # 移除所有默认处理器
     loguru_logger.configure(extra={"trace_id": "-"})
 
-    if env in ("local", "local_test"):
+    # 3. 配置控制台输出 (sys.stderr)
+    if write_to_console:
         loguru_logger.add(
             sink=sys.stderr,
             format=LogFormat.CONSOLE,
             level=LogConfig.LEVEL,
-            enqueue=True,
+            enqueue=True,  # 建议在异步环境开启
             colorize=True,
             diagnose=True
         )
-    else:
+
+    # 4. 配置文件输出
+    if write_to_file:
+        # 只有需要写文件时，才尝试创建目录，避免在无权限的容器环境中报错
+        try:
+            LogConfig.DIR.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            # 这里可以用 print，因为 logger 可能还没配置好文件输出，或者 stderr 被关了
+            print(f"Failed to create log directory: {e}", file=sys.stderr)
+            sys.exit(1)
+
         loguru_logger.add(
             sink=LogConfig.DIR / LogConfig.FILE_NAME,
             format=LogFormat.FILE,
@@ -62,12 +74,12 @@ def init_logger(env: str = "local"):
             rotation=LogConfig.ROTATION,
             retention=LogConfig.RETENTION,
             compression=LogConfig.COMPRESSION,
-            diagnose=True,
+            diagnose=True,  # 生产环境通常建议设为 False 以防泄漏敏感信息，视情况而定
             enqueue=True
         )
 
-    loguru_logger.info("Init logger successfully.")
+    loguru_logger.info(f"Init logger successfully. (Console: {write_to_console}, File: {write_to_file})")
     return loguru_logger
 
 
-logger = init_logger(SYS_ENV)
+logger = _init_logger()

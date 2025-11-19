@@ -1,3 +1,4 @@
+DROP TABLE IF EXISTS `user`;
 CREATE TABLE `user`
 (
     `id`         bigint unsigned NOT NULL AUTO_INCREMENT,
@@ -7,6 +8,8 @@ CREATE TABLE `user`
     `created_at` datetime                               NOT NULL ON UPDATE CURRENT_TIMESTAMP,
     `updated_at` datetime                               NOT NULL ON UPDATE CURRENT_TIMESTAMP,
     `deleted_at` datetime DEFAULT NULL,
+    `creator_id` bigint unsigned NOT NULL,
+    `updater_id` bigint unsigned DEFAULT NULL,
     PRIMARY KEY (`id`),
     UNIQUE KEY `username_unique` (`username`) USING BTREE,
     UNIQUE KEY `phone_unique` (`phone`) USING BTREE,

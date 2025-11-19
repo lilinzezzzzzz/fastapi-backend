@@ -22,7 +22,7 @@ auth_token_white = [
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         url_path = request.url.path
-        if url_path.startswith("/api/v1/public"):
+        if url_path.startswith("/v1/public"):
             return await call_next(request)
 
         if url_path in auth_token_white or url_path.startswith("/test"):

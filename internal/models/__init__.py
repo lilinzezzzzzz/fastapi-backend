@@ -5,11 +5,10 @@ from sqlalchemy import BigInteger, Column, DateTime
 from sqlalchemy.orm import InstrumentedAttribute
 
 from internal.infra.db import Base, get_session
-from pkg.context_tool import get_user_id_context_var
 from pkg import get_utc_without_tzinfo
-from pkg.logger_tool import logger
-from pkg.types import SessionProvider
+from pkg.context_tool import get_user_id_context_var
 from pkg.snowflake_tool import generate_snowflake_id
+from pkg.types import SessionProvider
 
 
 class ModelMixin(Base):
@@ -37,8 +36,7 @@ class ModelMixin(Base):
                 async with sess.begin():
                     sess.add_all(ins_list)
         except Exception as e:
-            logger.error(f"{cls.__name__} add_all_dict failed, error={e}")
-            raise e
+            raise Exception(f"{cls.__name__} add_all_dict failed, error={e}")
 
     @classmethod
     async def add_all_ins(
@@ -54,8 +52,7 @@ class ModelMixin(Base):
                 async with sess.begin():
                     sess.add_all(ins_list)
         except Exception as e:
-            logger.error(f"{cls.__name__} add_all_ins failed, error={e}")
-            raise e
+            raise Exception(f"{cls.__name__} add_all_ins failed, error={e}")
 
     async def save(self, session_provider: SessionProvider = get_session):
         try:
@@ -63,8 +60,7 @@ class ModelMixin(Base):
                 sess.add(self)
                 await sess.commit()
         except Exception as e:
-            logger.error(f"{self.__class__.__name__} save error: {e}")
-            raise e
+            raise Exception(f"{self.__class__.__name__} save error: {e}")
 
     async def update(
             self,
@@ -89,8 +85,7 @@ class ModelMixin(Base):
                 sess.add(self)
                 await sess.commit()
         except Exception as e:
-            logger.error(f"{self.__class__.__name__} update error: {e}")
-            raise e
+            raise Exception(f"{self.__class__.__name__} update error: {e}")
 
     async def soft_delete(self):
         await self.update(
@@ -100,18 +95,18 @@ class ModelMixin(Base):
     @classmethod
     def create(cls, **kwargs) -> "ModelMixin":
         cur_datetime = get_utc_without_tzinfo()
-        instance = cls(created_at=cur_datetime, updated_at=cur_datetime)
+        ins = cls(created_at=cur_datetime, updated_at=cur_datetime)
 
         if "id" not in kwargs:
-            instance.id = generate_snowflake_id()
-        if instance.has_creator_id_column():
+            ins.id = generate_snowflake_id()
+        if ins.has_creator_id_column() and getattr(ins, ins.creator_id_column_name()) is not None:
             user_id = get_user_id_context_var()
-            setattr(instance, instance.creator_id_column_name(), user_id)
-        if instance.has_updater_id_column():
-            setattr(instance, instance.updater_id_column_name(), None)
+            setattr(ins, ins.creator_id_column_name(), user_id)
+        if ins.has_updater_id_column():
+            setattr(ins, ins.updater_id_column_name(), None)
 
-        instance.populate(**kwargs)
-        return instance
+        ins.populate(**kwargs)
+        return ins
 
     def populate(self, **kwargs):
         for column_name, value in kwargs.items():

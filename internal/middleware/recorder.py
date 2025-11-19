@@ -23,7 +23,9 @@ class RecordMiddleware(BaseHTTPMiddleware):
                 response: Response = await call_next(request)
             except Exception as exc:
                 logger.error(f"Unhandled exception occurred during request processing, exc={get_last_exec_tb(exc)}")
-                return response_factory.response(code=error_code.InternalServerError, msg=f"Unhandled Exception: {exc}")
+                return response_factory.response(
+                    code=error_code.InternalServerError, message=f"Unhandled Exception: {exc}"
+                )
             process_time = time.perf_counter() - start_time
 
             response.headers["X-Process-Time"] = str(process_time)
