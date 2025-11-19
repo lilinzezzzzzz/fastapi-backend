@@ -1,9 +1,0 @@
-services:
-  pydev:
-    build: .
-    container_name: pydev
-    ports:
-      - "12222:8080"
-    volumes:
-      - ./:/app
-    restart: unless-stopped
