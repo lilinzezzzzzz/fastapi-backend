@@ -1,4 +1,5 @@
 from internal.dao import BaseDao
+from internal.infra.celery_db import get_celery_session
 from internal.infra.db import get_session
 from internal.models.user import User
 
@@ -11,3 +12,4 @@ class UserDao(BaseDao):
 
 
 user_dao = UserDao(session_provider=get_session)
+celery_user_dao = UserDao(session_provider=get_celery_session)
