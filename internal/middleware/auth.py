@@ -33,6 +33,7 @@ class ASGIAuthMiddleware:
         # 1. 白名单放行
         if path.startswith("/v1/public") or path in auth_token_white or path.startswith("/test"):
             # 某些白名单也可能需要记录日志，可视情况添加
+            set_user_id_context_var(0)
             await self.app(scope, receive, send)
             return
 

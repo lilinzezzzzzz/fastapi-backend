@@ -1,6 +1,5 @@
 import asyncio
 import random
-import traceback
 import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -12,9 +11,9 @@ from internal.dao.user import user_dao
 from internal.infra.db import get_session
 from internal.models.user import User
 from internal.utils.exception import AppException
-from pkg.orm_tool import new_cls_querier, new_cls_updater, new_counter
 from pkg.anyio_task_manager import anyio_task_manager
 from pkg.logger_tool import logger
+from pkg.orm_tool import new_cls_querier, new_cls_updater, new_counter
 from pkg.resp_tool import response_factory
 
 router = APIRouter(prefix="/test", tags=["public v1 test"])
@@ -123,70 +122,70 @@ async def test_dao():
 
     try:
         # 1. 验证基础查询
-        created_user = await new_cls_querier(User, session_provider=get_session).eq_(User.id, test_user.id).first()
+        created_user:User= await new_cls_querier(User, session_provider=get_session).eq_(User.id, test_user.id).first()
         assert created_user.id == test_user.id
         logger.info(f"test created success")
 
         # 2. 测试各种查询操作符
         # eq
-        user = await new_cls_querier(User).eq_(User.id, test_user.id).first()
+        user = await new_cls_querier(User, session_provider=get_session).eq_(User.id, test_user.id).first()
         assert user.id == test_user.id
         logger.info(f"test eq success")
 
         # ne
-        ne_users = await new_cls_querier(User).ne_(User.id, test_user.id).all()
+        ne_users = await new_cls_querier(User, session_provider=get_session).ne_(User.id, test_user.id).all()
         assert all(u.id != test_user.id for u in ne_users)
         logger.info(f"test ne success")
 
         # gt
-        gt_users: list[User] = await new_cls_querier(User).gt_(User.id, test_user.id).all()
+        gt_users: list[User] = await new_cls_querier(User, session_provider=get_session).gt_(User.id, test_user.id).all()
         assert all(u.id > test_user.id for u in gt_users)
         logger.info(f"test gt success")
 
         # lt
-        lt_users = await new_cls_querier(User).lt_(User.id, test_user.id).all()
+        lt_users = await new_cls_querier(User, session_provider=get_session).lt_(User.id, test_user.id).all()
         assert all(u.id < test_user.id for u in lt_users)
         logger.info(f"test lt success")
 
         # ge
-        ge_users = await new_cls_querier(User).ge_(User.id, test_user.id).all()
+        ge_users = await new_cls_querier(User, session_provider=get_session).ge_(User.id, test_user.id).all()
         assert all(u.id >= test_user.id for u in ge_users)
         logger.info(f"test ge success")
 
         # le
-        le_users = await new_cls_querier(User).le_(User.id, test_user.id).all()
+        le_users = await new_cls_querier(User, session_provider=get_session).le_(User.id, test_user.id).all()
         assert all(u.id <= test_user.id for u in le_users)
         logger.info(f"test le success")
 
         # in_ 测试
-        in_users = await new_cls_querier(User).in_(User.id, [test_user.id]).all()
+        in_users = await new_cls_querier(User, session_provider=get_session).in_(User.id, [test_user.id]).all()
         assert len(in_users) == 1
         logger.info(f"test in_ success")
 
         # like 测试
-        like_users: list[User] = await new_cls_querier(User).like(User.username, "lilinze").all()
+        like_users: list[User] = await new_cls_querier(User, session_provider=get_session).like(User.username, "lilinze").all()
         assert all("lilinze" in u.username for u in like_users)
         logger.info(f"test like success")
 
         # is_null 测试（确保测试时deleted_at为null）
-        null_users = await new_cls_querier(User).is_null(User.deleted_at).all()
+        null_users = await new_cls_querier(User, session_provider=get_session).is_null(User.deleted_at).all()
         assert any(u.deleted_at is None for u in null_users)
         logger.info(f"test is_null success")
 
         # 4. 计数测试
-        count = await new_counter(User).ge_(User.id, 0).count()
+        count = await new_counter(User, session_provider=get_session).ge_(User.id, 0).count()
         assert count >= 1
         logger.info(f"test count success")
 
         # AND 组合
-        and_users = await (new_cls_querier(User).
+        and_users = await (new_cls_querier(User, session_provider=get_session).
                            eq_(User.username, test_user.username).
                            eq_(User.account, test_user.account).first())
         assert and_users.username == test_user.username, and_users.account == test_user.account
         logger.info(f"test and success")
 
         # where 组合
-        where_user = await new_cls_querier(User).where(
+        where_user = await new_cls_querier(User, session_provider=get_session).where(
             User.username == test_user.username,
             User.account == test_user.account
         ).first()
@@ -194,7 +193,7 @@ async def test_dao():
         logger.info(f"test where success")
 
         # OR 组合
-        or_users = await new_cls_querier(User).or_(
+        or_users = await new_cls_querier(User, session_provider=get_session).or_(
             User.username == test_user.username,
             User.account == "invalid_account"
         ).all()
@@ -202,7 +201,7 @@ async def test_dao():
         logger.info(f"test or success")
 
         # BETWEEN 组合
-        between_users = await new_cls_querier(User).between_(
+        between_users = await new_cls_querier(User, session_provider=get_session).between_(
             User.id, test_user.id - 1, test_user.id + 1
         ).all()
         assert len(between_users) >= 1
@@ -211,21 +210,21 @@ async def test_dao():
         # 3. 更新操作测试
         # 显式使用新查询器避免缓存问题
         updated_name = f"updated_name_{unique_hex}"
-        await new_cls_updater(model_cls=User).eq_(User.id, test_user.id).update(username=updated_name).execute()
+        await new_cls_updater(User, session_provider=get_session).eq_(User.id, test_user.id).update(username=updated_name).execute()
         # 重新查询验证更新
-        updated_user = await new_cls_querier(User).eq_(User.id, test_user.id).first()
+        updated_user = await new_cls_querier(User, session_provider=get_session).eq_(User.id, test_user.id).first()
         assert updated_user.username == updated_name
         logger.info(f"test update-1 success")
 
         # 显式使用新查询器避免缓存问题
         updated_name = f"updated_name_{unique_hex}"
-        await new_cls_updater(model_cls=User).eq_(User.id, test_user.id).update(
+        await new_cls_updater(User, session_provider=get_session).eq_(User.id, test_user.id).update(
             **{"username": updated_name}).execute()
         # 重新查询验证更新
-        updated_user = await new_cls_querier(User).eq_(User.id, test_user.id).first()
+        updated_user = await new_cls_querier(User, session_provider=get_session).eq_(User.id, test_user.id).first()
         assert updated_user.username == updated_name
         logger.info(f"test update-2 success")
-    except Exception as e:
+    except Exception:
         raise
     else:
         return response_factory.resp_200()
