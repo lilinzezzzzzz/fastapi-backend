@@ -56,10 +56,6 @@ def register_middleware(app: FastAPI):
     from starlette.middleware.gzip import GZipMiddleware
     app.add_middleware(GZipMiddleware)
 
-    # 5. 限制上传文件大小
-    from internal.middleware.check_upload import LimitUploadSizeMiddleware
-    app.add_middleware(LimitUploadSizeMiddleware)
-
     # 4. 认证中间件：校验 Token，确保只有合法用户访问 API
     from internal.middleware.auth import AuthMiddleware
     app.add_middleware(AuthMiddleware)
@@ -76,8 +72,8 @@ def register_middleware(app: FastAPI):
         )
 
     # 1. 日志中间件：记录请求和响应的日志，监控 API 性能和请求流
-    from internal.middleware.recorder import RecordMiddleware
-    app.add_middleware(RecordMiddleware)
+    from internal.middleware.recorder import ASGIRecordMiddleware
+    app.add_middleware(ASGIRecordMiddleware)
 
 
 async def start_scheduler(pid: int):
