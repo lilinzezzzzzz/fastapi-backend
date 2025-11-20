@@ -98,3 +98,12 @@ name = "aliyun"
 url = "https://mirrors.aliyun.com/pypi/simple"
 default = true
 python-downloads = false
+
+[tool.ruff]
+target-version = "py312"            # 根据你的 Python 版本改
+line-length = 120
+exclude = ["venv", ".venv", "build", "dist"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]       # 基础错误 + isort + bugbear 等
+ignore = ["E203", "W503"]           # 常见的和 Black/格式化冲突的规则
