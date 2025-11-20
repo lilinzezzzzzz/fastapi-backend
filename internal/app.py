@@ -57,8 +57,8 @@ def register_middleware(app: FastAPI):
     app.add_middleware(GZipMiddleware)
 
     # 4. 认证中间件：校验 Token，确保只有合法用户访问 API
-    from internal.middleware.auth import AuthMiddleware
-    app.add_middleware(AuthMiddleware)
+    from internal.middleware.auth import ASGIAuthMiddleware
+    app.add_middleware(ASGIAuthMiddleware)
 
     # 2. CORS 中间件：处理跨域请求
     if setting.BACKEND_CORS_ORIGINS:
