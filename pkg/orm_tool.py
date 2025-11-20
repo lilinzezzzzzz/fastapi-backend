@@ -1,9 +1,8 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, cast, Generic
 
 from sqlalchemy import (Column, ColumnExpressionArgument, Delete, Function, Select, Subquery, Update,
-                        distinct, func, or_,
-                        select, update)
+                        distinct, func, or_, select, update)
 from sqlalchemy.orm import InstrumentedAttribute, aliased
 from sqlalchemy.sql.elements import ClauseElement, ColumnElement
 
@@ -14,7 +13,7 @@ from pkg.logger_tool import logger
 from pkg.types import SessionProvider
 
 
-class BaseBuilder:
+class BaseBuilder(Generic[MixinModelType]):
     """SQL查询构建器基类，提供模型类和方法的基本结构"""
 
     __slots__ = ("_model_cls", "_stmt", "_session_provider")  # 优化内存使用
@@ -254,10 +253,10 @@ class QueryBuilder(BaseBuilder):
         async with self._session_provider() as sess:
             try:
                 result = await sess.execute(self._stmt)
-                data = result.scalars().all()
+                raw_data = result.scalars().all()
+                data = cast(list[MixinModelType], raw_data)
             except Exception as e:
-                logger.error(f"{self._model_cls.__name__} get all error: {e}")
-                raise
+                raise Exception(f"{self._model_cls.__name__} get all error: {e}")
         return data
 
     async def first(self, *, include_deleted: bool | None = None) -> MixinModelType | None:
@@ -267,10 +266,10 @@ class QueryBuilder(BaseBuilder):
         async with self._session_provider() as sess:
             try:
                 result = await sess.execute(self._stmt)
-                data = result.scalars().first()
+                raw_data = result.scalars().first()
+                data = cast(MixinModelType | None, raw_data)
             except Exception as e:
-                logger.error(f"{self._model_cls.__name__} get first error: {e}")
-                raise
+                raise Exception(f"{self._model_cls.__name__} get first error: {e}")
         return data
 
     def paginate(self, *, page: int | None = None, limit: int | None = None) -> "QueryBuilder":
@@ -328,8 +327,7 @@ class CountBuilder(BaseBuilder):
                 exec_result = await sess.execute(self._stmt)
                 data = exec_result.scalar()
             except Exception as e:
-                logger.error(f"{self._model_cls.__name__} count error: {e}")
-                raise
+                raise Exception(f"{self._model_cls.__name__} count error: {e}")
         return data
 
 
@@ -443,8 +441,7 @@ class UpdateBuilder(BaseBuilder):
                 await sess.execute(self.update_stmt)
                 await sess.commit()
             except Exception as e:
-                logger.error(f"{self._model_cls.__name__} execute update_stmt failed: {e}")
-                raise
+                raise Exception(f"{self._model_cls.__name__} execute update_stmt failed: {e}")
 
 
 def _validate_model_cls(model_cls: type, expected_type: type = type, subclass_of: type = ModelMixin):
