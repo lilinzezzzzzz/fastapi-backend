@@ -2,7 +2,6 @@ from contextvars import ContextVar
 
 from fastapi import Request
 
-from internal.utils.exception import AppException
 from pkg.logger_tool import logger
 
 

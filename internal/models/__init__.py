@@ -4,7 +4,7 @@ from typing import TypeVar
 from sqlalchemy import BigInteger, Column, DateTime
 from sqlalchemy.orm import InstrumentedAttribute
 
-from internal.infra.db import Base, get_session
+from internal.infra.default_db_session import Base, get_session
 from pkg import get_utc_without_tzinfo
 from pkg.context_tool import get_user_id_context_var
 from pkg.snowflake_tool import generate_snowflake_id

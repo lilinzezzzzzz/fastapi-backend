@@ -4,7 +4,7 @@ import os
 from celery import signals
 
 from internal.config.setting import setting
-from internal.infra.celery_db import close_async_celery_db, init_async_celery_db
+from internal.infra.celery_db_session import close_async_celery_db, init_async_celery_db
 from pkg import SYS_NAMESPACE
 from pkg.celery_task_manager import CeleryClient
 from pkg.logger_tool import logger

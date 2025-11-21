@@ -8,9 +8,9 @@ import numpy as np
 from fastapi import APIRouter, Request
 
 from internal.dao.user import user_dao
-from internal.infra.db import get_session
+from internal.infra.default_db_session import get_session
 from internal.models.user import User
-from internal.utils.exception import AppException
+from internal.core.exception import AppException
 from pkg.anyio_task_manager import anyio_task_manager
 from pkg.logger_tool import logger
 from pkg.orm_tool import new_cls_querier, new_cls_updater, new_counter

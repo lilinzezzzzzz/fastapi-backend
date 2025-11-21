@@ -7,8 +7,8 @@ from fastapi import status
 from loguru import logger
 from orjson import JSONDecodeError
 
-from internal.infra.db import get_redis
-from internal.utils.exception import AppException
+from internal.infra.default_db_session import get_redis
+from internal.core.exception import AppException
 from pkg import create_uuid_token, orjson_dumps, orjson_loads, token_cache_key, token_list_cache_key
 
 

@@ -1,6 +1,6 @@
 from internal.dao import BaseDao
-from internal.infra.celery_db import get_celery_session
-from internal.infra.db import get_session
+from internal.infra.celery_db_session import get_celery_session
+from internal.infra.default_db_session import get_session
 from internal.models.user import User
 
 

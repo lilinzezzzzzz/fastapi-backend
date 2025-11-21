@@ -3,7 +3,7 @@ import uuid
 from starlette.types import ASGIApp, Scope, Receive, Send
 from starlette.datastructures import MutableHeaders
 
-from internal.utils.exception import get_last_exec_tb
+from internal.core.exception import get_last_exec_tb
 from pkg.logger_tool import logger
 from pkg.resp_tool import error_code, response_factory
 

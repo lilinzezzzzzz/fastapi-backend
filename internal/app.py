@@ -7,7 +7,7 @@ from fastapi.exceptions import RequestValidationError
 
 from internal.aps_tasks import apscheduler_manager
 from internal.config.setting import setting
-from internal.constant import REDIS_KEY_LOCK_PREFIX
+from internal.constants import REDIS_KEY_LOCK_PREFIX
 from internal.utils.cache_helpers import cache
 from pkg import SYS_ENV, SYS_NAMESPACE
 from pkg.logger_tool import logger
