@@ -1,0 +1,138 @@
+###############################################################################
+# GIT ATTRIBUTES FOR PYTHON & WEB PROJECTS
+# Best practices for cross-platform consistency (Windows/macOS/Linux)
+###############################################################################
+
+# 1. 默认行为：自动处理文本文件
+# Git 会在检入时将其转换为 LF，检出时转换为系统默认（Windows为CRLF，Mac/Linux为LF）
+* text=auto
+
+###############################################################################
+# 2. 核心代码文件 (强制使用 LF)
+# 无论在哪个系统上，这些文件都应始终保持 LF 结尾。
+# 这对 Docker 容器、CI/CD 流程和跨平台兼容性至关重要。
+###############################################################################
+
+# Python
+*.py    text eol=lf diff=python
+*.pyi   text eol=lf diff=python
+*.pyx   text eol=lf diff=python
+*.whl   binary
+
+# Web / JavaScript / TypeScript
+*.js    text eol=lf
+*.jsx   text eol=lf
+*.ts    text eol=lf
+*.tsx   text eol=lf
+*.json  text eol=lf
+*.css   text eol=lf
+*.scss  text eol=lf
+*.less  text eol=lf
+*.html  text eol=lf
+*.htm   text eol=lf
+*.xml   text eol=lf
+*.svg   text eol=lf
+
+# Configs / Data / Documentation
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.toml  text eol=lf
+*.ini   text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
+*.csv   text eol=lf
+*.sql   text eol=lf
+
+###############################################################################
+# 3. Shell 脚本 (必须 LF)
+# 这是一个常见的痛点：Windows 用户检出的脚本如果变成 CRLF，
+# 在 Linux/Docker 中运行会报错 "no such file or directory" 或 "\r command not found"。
+###############################################################################
+*.sh    text eol=lf
+*.bash  text eol=lf
+*.zsh   text eol=lf
+
+###############################################################################
+# 4. Windows 脚本 (必须 CRLF)
+# 批处理文件需要 CRLF 才能在 Windows 上正确执行。
+###############################################################################
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+
+###############################################################################
+# 5. 二进制文件 (禁止 Git 修改)
+# 明确标记为二进制，防止 Git 尝试进行换行符转换或错误的 Diff。
+###############################################################################
+
+# Images
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.webp  binary
+*.svgz  binary
+
+# Fonts
+*.ttf   binary
+*.eot   binary
+*.otf   binary
+*.woff  binary
+*.woff2 binary
+
+# Archives / Documents
+*.jar   binary
+*.war   binary
+*.zip   binary
+*.tar   binary
+*.gz    binary
+*.7z    binary
+*.pdf   binary
+*.xls   binary
+*.xlsx  binary
+*.doc   binary
+*.docx  binary
+*.ppt   binary
+*.pptx  binary
+
+# Python Compiled / Cache (Should be in .gitignore, but safe to mark binary)
+*.pyc   binary
+*.pyd   binary
+*.db    binary
+*.sqlite binary
+
+###############################################################################
+# 6. 特殊文件处理
+###############################################################################
+
+# Jupyter Notebooks
+# 标记为文本，但通常不需要标准的 diff（结构太复杂）。
+# 如果已安装 jq 或 nbstripout，可以配置 filter。
+*.ipynb text eol=lf
+
+# Lock files
+# 这些通常是机器生成的，Diff 看起来很乱，标记为 binary 可以抑制 diff 显示，
+# 或者标记为 linguist-generated 以在 GitHub 统计中忽略它们。
+*.lock      text eol=lf linguist-generated
+package-lock.json text eol=lf linguist-generated
+yarn.lock   text eol=lf linguist-generated
+pnpm-lock.yaml text eol=lf linguist-generated
+poetry.lock text eol=lf linguist-generated
+
+###############################################################################
+# 7. Git Archive 设置 (Export Ignore)
+# 当运行 "git archive" (或在 GitHub 下载 ZIP) 时排除这些文件。
+# 用户下载源码包时不需要看到 CI 配置或 Git 设置。
+###############################################################################
+
+.gitattributes  export-ignore
+.gitignore      export-ignore
+.editorconfig   export-ignore
+.github/        export-ignore
+.vscode/        export-ignore
+.idea/          export-ignore
+Dockerfile      export-ignore
+docker-compose.yml export-ignore
+tests/          export-ignore
+docs/           export-ignore
