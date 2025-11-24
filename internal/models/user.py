@@ -1,6 +1,6 @@
 from sqlalchemy import Column, String
 
-from internal.models import ModelMixin
+from pkg.orm_tool.model_mixin import ModelMixin
 
 
 class User(ModelMixin):

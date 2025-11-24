@@ -4,14 +4,10 @@ from typing import Any, AsyncGenerator
 from redis.asyncio import ConnectionPool, Redis
 from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import declarative_base
 
 from internal.config.setting import setting
 from pkg import orjson_dumps, orjson_loads
 from pkg.logger_tool import logger
-
-# 创建 SQLAlchemy 基类
-Base = declarative_base()
 
 # 创建异步引擎
 engine = create_async_engine(

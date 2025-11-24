@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 import grpc
 from grpc.aio import Metadata
 
-from internal.config.setting import setting
 from pkg.logger_tool import logger
 
 
@@ -120,7 +119,7 @@ class BaseGrpcClient(ABC):
     def build_grpc_metadata(token):
         return Metadata(
             ('authorization', f"bearer {token}"),
-            ("app_id", setting.APP_ID)
+            ("app_id", "setting.APP_ID")
         )
 
     async def _ensure_connected(self):
@@ -147,5 +146,5 @@ class AsyncUserClient(BaseGrpcClient):
     def create_stub(self, channel):
         ...
 
-
-async_user_client = AsyncUserClient(setting.GRPC_HOST, setting.GRPC_PORT)
+# 使用示例：
+# async_user_client = AsyncUserClient(setting.GRPC_HOST, setting.GRPC_PORT)

@@ -1,7 +1,7 @@
 from pydantic import Field
 from typing import Annotated
 
-from internal.models import ModelMixin
+from pkg.orm_tool.model_mixin import ModelMixin
 
 
 class UserReqSchema(ModelMixin):

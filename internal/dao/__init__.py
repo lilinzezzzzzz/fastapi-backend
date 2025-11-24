@@ -4,7 +4,7 @@
 from sqlalchemy import Subquery
 from sqlalchemy.orm import InstrumentedAttribute
 
-from internal.models import MixinModelType, ModelMixin
+from pkg.orm_tool.model_mixin import ModelMixin, MixinModelType
 from internal.core.exception import AppException
 from pkg.logger_tool import logger
 from pkg.orm_tool import (CountBuilder, QueryBuilder, UpdateBuilder, new_cls_querier,
