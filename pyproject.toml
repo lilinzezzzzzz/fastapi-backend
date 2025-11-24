@@ -91,6 +91,7 @@ build = [
 ]
 
 [tool.uv]
+package = false
 default-groups = []
 
 [[tool.uv.index]]

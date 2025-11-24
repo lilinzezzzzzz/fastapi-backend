@@ -25,7 +25,7 @@ def get_base_dir() -> Path:
 
 
 def get_sys_env() -> str:
-    return str.lower(os.getenv("ENV", "unknown"))
+    return str.lower(os.getenv("APP_ENV", "unknown"))
 
 
 def get_sys_namespace() -> str:

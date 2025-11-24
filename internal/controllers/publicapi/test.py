@@ -6,6 +6,7 @@ from decimal import Decimal
 
 import numpy as np
 from fastapi import APIRouter, Request
+from fastapi.responses import StreamingResponse
 
 from internal.dao.user import user_dao
 from internal.infra.default_db_session import get_session
@@ -122,7 +123,8 @@ async def test_dao():
 
     try:
         # 1. 验证基础查询
-        created_user:User= await new_cls_querier(User, session_provider=get_session).eq_(User.id, test_user.id).first()
+        created_user: User = await new_cls_querier(User, session_provider=get_session).eq_(User.id,
+                                                                                           test_user.id).first()
         assert created_user.id == test_user.id
         logger.info(f"test created success")
 
@@ -138,7 +140,8 @@ async def test_dao():
         logger.info(f"test ne success")
 
         # gt
-        gt_users: list[User] = await new_cls_querier(User, session_provider=get_session).gt_(User.id, test_user.id).all()
+        gt_users: list[User] = await new_cls_querier(User, session_provider=get_session).gt_(User.id,
+                                                                                             test_user.id).all()
         assert all(u.id > test_user.id for u in gt_users)
         logger.info(f"test gt success")
 
@@ -163,7 +166,8 @@ async def test_dao():
         logger.info(f"test in_ success")
 
         # like 测试
-        like_users: list[User] = await new_cls_querier(User, session_provider=get_session).like(User.username, "lilinze").all()
+        like_users: list[User] = await new_cls_querier(User, session_provider=get_session).like(User.username,
+                                                                                                "lilinze").all()
         assert all("lilinze" in u.username for u in like_users)
         logger.info(f"test like success")
 
@@ -210,7 +214,8 @@ async def test_dao():
         # 3. 更新操作测试
         # 显式使用新查询器避免缓存问题
         updated_name = f"updated_name_{unique_hex}"
-        await new_cls_updater(User, session_provider=get_session).eq_(User.id, test_user.id).update(username=updated_name).execute()
+        await new_cls_updater(User, session_provider=get_session).eq_(User.id, test_user.id).update(
+            username=updated_name).execute()
         # 重新查询验证更新
         updated_user = await new_cls_querier(User, session_provider=get_session).eq_(User.id, test_user.id).first()
         assert updated_user.username == updated_name
@@ -231,3 +236,23 @@ async def test_dao():
     finally:
         test_user.deleted_at = datetime.now()
         await test_user.save()
+
+
+@router.get("/test-sse")
+async def test_sse():
+    async def event_generator():
+        # 1. 请求进入，先返回：hello，正在查询资料
+        yield "data: hello，正在查询资料\n\n"
+        await asyncio.sleep(2)
+        
+        # 2. sleep，返回：正在组织回答
+        yield "data: 正在组织回答\n\n"
+        await asyncio.sleep(2)
+        
+        # 3. sleep，陆续返回文本答案
+        answer_text = "这是流式返回的文本内容。这个接口演示了SSE的基本用法。"
+        for char in answer_text:
+            yield f"data: {char}\n\n"
+            await asyncio.sleep(0.05)
+    
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
