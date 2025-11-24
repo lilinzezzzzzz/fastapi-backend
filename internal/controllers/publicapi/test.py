@@ -24,7 +24,12 @@ router = APIRouter(prefix="/test", tags=["public v1 test"])
 async def test_raise_exception(_: Request):
     # 如果触发fastapi.HTTPException会有限被main.py的exception_handler捕获，
     # 如果是Exception会被middleware的exception.py捕获
-    raise AppException(code=500, detail="test_raise_exception")
+    raise Exception("test_raise_exception")
+
+
+@router.get("/test_raise_app_exception", summary="测试APP异常")
+async def test_raise_app_exception():
+    raise AppException(code=500, detail="test_raise_app_exception")
 
 
 @router.get("/test_custom_response_class_basic_types", summary="测试自定义响应类-基本类型")
@@ -273,4 +278,5 @@ async def test_sse():
 
         yield "data: =========\n\n"
         yield "data: 回答结束\n\n"
+
     return StreamingResponse(event_generator(), media_type="text/event-stream")
