@@ -110,7 +110,5 @@
 6. service 整理结果返回 controller  
 7. controller 将结果交给 transformers（序列化/格式化）  
 8. 前端接收响应
-
+PYTHONUNBUFFERED=1;PYTHONIOENCODING=utf-8;APP_ENV=local
 ---
-
-项目结构经过合理分层，职责边界清晰，便于长期迭代与团队协作。
