@@ -20,14 +20,14 @@ from pkg.resp_tool import response_factory
 router = APIRouter(prefix="/test", tags=["public v1 test"])
 
 
-@router.get("/test_raise_exception")
+@router.get("/test_raise_exception", summary="测试异常")
 async def test_raise_exception(_: Request):
     # 如果触发fastapi.HTTPException会有限被main.py的exception_handler捕获，
     # 如果是Exception会被middleware的exception.py捕获
     raise AppException(code=500, detail="test_raise_exception")
 
 
-@router.get("/test_custom_response_class_basic_types")
+@router.get("/test_custom_response_class_basic_types", summary="测试自定义响应类-基本类型")
 async def test_custom_response_class_basic_types(_: Request):
     return response_factory.resp_200(data={
         "large_int": 2 ** 53 + 1,  # 超过JS安全整数
@@ -38,7 +38,7 @@ async def test_custom_response_class_basic_types(_: Request):
     })
 
 
-@router.get("/test_custom_response_class_containers")
+@router.get("/test_custom_response_class_containers", summary="测试自定义响应类-容器类型")
 async def test_custom_response_class_containers(_: Request):
     return response_factory.resp_200(data=[
         {"set_data": {1, 2, 3}},  # 集合转列表
@@ -47,7 +47,7 @@ async def test_custom_response_class_containers(_: Request):
     ])
 
 
-@router.get("/test_custom_response_class_nested")
+@router.get("/test_custom_response_class_nested", summary="测试自定义响应类-嵌套结构")
 async def test_custom_response_class_nested(_: Request):
     return response_factory.resp_200(data={
         "level1": {
@@ -64,7 +64,7 @@ async def test_custom_response_class_nested(_: Request):
     })
 
 
-@router.get("/test_custom_response_class_third_party")
+@router.get("/test_custom_response_class_third_party", summary="测试自定义响应类-第三方库")
 async def test_custom_response_class_third_party(_: Request):
     return response_factory.resp_200(data={
         "numpy_array": np.array([1.1, 2.2, 3.3]),  # NumPy数组
@@ -72,7 +72,7 @@ async def test_custom_response_class_third_party(_: Request):
     })
 
 
-@router.get("/test_custom_response_class_edge_cases")
+@router.get("/test_custom_response_class_edge_cases", summary="测试自定义响应类-边缘情况")
 async def test_custom_response_class_edge_cases(_: Request):
     return response_factory.resp_200(data={
         "numpy_array": np.array([1.1, 2.2, 3.3]),  # NumPy数组
@@ -80,7 +80,7 @@ async def test_custom_response_class_edge_cases(_: Request):
     })
 
 
-@router.get("/test_custom_response_class_edge_cases")
+@router.get("/test_custom_response_class_complex", summary="测试自定义响应类-复杂情况")
 async def test_custom_response_class_complex(_: Request):
     return response_factory.resp_200(data={
         "empty_dict": {},
@@ -90,7 +90,7 @@ async def test_custom_response_class_complex(_: Request):
     })
 
 
-@router.get("/test_custom_response_class_special_types")
+@router.get("/test_custom_response_class_special_types", summary="测试自定义响应类-特殊类型")
 async def test_custom_response_class_special_types(_: Request):
     return response_factory.resp_200(data={
         "decimal": Decimal("123.4567890123456789"),
@@ -107,7 +107,7 @@ async def async_task():
     await asyncio.sleep(10)
 
 
-@router.get("/test_contextvars_on_asyncio_task")
+@router.get("/test_contextvars_on_asyncio_task", summary="测试Contextvars在Asyncio任务")
 async def test_contextvars_on_asyncio_task():
     await  anyio_task_manager.add_task("test", async_task)
     return response_factory.resp_200()
@@ -246,7 +246,7 @@ async def text_generator():
         await asyncio.sleep(0.05)
 
 
-@router.get("/test-sse")
+@router.get("/test-sse", summary="测试SSE")
 async def test_sse():
     async def event_generator():
         # 1. 请求进入，先返回：hello，正在查询资料
