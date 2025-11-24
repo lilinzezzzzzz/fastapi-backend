@@ -5,6 +5,8 @@ from typing import Any, Callable, Union
 from fastapi.responses import ORJSONResponse
 from orjson import orjson
 
+from pkg import orjson_dumps
+
 
 class CustomORJSONResponse(ORJSONResponse):
     SERIALIZER_OPTIONS = (
@@ -183,3 +185,24 @@ class ResponseFactory:
 
 # 使用示例
 response_factory = ResponseFactory()
+
+
+def wrap_sse_data(content: str | dict) -> str:
+    """
+    将字符串或字典包装成符合SSE格式的数据
+    
+    Args:
+        content: 要发送的内容，可以是字符串或字典
+    
+    Returns:
+        符合SSE格式的字符串，格式为 "data: {content}\n\n"
+    
+    Examples:
+        >>> wrap_sse_data("hello world")
+        'data: hello world\n\n'
+        >>> wrap_sse_data({"message": "hello", "status": "ok"})
+        'data: {"message": "hello", "status": "ok"}\n\n'
+    """
+    if isinstance(content, dict):
+        content = orjson_dumps(content).decode("utf-8")
+    return f"data: {content}\n\n"
