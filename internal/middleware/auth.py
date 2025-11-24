@@ -58,7 +58,14 @@ class ASGIAuthMiddleware:
             return
 
         # 3. Token 校验
-        token = headers.get("Authorization", "")
+        auth_header = headers.get("Authorization", "")
+
+        # 兼容 Bearer Token
+        if auth_header.startswith("Bearer "):
+            token = auth_header.split(" ")[1]
+        else:
+            token = auth_header
+
         if not token:
             logger.warning("get empty token from Authorization")
             resp = response_factory.resp_401(message="invalid or missing token")
