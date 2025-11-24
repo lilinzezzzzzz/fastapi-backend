@@ -238,21 +238,39 @@ async def test_dao():
         await test_user.save()
 
 
+async def text_generator():
+    """异步生成器：逐字返回文本"""
+    answer_text = "演示用异步生成器陆续返回文本答案。"
+    for c in answer_text:
+        yield c
+        await asyncio.sleep(0.05)
+
+
 @router.get("/test-sse")
 async def test_sse():
     async def event_generator():
         # 1. 请求进入，先返回：hello，正在查询资料
         yield "data: hello，正在查询资料\n\n"
         await asyncio.sleep(2)
-        
+
         # 2. sleep，返回：正在组织回答
         yield "data: 正在组织回答\n\n"
         await asyncio.sleep(2)
-        
-        # 3. sleep，陆续返回文本答案
-        answer_text = "这是流式返回的文本内容。这个接口演示了SSE的基本用法。"
-        for char in answer_text:
-            yield f"data: {char}\n\n"
+
+        yield "data: 开始回答\n\n"
+        yield "data: =========\n\n"
+        # 3. 逐字返回文本答案
+        answer_text = "演示了SSE的基本用法, 逐字返回文本答案"
+        for c in answer_text:
+            yield f"data: {c}\n\n"
             await asyncio.sleep(0.05)
-    
+
+        yield "data: =========\n\n"
+
+        # 3. sleep，用异步生成器陆续返回文本答案
+        async for char in text_generator():
+            yield f"data: {char}\n\n"
+
+        yield "data: =========\n\n"
+        yield "data: 回答结束\n\n"
     return StreamingResponse(event_generator(), media_type="text/event-stream")
