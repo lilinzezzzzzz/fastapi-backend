@@ -313,6 +313,12 @@ uv add "starlette>0.49.1"
 # 升级依赖(会自动执行uv lock, 并且更新project.toml)
 uv lock --upgrade-package <包名>
 
+# 升级工具
+uv tool upgrade black
+
+# 升级所有工具
+uv tool upgrade --all
+
 # 删除依赖(会自动执行uv lock, 并且更新project.toml)
 uv remove <包名>
 
