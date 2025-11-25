@@ -8,7 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from internal.aps_tasks import apscheduler_manager
 from internal.config.setting import setting
 from internal.constants import REDIS_KEY_LOCK_PREFIX
-from internal.utils.cache_helpers import cache
+from internal.utils import cache_client
 from pkg import SYS_ENV, SYS_NAMESPACE
 from pkg.logger_tool import logger
 from pkg.resp_tool import response_factory
@@ -79,7 +79,7 @@ def register_middleware(app: FastAPI):
 async def start_scheduler(pid: int):
     scheduler_lock_key = f"{REDIS_KEY_LOCK_PREFIX}:scheduler:master"
     # 只有一个 worker 能获得锁，成为 scheduler master
-    lock_id = await cache.acquire_lock(
+    lock_id = await cache_client.acquire_lock(
         scheduler_lock_key,
         expire_ms=180000,  # 3 分钟, 避免锁死
         timeout_ms=1000,  # 最多等 1 秒获取锁
