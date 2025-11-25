@@ -301,11 +301,17 @@ uv sync --python <解释器路径>
 # 添加依赖(会自动执行uv lock, 并且更新project.toml)
 uv add <包名>
 
-# 删除依赖(会自动执行uv lock, 并且更新project.toml)
-uv remove <包名>
+# 升级依赖(会自动执行uv lock, 并且更新project.toml)
+uv add <包名> --upgrade
+
+# 升级依赖(会自动执行uv lock, 并且更新project.toml)
+uv add "starlette>0.49.1"
 
 # 升级依赖(会自动执行uv lock, 并且更新project.toml)
 uv lock --upgrade-package <包名>
+
+# 删除依赖(会自动执行uv lock, 并且更新project.toml)
+uv remove <包名>
 
 # 所有的依赖
 uv pip list
