@@ -12,7 +12,7 @@ from pkg import create_uuid_token, orjson_dumps, orjson_loads, token_cache_key, 
 from pkg.cache_tool.types import SessionProvider
 
 
-class Cache:
+class CacheClient:
     def __init__(self, session_provider: SessionProvider):
         self.session_provider = session_provider
 
@@ -276,5 +276,5 @@ class Cache:
         return None
 
 
-def new_cache_tool(session_provider: SessionProvider):
-    return Cache(session_provider=session_provider)
+def new_cache_client(session_provider: SessionProvider):
+    return CacheClient(session_provider=session_provider)

@@ -25,13 +25,9 @@ class LogConfig:
     RETENTION: str = os.getenv("LOG_RETENTION", "30 days")
     COMPRESSION: str = "zip"
 
+    CONSOLE_FORMAT = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | <magenta>{extra[trace_id]}</magenta> | <yellow>{extra[type]}</yellow> - <level>{message}</level>"
 
-class LogFormat:
-    """日志格式模板"""
-    # 控制台通常可以简单一点，或者包含 type 字段以便调试
-    CONSOLE = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | <magenta>{extra[trace_id]}</magenta> | <yellow>{extra[type]}</yellow> - <level>{message}</level>"
-
-    FILE = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {extra[trace_id]} | {extra[type]} - {message}"
+    FILE_FORMAT = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {extra[trace_id]} | {extra[type]} - {message}"
 
 
 def _remove_logging_logger():
@@ -64,7 +60,7 @@ def _init_logger(write_to_file: bool = True, write_to_console: bool = True):
     if write_to_console:
         loguru_logger.add(
             sink=sys.stderr,
-            format=LogFormat.CONSOLE,
+            format=LogConfig.CONSOLE_FORMAT,
             level=LogConfig.LEVEL,
             enqueue=True,
             colorize=True,
@@ -83,7 +79,7 @@ def _init_logger(write_to_file: bool = True, write_to_console: bool = True):
         # --- Sink A: 系统默认日志 (排除 LLM) ---
         loguru_logger.add(
             sink=LogConfig.DEFAULT_DIR / "app_{time:YYYY-MM-DD}.log",
-            format=LogFormat.FILE,
+            format=LogConfig.FILE_FORMAT,
             level=LogConfig.LEVEL,
             rotation=LogConfig.ROTATION,
             retention=LogConfig.RETENTION,
@@ -95,7 +91,7 @@ def _init_logger(write_to_file: bool = True, write_to_console: bool = True):
         # --- Sink B: LLM 专用日志 ---
         loguru_logger.add(
             sink=LogConfig.LLM_DIR / "llm_{time:YYYY-MM-DD}.log",
-            format=LogFormat.FILE,
+            format=LogConfig.FILE_FORMAT,
             level=LogConfig.LEVEL,
             rotation=LogConfig.ROTATION,
             retention=LogConfig.RETENTION,
