@@ -5,7 +5,7 @@ from pathlib import Path
 
 import loguru
 
-from pkg import BASE_DIR, SYS_ENV
+from pkg import BASE_DIR
 
 
 class LogConfig:
