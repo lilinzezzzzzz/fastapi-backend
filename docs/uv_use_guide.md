@@ -330,4 +330,7 @@ uv pip freeze > requirements.txt
 
 # PyCharm 兼容性
 uv pip install pip setuptools wheel
+
+# PyCharm 运行时环境变量
+PYTHONUNBUFFERED=1;PYTHONIOENCODING=utf-8;APP_ENV=local
 ```
