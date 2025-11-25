@@ -292,6 +292,9 @@ uv sync --no-default-groups
 # 同步主依赖+dev依赖
 uv sync --no-default-groups --group dev
 
+# 同步所有依赖
+uv sync --all-groups
+
 # 同步依赖到当前激活的虚拟环境
 uv sync --active
 
