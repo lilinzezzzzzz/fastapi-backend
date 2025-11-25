@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from redis.asyncio import ConnectionPool, Redis
 
 from internal.config.setting import setting
+from pkg.cache_tool.client import new_cache_client
 
 RedisConnectPool = ConnectionPool.from_url(
     setting.redis_url,
@@ -22,3 +23,6 @@ async def get_redis() -> AsyncGenerator[Redis, None]:
         yield _redis
     except Exception as e:
         raise Exception(f"Redis operation failed, err={e}")
+
+
+cache_client = new_cache_client(session_provider=get_redis)
