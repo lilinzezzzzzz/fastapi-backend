@@ -10,7 +10,7 @@ from pkg.orm_tool.model_mixin import ModelMixin
 from pkg import get_utc_without_tzinfo, unique_list
 from pkg.context_tool import get_user_id_context_var
 from pkg.logger_tool import logger
-from pkg.types import SessionProvider
+from pkg.orm_tool.types import SessionProvider
 
 
 class BaseBuilder[T: ModelMixin]:

@@ -7,7 +7,7 @@ from pkg.orm_tool import Base
 from pkg import get_utc_without_tzinfo
 from pkg.context_tool import get_user_id_context_var
 from pkg.snowflake_tool import generate_snowflake_id
-from pkg.types import SessionProvider
+from pkg.orm_tool.types import SessionProvider
 
 
 class ModelMixin(Base):

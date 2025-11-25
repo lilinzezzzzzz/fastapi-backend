@@ -1,7 +1,6 @@
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator
 
-from redis.asyncio import ConnectionPool, Redis
 from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -58,22 +57,3 @@ def before_cursor_execute(conn, cursor, statement, parameters, context, executem
 
 # 监听 before_cursor_execute 事件，将事件处理函数绑定到 Engine 上
 event.listen(engine.sync_engine, "before_cursor_execute", before_cursor_execute)
-
-# 创建全局的连接池实例
-RedisConnectPool = ConnectionPool.from_url(
-    setting.redis_url,
-    encoding="utf-8",
-    decode_responses=True,
-    max_connections=20
-)
-
-_redis = Redis(connection_pool=RedisConnectPool)
-
-
-@asynccontextmanager
-async def get_redis() -> AsyncGenerator[Redis, None]:
-    try:
-        yield _redis
-    except Exception as e:
-        logger.error(f"Redis operation failed: {e}")
-        raise
