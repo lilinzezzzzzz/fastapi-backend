@@ -7,10 +7,10 @@ from sqlalchemy.orm import InstrumentedAttribute
 from pkg.orm_tool.model_mixin import ModelMixin, MixinModelType
 from internal.core.exception import AppException
 from pkg.logger_tool import logger
-from pkg.orm_tool import (CountBuilder, QueryBuilder, UpdateBuilder, new_cls_querier,
-                          new_cls_updater,
-                          new_col_counter, new_counter,
-                          new_ins_updater, new_sub_querier)
+from pkg.orm_tool.builder import (CountBuilder, QueryBuilder, UpdateBuilder, new_cls_querier,
+                                  new_cls_updater,
+                                  new_col_counter, new_counter,
+                                  new_ins_updater, new_sub_querier)
 from pkg.types import SessionProvider
 
 

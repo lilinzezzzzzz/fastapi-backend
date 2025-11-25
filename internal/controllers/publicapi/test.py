@@ -13,8 +13,8 @@ from internal.infra.default_db_session import get_session
 from internal.models.user import User
 from internal.core.exception import AppException
 from pkg.anyio_task_manager import anyio_task_manager
-from pkg.logger_tool import logger
-from pkg.orm_tool import new_cls_querier, new_cls_updater, new_counter
+from pkg.logger_tool import logger, llm_logger
+from pkg.orm_tool.builder import new_cls_querier, new_cls_updater, new_counter
 from pkg.resp_tool import response_factory
 
 router = APIRouter(prefix="/test", tags=["public v1 test"])
@@ -280,3 +280,10 @@ async def test_sse():
         yield "data: 回答结束\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.get("/test-logger", summary="测试日志")
+async def test_logger():
+    logger.info("测试默认日志")
+    llm_logger.info("测试LLM日志")
+    return response_factory.resp_200()
