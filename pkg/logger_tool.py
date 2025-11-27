@@ -14,10 +14,8 @@ class LogConfig:
     """日志配置中心"""
     LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
-    # 基础日志根目录
     BASE_LOG_DIR: Path = BASE_DIR / "logs"
-
-    # 只有 Default 是静态定义的，其他目录(llm/device等)都是动态生成的
+    # 只有 Default 是静态定义的
     DEFAULT_DIR: Path = BASE_LOG_DIR / "default"
 
     FILE_NAME: str = "{time:YYYY-MM-DD}.log"
@@ -25,7 +23,6 @@ class LogConfig:
     RETENTION: str = os.getenv("LOG_RETENTION", "30 days")
     COMPRESSION: str = "zip"
 
-    # 格式配置
     CONSOLE_FORMAT = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | <magenta>{extra[trace_id]}</magenta> | <yellow>{extra[type]}</yellow> - <level>{message}</level>"
     FILE_FORMAT = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {extra[trace_id]} | {extra[type]} - {message}"
 
@@ -45,7 +42,6 @@ def filter_default(record: Any) -> bool:
 
 
 # --- 全局状态管理 ---
-# 用于记录已注册的 type，防止重复 add sink
 _REGISTERED_TYPES: Set[str] = set()
 
 
@@ -55,11 +51,9 @@ def _init_logger(write_to_file: bool = True, write_to_console: bool = True):
 
     loguru_logger = loguru.logger
     loguru_logger.remove()
-
-    # 重置已注册列表 (测试隔离用)
     _REGISTERED_TYPES.clear()
 
-    # 1. 默认配置
+    # 1. 默认配置 (type='default')
     loguru_logger.configure(extra={"trace_id": "-", "type": "default"})
 
     # 2. 控制台输出
@@ -92,7 +86,6 @@ def _init_logger(write_to_file: bool = True, write_to_console: bool = True):
             filter=filter_default
         )
 
-        # 标记 default 为已注册
         _REGISTERED_TYPES.add("default")
 
     loguru_logger.info("Logger initialized.")
@@ -103,32 +96,27 @@ def _init_logger(write_to_file: bool = True, write_to_console: bool = True):
 logger = _init_logger()
 
 
-# --- 动态注册函数 ---
+# --- 动态注册函数 (已修改) ---
 
 def get_logger_by_type(log_type: str):
     """
     获取指定类型的 logger。
-    如果是首次遇到该 log_type (例如 'llm', 'device_01')，会自动注册一个新的 Sink。
-
-    :param log_type: 业务类型或设备ID
+    如果是首次遇到该 log_type，会自动注册一个新的 Sink。
     """
     global _REGISTERED_TYPES
 
-    # 1. 如果已经注册过，直接返回绑定好的 logger
     if log_type in _REGISTERED_TYPES:
         return logger.bind(type=log_type)
 
-    # 2. 动态注册新 Sink
-    # 定义闭包过滤器：只接收当前 log_type 的日志
+    # --- 动态注册新 Sink ---
+
+    # 定义闭包过滤器
     def specific_filter(record):
         return record["extra"].get("type") == log_type
 
-    # 路径构造：使用变量拼接，而不是 Loguru 的 {extra} 模板
-    # 这样彻底规避了 KeyError: 'extra' 问题，且支持 Rotation
     sink_path = LogConfig.BASE_LOG_DIR / log_type / "{time:YYYY-MM-DD}.log"
 
     try:
-        # 确保目录存在
         (LogConfig.BASE_LOG_DIR / log_type).mkdir(parents=True, exist_ok=True)
 
         logger.add(
@@ -138,16 +126,20 @@ def get_logger_by_type(log_type: str):
             rotation=LogConfig.ROTATION,
             retention=LogConfig.RETENTION,
             compression=LogConfig.COMPRESSION,
-            enqueue=True,  # 异步写入
+            enqueue=True,
             filter=specific_filter
         )
 
         _REGISTERED_TYPES.add(log_type)
-        # 仅在调试时打开，生产环境可注释
-        # print(f"DEBUG: Registered new log sink for type: {log_type}", file=sys.stderr)
+
+        # [修改点]：使用 logger 记录系统事件
+        # 这条日志本身带有 type='default'，所以会被 filter_default 捕获，
+        # 写入到 /logs/default/app_xxxx.log 中
+        logger.info(f"System: Registered new log sink for type {log_type}")
 
     except Exception as e:
-        print(f"Error registering sink for {log_type}: {e}", file=sys.stderr)
+        # [修改点]：使用 logger.error 记录错误
+        # 同样写入默认日志，方便排查为什么文件夹创建失败
+        logger.error(f"System: Failed to register sink for {log_type}. Error: {e}")
 
-    # 3. 返回绑定了新类型的 logger
     return logger.bind(type=log_type)
