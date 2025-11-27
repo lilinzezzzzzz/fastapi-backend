@@ -15,134 +15,157 @@ class LogConfig:
     LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
     BASE_LOG_DIR: Path = BASE_DIR / "logs"
-    # 只有 Default 是静态定义的
     DEFAULT_DIR: Path = BASE_LOG_DIR / "default"
 
-    FILE_NAME: str = "{time:YYYY-MM-DD}.log"
+    # 通用配置
     ROTATION: str = os.getenv("LOG_ROTATION", "00:00")
     RETENTION: str = os.getenv("LOG_RETENTION", "30 days")
     COMPRESSION: str = "zip"
 
+    # 格式配置
+    # Console 使用文本格式 (方便看)
     CONSOLE_FORMAT = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | <magenta>{extra[trace_id]}</magenta> | <yellow>{extra[type]}</yellow> - <level>{message}</level>"
+    # File 使用 JSON 序列化，FORMAT 参数在 serialize=True 时会被 loguru 忽略或作为 text 字段，此处保留供参考
     FILE_FORMAT = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {extra[trace_id]} | {extra[type]} - {message}"
 
 
-def _remove_logging_logger():
-    """清除 uvicorn 等第三方库的默认 handler"""
-    logging.getLogger("uvicorn.access").handlers = []
-    logging.getLogger("uvicorn.error").handlers = []
-    logging.getLogger("uvicorn").handlers = []
+class LoggerManager:
+    """日志管理器：负责 Loguru 的初始化、Sink 注册和动态日志获取"""
 
+    def __init__(self):
+        self._logger = loguru.logger
+        self._registered_types: Set[str] = set()
+        self._is_initialized = False
 
-# --- 过滤器定义 ---
+    def setup(self, write_to_file: bool = True, write_to_console: bool = True) -> "loguru.Logger":
+        """
+        初始化日志配置 (相当于之前的 _init_logger)
+        """
+        # 防止重复初始化
+        self._logger.remove()
+        self._registered_types.clear()
 
-def filter_default(record: Any) -> bool:
-    """通道 A: 只收 default"""
-    return record["extra"].get("type") == "default"
+        # 1. 清除第三方库(uvicorn)的默认 handler
+        # self._remove_uvicorn_handlers()
 
+        # 2. 设置默认 Context (type='default')
+        self._logger.configure(extra={"trace_id": "-", "type": "default"})
 
-# --- 全局状态管理 ---
-_REGISTERED_TYPES: Set[str] = set()
+        # 3. 配置控制台输出 (Human Readable)
+        if write_to_console:
+            self._logger.add(
+                sink=sys.stderr,
+                format=LogConfig.CONSOLE_FORMAT,
+                level=LogConfig.LEVEL,
+                enqueue=True,
+                colorize=True,
+                diagnose=True
+            )
 
+        # 4. 配置文件输出 (JSON)
+        if write_to_file:
+            self._ensure_dir(LogConfig.DEFAULT_DIR)
 
-def _init_logger(write_to_file: bool = True, write_to_console: bool = True):
-    """初始化日志系统"""
-    global _REGISTERED_TYPES
+            # --- Sink A: 静态默认日志 (type=default) ---
+            self._logger.add(
+                sink=LogConfig.DEFAULT_DIR / "app_{time:YYYY-MM-DD}.log",
+                level=LogConfig.LEVEL,
+                rotation=LogConfig.ROTATION,
+                retention=LogConfig.RETENTION,
+                compression=LogConfig.COMPRESSION,
+                enqueue=True,
+                serialize=True,  # 开启 JSON
+                filter=self._filter_default
+            )
 
-    loguru_logger = loguru.logger
-    loguru_logger.remove()
-    _REGISTERED_TYPES.clear()
+            self._registered_types.add("default")
 
-    # 1. 默认配置 (type='default')
-    loguru_logger.configure(extra={"trace_id": "-", "type": "default"})
+        self._logger.info("Logger initialized successfully.")
+        self._is_initialized = True
+        return self._logger
 
-    # 2. 控制台输出
-    if write_to_console:
-        loguru_logger.add(
-            sink=sys.stderr,
-            format=LogConfig.CONSOLE_FORMAT,
-            level=LogConfig.LEVEL,
-            enqueue=True,
-            colorize=True,
-            diagnose=True
-        )
+    def get_dynamic_logger(self, log_type: str) -> "loguru.Logger":
+        """
+        获取动态类型的 Logger (相当于之前的 get_logger_by_dynamic_type)
+        如果该类型是第一次出现，会自动注册对应的文件 Sink
+        """
+        if not self._is_initialized:
+            # 防止忘记调用 setup，这里可以做一个隐式初始化，或者报错
+            # 这里选择打印警告
+            raise RuntimeError("LoggerManager is not initialized! You MUST call 'logger_manager.setup()' first.")
 
-    # 3. 文件输出 (系统启动时只注册 default)
-    if write_to_file:
+        # 1. 缓存命中，直接返回
+        if log_type in self._registered_types:
+            return self._logger.bind(type=log_type)
+
+        # 2. 动态注册新 Sink
         try:
-            LogConfig.DEFAULT_DIR.mkdir(parents=True, exist_ok=True)
+            log_dir = LogConfig.BASE_LOG_DIR / log_type
+            self._ensure_dir(log_dir)
+
+            sink_path = log_dir / "{time:YYYY-MM-DD}.log"
+
+            # 使用闭包锁定当前的 log_type
+            def specific_filter(record):
+                return record["extra"].get("type") == log_type
+
+            self._logger.add(
+                sink=sink_path,
+                level=LogConfig.LEVEL,
+                rotation=LogConfig.ROTATION,
+                retention=LogConfig.RETENTION,
+                compression=LogConfig.COMPRESSION,
+                enqueue=True,
+                serialize=True,  # 开启 JSON
+                filter=specific_filter
+            )
+
+            self._registered_types.add(log_type)
+
+            # 记录系统日志
+            self._logger.info(f"System: Registered new log sink for type '{log_type}'")
+
+        except Exception as e:
+            # 降级处理：注册失败时，回退到 default，并记录错误
+            self._logger.error(f"System: Failed to register sink for '{log_type}'. Error: {e}")
+            return self._logger.bind(type="default", original_type=log_type)
+
+        return self._logger.bind(type=log_type)
+
+    @staticmethod
+    def _filter_default(record: Any) -> bool:
+        return record["extra"].get("type") == "default"
+
+    @staticmethod
+    def _remove_uvicorn_handlers():
+        logging.getLogger("uvicorn.access").handlers = []
+        logging.getLogger("uvicorn.error").handlers = []
+        logging.getLogger("uvicorn").handlers = []
+
+    @staticmethod
+    def _ensure_dir(path: Path):
+        try:
+            path.mkdir(parents=True, exist_ok=True)
         except OSError:
             pass
 
-        # --- Sink A: 静态默认日志 ---
-        loguru_logger.add(
-            sink=LogConfig.DEFAULT_DIR / "app_{time:YYYY-MM-DD}.log",
-            format=LogConfig.FILE_FORMAT,
-            level=LogConfig.LEVEL,
-            rotation=LogConfig.ROTATION,
-            retention=LogConfig.RETENTION,
-            compression=LogConfig.COMPRESSION,
-            enqueue=True,
-            serialize=True,
-            filter=filter_default
-        )
-
-        _REGISTERED_TYPES.add("default")
-
-    loguru_logger.info("Logger initialized.")
-    return loguru_logger
+    @property
+    def server_logger(self):
+        """返回原始的 loguru logger 对象"""
+        return self._logger
 
 
-# --- 初始化主对象 ---
-logger = _init_logger()
+# --- 单例模式导出 ---
 
+# 1. 实例化管理器
+logger_manager = LoggerManager()
 
-# --- 动态注册函数 (已修改) ---
+# 2. 执行初始化 (模块加载时执行)
+# 这样外部 import logger 时，已经是配置好的状态
+logger = logger_manager.setup()
 
-def get_logger_by_dynamic_type(log_type: str):
-    """
-    获取指定类型的 logger。
-    如果是首次遇到该 log_type，会自动注册一个新的 Sink。
-    """
-    global _REGISTERED_TYPES
+# 3. 导出常用的动态 logger 获取方法，保持 API 简洁
+get_logger = logger_manager.get_dynamic_logger
 
-    if log_type in _REGISTERED_TYPES:
-        return logger.bind(type=log_type)
-
-    # --- 动态注册新 Sink ---
-
-    # 定义闭包过滤器
-    def specific_filter(record):
-        return record["extra"].get("type") == log_type
-
-    sink_path = LogConfig.BASE_LOG_DIR / log_type / "{time:YYYY-MM-DD}.log"
-
-    try:
-        (LogConfig.BASE_LOG_DIR / log_type).mkdir(parents=True, exist_ok=True)
-
-        logger.add(
-            sink=sink_path,
-            format=LogConfig.FILE_FORMAT,
-            level=LogConfig.LEVEL,
-            rotation=LogConfig.ROTATION,
-            retention=LogConfig.RETENTION,
-            compression=LogConfig.COMPRESSION,
-            enqueue=True,
-            serialize=True,
-            filter=specific_filter
-        )
-
-        _REGISTERED_TYPES.add(log_type)
-
-        # [修改点]：使用 logger 记录系统事件
-        # 这条日志本身带有 type='default'，所以会被 filter_default 捕获，
-        # 写入到 /logs/default/app_xxxx.log 中
-        logger.info(f"System: Registered new log sink for type {log_type}")
-
-    except Exception as e:
-        # [修改点]：使用 logger.error 记录错误
-        # 同样写入默认日志，方便排查为什么文件夹创建失败
-        logger.error(f"System: Failed to register sink for {log_type}. Error: {e}")
-        return logger.bind(type="default")
-
-    return logger.bind(type=log_type)
+# 4. 预置 LLM Logger
+llm_logger = logger_manager.get_dynamic_logger("llm")
