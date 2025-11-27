@@ -15,7 +15,7 @@ WORKDIR /app
 # 安装 uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# --- 修改点 1: 全局激活虚拟环境
+# 全局激活虚拟环境
 #  python/pip/uvicorn 命令可以直接用，
 # 而且 uv sync 也会自动检测到 VIRTUAL_ENV 并在其中安装，不需要手动指定环境位置
 ENV VIRTUAL_ENV=/app/.venv \
@@ -23,7 +23,7 @@ ENV VIRTUAL_ENV=/app/.venv \
 
 COPY pyproject.toml uv.lock ./
 
-# --- 安装依赖 ---
+# 安装依赖
 # 此时 VIRTUAL_ENV 已经生效，uv 会自动把包安装到 /app/.venv 中
 RUN uv sync --frozen --no-cache --no-default-groups
 
@@ -34,6 +34,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD ss -lnt | grep -q 8000 || exit 1
 
-# --- 启动命令---
+# 启动命令
 # 不需要 "uv run" 了，因为 uvicorn 已经在 PATH 里了
 ENTRYPOINT ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--loop", "uvloop", "--http", "httptools", "--access-log"]
