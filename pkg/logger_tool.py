@@ -98,7 +98,7 @@ logger = _init_logger()
 
 # --- 动态注册函数 (已修改) ---
 
-def get_logger_by_type(log_type: str):
+def get_logger_by_dynamic_type(log_type: str):
     """
     获取指定类型的 logger。
     如果是首次遇到该 log_type，会自动注册一个新的 Sink。
@@ -141,5 +141,6 @@ def get_logger_by_type(log_type: str):
         # [修改点]：使用 logger.error 记录错误
         # 同样写入默认日志，方便排查为什么文件夹创建失败
         logger.error(f"System: Failed to register sink for {log_type}. Error: {e}")
+        return logger.bind(type="default")
 
     return logger.bind(type=log_type)

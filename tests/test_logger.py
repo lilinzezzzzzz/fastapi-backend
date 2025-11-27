@@ -4,7 +4,7 @@ import pytest
 from loguru import logger as loguru_logger
 
 # 请将 core_logger 替换为你实际的文件名/路径
-from pkg.logger_tool import LogConfig, _init_logger, get_logger_by_type, logger as global_logger
+from pkg.logger_tool import LogConfig, _init_logger, get_logger_by_dynamic_type, logger as global_logger
 
 
 @pytest.fixture
@@ -59,7 +59,7 @@ def test_llm_logging_path(setup_logging):
     today = get_today_str()
 
     # 触发 LLM 日志 (使用你代码中的 get_logger_by_type 或 bind)
-    llm_logger = get_logger_by_type("llm")
+    llm_logger = get_logger_by_dynamic_type("llm")
     llm_logger.info("This is an AI response")
 
     loguru_logger.complete()
@@ -77,7 +77,7 @@ def test_dynamic_device_logging(setup_logging):
     device_id = "device_camera_001"
 
     # 触发动态设备日志
-    dev_logger = get_logger_by_type(device_id)
+    dev_logger = get_logger_by_dynamic_type(device_id)
     dev_logger.info("Device connected successfully")
 
     loguru_logger.complete()
@@ -97,7 +97,7 @@ def test_log_isolation(setup_logging):
     today = get_today_str()
 
     # 写入一条设备日志
-    get_logger_by_type("device_x").info("Device Msg")
+    get_logger_by_dynamic_type("device_x").info("Device Msg")
 
     loguru_logger.complete()
 
@@ -117,7 +117,7 @@ def test_new_device_on_the_fly(setup_logging):
 
     # 模拟系统运行中突然出现新设备
     new_device_id = "sensor_9999"
-    logger = get_logger_by_type(new_device_id)
+    logger = get_logger_by_dynamic_type(new_device_id)
     logger.warning("Battery Low")
 
     loguru_logger.complete()
