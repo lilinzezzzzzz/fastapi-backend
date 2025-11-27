@@ -20,7 +20,7 @@ def init_setting() -> BaseConfig:
     }
     config_class = config_classes_gather.get(SYS_ENV)
     if not config_class:
-        raise Exception(f"Invalid ENV value: {SYS_ENV}")
+        raise Exception(f"Invalid APP_ENV value: {SYS_ENV}")
 
     env_file_path = (BASE_DIR / "configs" / f".env.{SYS_NAMESPACE}").as_posix()
     # 检查env_file_path是否存在
