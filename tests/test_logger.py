@@ -23,6 +23,8 @@ def setup_logging(tmp_path, monkeypatch):
     # 我们关闭控制台输出，只测试文件写入，保持测试输出干净
     _init_logger(write_to_file=True, write_to_console=False)
 
+    print(f"\n---> 当前测试日志路径: {tmp_path}")
+
     # 3. 返回临时目录路径供测试使用
     yield tmp_path
 
