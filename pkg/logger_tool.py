@@ -83,6 +83,7 @@ def _init_logger(write_to_file: bool = True, write_to_console: bool = True):
             retention=LogConfig.RETENTION,
             compression=LogConfig.COMPRESSION,
             enqueue=True,
+            serialize=True,
             filter=filter_default
         )
 
@@ -127,6 +128,7 @@ def get_logger_by_dynamic_type(log_type: str):
             retention=LogConfig.RETENTION,
             compression=LogConfig.COMPRESSION,
             enqueue=True,
+            serialize=True,
             filter=specific_filter
         )
 
