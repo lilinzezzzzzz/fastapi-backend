@@ -139,10 +139,11 @@ class LoggerManager:
         return self._logger.bind(type=log_type)
 
     @staticmethod
-    def _json_formatter(record: dict) -> str:
+    def _json_formatter(record: Any) -> str:
         """
         自定义 JSON 格式化器。
         将日志记录转换为符合要求的 JSON 字符串。
+        :param record: 字典
         """
         # 1. 提取基础信息
         log_record = {
