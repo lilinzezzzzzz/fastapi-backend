@@ -31,15 +31,6 @@ class LoggerManager:
     RETENTION: str = os.getenv("LOG_RETENTION", "30 days")
     COMPRESSION: str = "zip"
 
-    # 文件格式配置 (保持不变)
-    FILE_FORMAT = (
-        "{time:YYYY-MM-DD HH:mm:ss.SSS} | "
-        "{level: <8} | "
-        "{name}:{function}:{line} | "
-        "{extra[trace_id]} | "
-        "{extra[type]} - {message}"
-    )
-
     def __init__(self):
         self._logger = loguru.logger
         self._registered_types: dict[str, dict[str, Any]] = {}
@@ -73,7 +64,7 @@ class LoggerManager:
         if write_to_console:
             self._logger.add(
                 sink=sys.stderr,
-                format=self._console_formatter,
+                format=self._console_formatter,  # 使用动态 Console 格式化器
                 level=self.LEVEL,
                 enqueue=True,
                 colorize=True,
@@ -83,6 +74,7 @@ class LoggerManager:
         # 4. File 输出 (System Log)
         if write_to_file:
             self._ensure_dir(self.SYSTEM_LOG_DIR)
+
             self._logger.add(
                 sink=self.SYSTEM_LOG_DIR / "{time:YYYY-MM-DD}.log",
                 level=self.LEVEL,
@@ -90,9 +82,10 @@ class LoggerManager:
                 retention=self.RETENTION,
                 compression=self.COMPRESSION,
                 enqueue=True,
-                format=self.FILE_FORMAT,
+                format=self._file_formatter,  # <--- 修改这里：使用动态文件格式化器
                 filter=self._filter_system
             )
+
             # 记录 System 类型配置
             self._registered_types[self.SYSTEM_LOG_TYPE] = {"save_json": False}
 
@@ -138,7 +131,9 @@ class LoggerManager:
                 )
 
             if write_to_file:
-                log_format = self._json_formatter if save_json else self.FILE_FORMAT
+                # <--- 修改这里：如果 save_json 为 False，使用 _file_formatter
+                log_format = self._json_formatter if save_json else self._file_formatter
+
                 self._logger.add(
                     sink=sink_path,
                     level=self.LEVEL,
@@ -147,7 +142,7 @@ class LoggerManager:
                     compression=self.COMPRESSION,
                     enqueue=True,
                     format=log_format,
-                    serialize=False,
+                    serialize=False,  # 注意：这里如果是 JSON 格式化器内部处理序列化，这里 False 是对的
                     filter=_specific_filter
                 )
 
@@ -182,18 +177,32 @@ class LoggerManager:
             # loguru 会自动调用字典的 __str__ 或 __repr__
             # 如果你想在控制台看漂亮的 JSON，可以在这里把 json_content 先 dumps 一下
             fmt += "\n<cyan>{extra[json_content]}</cyan>"
+        return fmt + "\n"
+
+    @staticmethod
+    def _file_formatter(record: Any) -> str:
+        """
+        File 文本动态格式化器 (save_json=False 时使用)
+        """
+        fmt = (
+            "{time:YYYY-MM-DD HH:mm:ss.SSS} | "
+            "{level: <8} | "
+            "{name}:{function}:{line} | "
+            "{extra[trace_id]} | "
+            "{extra[type]} - {message}"
+        )
+
+        # 检查并追加 json_content
+        if record["extra"].get("json_content") is not None:
+            # 这里选择换行追加，保持与 Console 视觉一致，且避免单行过长
+            # 如果希望单行，可以将 \n 替换为 | 或 -
+            fmt += "\n{extra[json_content]}"
 
         return fmt + "\n"
 
     @staticmethod
-    def _utc_time_patcher(record: Any):
-        record["time"] = record["time"].astimezone(timezone.utc)
-
-    @staticmethod
     def _json_formatter(record: Any) -> str:
-        """
-        自定义 JSON 格式化器
-        """
+        """JSON Lines 格式化器 (save_json=True 时使用)"""
         extra_data = record["extra"].copy()
         json_content = extra_data.pop("json_content", None)
 
@@ -216,8 +225,13 @@ class LoggerManager:
 
         serialized = orjson_dumps(log_record, default=str)
         record["extra"]["serialized_json"] = serialized
-
         return "{extra[serialized_json]}\n"
+
+    # --- 辅助方法 ---
+
+    @staticmethod
+    def _utc_time_patcher(record: Any):
+        record["time"] = record["time"].astimezone(timezone.utc)
 
     @staticmethod
     def _filter_system(record: Any) -> bool:
@@ -233,6 +247,5 @@ class LoggerManager:
 
 # 实例化
 logger_manager = LoggerManager()
-# 显式指定使用 UTC
 logger = logger_manager.setup(force_use_utc=True)
 get_dynamic_logger = logger_manager.get_dynamic_logger
