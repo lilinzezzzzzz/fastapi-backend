@@ -108,8 +108,12 @@ class LoggerManager:
 
         if log_type in self._registered_types:
             existing_config = self._registered_types[log_type]
+            existing_save_json = existing_config.get("save_json")
             if existing_config.get("save_json") != save_json:
-                raise ValueError(f"Configuration conflict for '{log_type}'.")
+                raise ValueError(
+                    f"Log type '{log_type}' is already registered with save_json={existing_save_json}, "
+                    f"but requested with save_json={save_json}. Configuration conflict!"
+                )
             return self._logger.bind(type=log_type)
 
         try:
