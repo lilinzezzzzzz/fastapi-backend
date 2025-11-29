@@ -5,6 +5,7 @@ from typing import Any, Set
 
 import loguru
 
+# 确保这里的导入路径与你的项目结构一致
 from pkg import BASE_DIR, orjson_dumps
 
 
@@ -22,7 +23,7 @@ class LogConfig:
     # Console 格式 (保持人类可读)
     CONSOLE_FORMAT = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | <magenta>{extra[trace_id]}</magenta> | <yellow>{extra[type]}</yellow> - <level>{message}</level>"
 
-    # File 格式 (这个参数在使用 serialize=True 时会被忽略，但我们这里是自定义 format，保留作参考)
+    # File 格式 (文本模式使用)
     FILE_FORMAT = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {extra[trace_id]} | {extra[type]} - {message}"
 
 
@@ -39,7 +40,7 @@ class LoggerManager:
         self._registered_types.clear()
 
         # 1. 设置默认 Context
-        # json_content 初始化为 None，这是后续判断是否使用 bind 的关键
+        # json_content 初始化为 None
         self._logger.configure(extra={"trace_id": "-", "type": "default", "json_content": None})
 
         # 2. Console 输出
@@ -56,7 +57,7 @@ class LoggerManager:
         # 3. File 输出 (Default)
         if write_to_file:
             self._ensure_dir(LogConfig.DEFAULT_DIR)
-            # 默认日志暂保持普通格式，如果默认日志也要 JSON，可以把 format 改成 self._json_formatter
+            # 默认日志保持普通文本格式
             self._logger.add(
                 sink=LogConfig.DEFAULT_DIR / "{time:YYYY-MM-DD}.log",
                 level=LogConfig.LEVEL,
@@ -78,12 +79,15 @@ class LoggerManager:
             log_type: str,
             *,
             write_to_file: bool = True,
-            write_to_console: bool = False
+            write_to_console: bool = False,
+            save_json: bool = True  # <--- 新增参数：控制是否为 JSON 格式，默认为 True
     ) -> "loguru.Logger":
 
         if not self._is_initialized:
             raise RuntimeError("LoggerManager is not initialized!")
 
+        # 注意：如果同一个 log_type 已经被注册过，这里会直接返回之前的配置。
+        # 也就是说，第一次调用决定了该 type 是 JSON 还是文本，后续调用改变 is_json 无效，除非重启应用。
         if log_type in self._registered_types:
             return self._logger.bind(type=log_type)
 
@@ -106,6 +110,12 @@ class LoggerManager:
                 )
 
             if write_to_file:
+                # --- 根据参数选择格式化器 ---
+                if save_json:
+                    log_format = self._json_formatter
+                else:
+                    log_format = LogConfig.FILE_FORMAT
+
                 self._logger.add(
                     sink=sink_path,
                     level=LogConfig.LEVEL,
@@ -113,15 +123,14 @@ class LoggerManager:
                     retention=LogConfig.RETENTION,
                     compression=LogConfig.COMPRESSION,
                     enqueue=True,
-                    # 使用自定义的 _json_formatter
-                    format=self._json_formatter,
-                    # 必须关闭 Loguru 自带的序列化，因为我们在 formatter 里自己做 JSON
+                    # 应用选择的格式化器
+                    format=log_format,
                     serialize=False,
                     filter=_specific_filter
                 )
 
             self._registered_types.add(log_type)
-            self._logger.info(f"System: Registered new log sink for type '{log_type}'")
+            self._logger.info(f"System: Registered new log sink for type '{log_type}' (save_json={save_json})")
 
         except Exception as e:
             self._logger.error(f"System: Failed to register sink for '{log_type}'. Error: {e}")
@@ -133,34 +142,26 @@ class LoggerManager:
     def _json_formatter(record: Any) -> str:
         """
         自定义 JSON 格式化器：
-        1. 提取 extra 中的 json_content。
-        2. 将其放置在 JSON 根层级。
-        3. 剩下的 extra (如 trace_id) 放在 extra 字段。
+        1. 提取 extra 中的 json_content 至根节点。
+        2. text 字段为空。
         """
-        # 1. 处理 extra 数据
-        # 必须使用 .copy()，否则 pop 操作会影响后续的其他 sink 或 Loguru 内部状态
         extra_data = record["extra"].copy()
-
-        # 提取并从 extra 副本中移除 json_content，防止重复
         json_content = extra_data.pop("json_content", None)
 
-        # 2. 构建根层级字典
         log_record = {
             "time": record["time"].strftime("%Y-%m-%d %H:%M:%S.%f"),
             "level": record["level"].name,
             "name": record["name"],
             "function": record["function"],
             "line": record["line"],
-            "text": "",  # 需求：空字符串
-            "message": record["message"],  # 需求：原始消息
-            "extra": extra_data  # 需求：元数据 (trace_id, type)
+            "text": "",
+            "message": record["message"],
+            "extra": extra_data
         }
 
-        # 3. 如果 json_content 存在，挂载到根层级
         if json_content is not None:
             log_record["json_content"] = json_content
 
-        # 4. 序列化
         serialized = orjson_dumps(log_record, default=str)
         record["extra"]["serialized_json"] = serialized
 
