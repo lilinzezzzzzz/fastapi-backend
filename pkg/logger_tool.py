@@ -5,7 +5,6 @@ from typing import Any, Set
 
 import loguru
 
-# 引入你自定义的 helper
 from pkg import BASE_DIR, orjson_dumps
 
 
@@ -133,40 +132,38 @@ class LoggerManager:
     @staticmethod
     def _json_formatter(record: Any) -> str:
         """
-        自定义 JSON 格式化器。
+        自定义 JSON 格式化器：
+        1. 提取 extra 中的 json_content。
+        2. 将其放置在 JSON 根层级。
+        3. 剩下的 extra (如 trace_id) 放在 extra 字段。
         """
-        # 1. 构建日志基础结构
+        # 1. 处理 extra 数据
+        # 必须使用 .copy()，否则 pop 操作会影响后续的其他 sink 或 Loguru 内部状态
+        extra_data = record["extra"].copy()
+
+        # 提取并从 extra 副本中移除 json_content，防止重复
+        json_content = extra_data.pop("json_content", None)
+
+        # 2. 构建根层级字典
         log_record = {
             "time": record["time"].strftime("%Y-%m-%d %H:%M:%S.%f"),
             "level": record["level"].name,
             "name": record["name"],
             "function": record["function"],
             "line": record["line"],
-            "trace_id": record["extra"].get("trace_id", "-"),
-            "type": record["extra"].get("type", "default"),
-
-            # 你的核心需求：text 恒为空
-            "text": "",
-
-            # 默认 message 为 Loguru 处理后的字符串
-            "message": record["message"]
+            "text": "",  # 需求：空字符串
+            "message": record["message"],  # 需求：原始消息
+            "extra": extra_data  # 需求：元数据 (trace_id, type)
         }
 
-        # 2. 判断是否通过 bind 传入了 json_content
-        # 你的核心需求：只有 bind 了 json_content，message 才是对象
-        json_content = record["extra"].get("json_content")
+        # 3. 如果 json_content 存在，挂载到根层级
         if json_content is not None:
-            log_record["message"] = json_content
+            log_record["json_content"] = json_content
 
-        # 3. 序列化
-        # 注意：这里去掉了 ensure_ascii=False，因为 orjson 不支持该参数
-        # 你的 orjson_dumps 已经包含了 .decode("utf-8")，所以这里得到的是 str
+        # 4. 序列化
         serialized = orjson_dumps(log_record, default=str)
-
-        # 4. 存回 extra
         record["extra"]["serialized_json"] = serialized
 
-        # 5. 返回模板
         return "{extra[serialized_json]}\n"
 
     @staticmethod
