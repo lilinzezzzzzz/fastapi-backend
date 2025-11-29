@@ -1,9 +1,12 @@
 import json
-
 import pytest
+import sys
+from pathlib import Path
+
+# 确保能导入 pkg (视你的目录结构而定，如果已在 pythonpath 可忽略)
+sys.path.append(str(Path(__file__).parent.parent))
 
 from pkg.logger_tool import LoggerManager, LogConfig
-
 
 @pytest.fixture
 def logger_setup(tmp_path):
@@ -64,6 +67,9 @@ def test_dynamic_logger_json_structure(logger_setup):
     assert len(log_files) > 0, "没有生成日志文件"
     log_file = log_files[0]
 
+    # --- 输出日志路径 ---
+    print(f"\n>>> [test_dynamic_logger_json_structure] 生成的日志文件路径: {log_file.absolute()}")
+
     # 3. 读取并验证内容
     with open(log_file, "r", encoding="utf-8") as f:
         line = f.readline()
@@ -111,6 +117,9 @@ def test_dynamic_logger_with_bind(logger_setup):
     target_dir = base_dir / log_type
     log_file = list(target_dir.glob("*.log"))[0]
 
+    # --- 输出日志路径 ---
+    print(f"\n>>> [test_dynamic_logger_with_bind] 生成的日志文件路径: {log_file.absolute()}")
+
     with open(log_file, "r", encoding="utf-8") as f:
         log_json = json.loads(f.readline())
 
@@ -137,6 +146,9 @@ def test_fallback_for_non_dict_message(logger_setup):
 
     target_dir = base_dir / log_type
     log_file = list(target_dir.glob("*.log"))[0]
+
+    # --- 输出日志路径 ---
+    print(f"\n>>> [test_fallback_for_non_dict_message] 生成的日志文件路径: {log_file.absolute()}")
 
     with open(log_file, "r", encoding="utf-8") as f:
         log_json = json.loads(f.readline())
