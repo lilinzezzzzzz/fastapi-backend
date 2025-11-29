@@ -164,6 +164,9 @@ class LoggerManager:
         extra_data = record["extra"].copy()
         json_content = extra_data.pop("json_content", None)
 
+        if not isinstance(json_content, dict | list | str | None):
+            raise TypeError("json_content must be a dict, list, str, or None")
+
         log_record = {
             "time": record["time"].strftime("%Y-%m-%d %H:%M:%S.%f"),
             "level": record["level"].name,
