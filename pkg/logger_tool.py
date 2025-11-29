@@ -183,6 +183,6 @@ class LoggerManager:
 # 1. 实例化管理器
 logger_manager = LoggerManager()
 # 2. 执行初始化 (模块加载时执行)
-default_logger = logger_manager.setup()
+logger = logger_manager.setup()
 # 3. 导出常用的动态 logger 获取方法，保持 API 简洁
 get_dynamic_logger = logger_manager.get_dynamic_logger
