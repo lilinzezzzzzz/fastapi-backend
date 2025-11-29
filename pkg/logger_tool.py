@@ -221,7 +221,7 @@ class LoggerManager:
             "line": record["line"],
             "text": "",
             "message": record["message"],
-            "extra": extra_data
+            **extra_data
         }
 
         if json_content is not None:
