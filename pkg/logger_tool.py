@@ -132,7 +132,8 @@ class LoggerManager:
                     retention=LogConfig.RETENTION,
                     compression=LogConfig.COMPRESSION,
                     enqueue=True,
-                    format=LogConfig.FILE_FORMAT,
+                    format=self._empty_format,
+                    serialize=True,
                     filter=_specific_filter
                 )
 
