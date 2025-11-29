@@ -31,15 +31,7 @@ class LoggerManager:
     RETENTION: str = os.getenv("LOG_RETENTION", "30 days")
     COMPRESSION: str = "zip"
 
-    # 格式配置
-    CONSOLE_FORMAT = (
-        "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
-        "<level>{level: <8}</level> | "
-        "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
-        "<magenta>{extra[trace_id]}</magenta> | "
-        "<yellow>{extra[type]}</yellow> - <level>{message}</level>"
-    )
-
+    # 文件格式配置 (保持不变)
     FILE_FORMAT = (
         "{time:YYYY-MM-DD HH:mm:ss.SSS} | "
         "{level: <8} | "
@@ -62,9 +54,6 @@ class LoggerManager:
     ) -> "loguru.Logger":
         """
         初始化系统日志 (System Logger)
-        :param force_use_utc: 是否强制使用 UTC 时间 (影响控制台、文件时间戳及文件名)
-        :param write_to_console
-        :param write_to_file
         """
         self._logger.remove()
         self._registered_types.clear()
@@ -84,7 +73,7 @@ class LoggerManager:
         if write_to_console:
             self._logger.add(
                 sink=sys.stderr,
-                format=self.CONSOLE_FORMAT,
+                format=self._console_formatter,
                 level=self.LEVEL,
                 enqueue=True,
                 colorize=True,
@@ -94,7 +83,6 @@ class LoggerManager:
         # 4. File 输出 (System Log)
         if write_to_file:
             self._ensure_dir(self.SYSTEM_LOG_DIR)
-
             self._logger.add(
                 sink=self.SYSTEM_LOG_DIR / "{time:YYYY-MM-DD}.log",
                 level=self.LEVEL,
@@ -105,7 +93,6 @@ class LoggerManager:
                 format=self.FILE_FORMAT,
                 filter=self._filter_system
             )
-
             # 记录 System 类型配置
             self._registered_types[self.SYSTEM_LOG_TYPE] = {"save_json": False}
 
@@ -128,11 +115,8 @@ class LoggerManager:
 
         if log_type in self._registered_types:
             existing_config = self._registered_types[log_type]
-            existing_save_json = existing_config.get("save_json")
-            if existing_save_json != save_json:
-                raise ValueError(
-                    f"Configuration conflict for '{log_type}'."
-                )
+            if existing_config.get("save_json") != save_json:
+                raise ValueError(f"Configuration conflict for '{log_type}'.")
             return self._logger.bind(type=log_type)
 
         try:
@@ -146,7 +130,7 @@ class LoggerManager:
             if write_to_console:
                 self._logger.add(
                     sink=sys.stderr,
-                    format=self.CONSOLE_FORMAT,
+                    format=self._console_formatter,
                     level=self.LEVEL,
                     enqueue=True,
                     colorize=True,
@@ -176,10 +160,33 @@ class LoggerManager:
 
         return self._logger.bind(type=log_type)
 
-    # --- UTC 转换补丁 ---
+    # --- 格式化器更新 ---
+    @staticmethod
+    def _console_formatter(record: Any) -> str:
+        """
+        动态控制台格式化器
+        如果 extra 中包含非空的 json_content，则将其追加显示
+        """
+        # 基础格式
+        fmt = (
+            "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+            "<level>{level: <8}</level> | "
+            "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
+            "<magenta>{extra[trace_id]}</magenta> | "
+            "<yellow>{extra[type]}</yellow> - <level>{message}</level>"
+        )
+
+        # 检查 json_content 是否存在且不为 None
+        if record["extra"].get("json_content") is not None:
+            # 换行并以青色显示 JSON 内容
+            # loguru 会自动调用字典的 __str__ 或 __repr__
+            # 如果你想在控制台看漂亮的 JSON，可以在这里把 json_content 先 dumps 一下
+            fmt += "\n<cyan>{extra[json_content]}</cyan>"
+
+        return fmt + "\n"
+
     @staticmethod
     def _utc_time_patcher(record: Any):
-        """将记录时间强制转换为 UTC"""
         record["time"] = record["time"].astimezone(timezone.utc)
 
     @staticmethod
@@ -226,8 +233,6 @@ class LoggerManager:
 
 # 实例化
 logger_manager = LoggerManager()
-
 # 显式指定使用 UTC
 logger = logger_manager.setup(force_use_utc=True)
-
 get_dynamic_logger = logger_manager.get_dynamic_logger
