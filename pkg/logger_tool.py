@@ -5,6 +5,7 @@ from typing import Any, Set
 
 import loguru
 
+# 引入你自定义的 helper
 from pkg import BASE_DIR, orjson_dumps
 
 
@@ -19,8 +20,12 @@ class LogConfig:
     RETENTION: str = os.getenv("LOG_RETENTION", "30 days")
     COMPRESSION: str = "zip"
 
+    # Console 格式 (保持人类可读)
     CONSOLE_FORMAT = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | <magenta>{extra[trace_id]}</magenta> | <yellow>{extra[type]}</yellow> - <level>{message}</level>"
+
+    # File 格式 (这个参数在使用 serialize=True 时会被忽略，但我们这里是自定义 format，保留作参考)
     FILE_FORMAT = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {extra[trace_id]} | {extra[type]} - {message}"
+
 
 class LoggerManager:
     """日志管理器"""
@@ -34,9 +39,11 @@ class LoggerManager:
         self._logger.remove()
         self._registered_types.clear()
 
-        # 设置默认 Context
-        self._logger.configure(extra={"trace_id": "-", "type": "default"})
+        # 1. 设置默认 Context
+        # json_content 初始化为 None，这是后续判断是否使用 bind 的关键
+        self._logger.configure(extra={"trace_id": "-", "type": "default", "json_content": None})
 
+        # 2. Console 输出
         if write_to_console:
             self._logger.add(
                 sink=sys.stderr,
@@ -47,11 +54,12 @@ class LoggerManager:
                 diagnose=True
             )
 
+        # 3. File 输出 (Default)
         if write_to_file:
             self._ensure_dir(LogConfig.DEFAULT_DIR)
-            # 默认日志暂保持普通格式，如需 JSON 也可按下面的方式修改
+            # 默认日志暂保持普通格式，如果默认日志也要 JSON，可以把 format 改成 self._json_formatter
             self._logger.add(
-                sink=LogConfig.DEFAULT_DIR / "app_{time:YYYY-MM-DD}.log",
+                sink=LogConfig.DEFAULT_DIR / "{time:YYYY-MM-DD}.log",
                 level=LogConfig.LEVEL,
                 rotation=LogConfig.ROTATION,
                 retention=LogConfig.RETENTION,
@@ -106,7 +114,9 @@ class LoggerManager:
                     retention=LogConfig.RETENTION,
                     compression=LogConfig.COMPRESSION,
                     enqueue=True,
+                    # 使用自定义的 _json_formatter
                     format=self._json_formatter,
+                    # 必须关闭 Loguru 自带的序列化，因为我们在 formatter 里自己做 JSON
                     serialize=False,
                     filter=_specific_filter
                 )
@@ -124,13 +134,8 @@ class LoggerManager:
     def _json_formatter(record: Any) -> str:
         """
         自定义 JSON 格式化器。
-        这里使用了一个技巧：
-        1. 我们在这里手动构建字典并序列化为 JSON 字符串。
-        2. 将 JSON 字符串存入 record['extra'] 的临时字段中。
-        3. 返回 "{extra[serialized_json]}\n" 让 Loguru 去输出这个字段。
-        这样避免了 Loguru 试图去解析 JSON 字符串中的花括号从而导致 Crash。
         """
-        # 1. 构建日志数据
+        # 1. 构建日志基础结构
         log_record = {
             "time": record["time"].strftime("%Y-%m-%d %H:%M:%S.%f"),
             "level": record["level"].name,
@@ -139,22 +144,29 @@ class LoggerManager:
             "line": record["line"],
             "trace_id": record["extra"].get("trace_id", "-"),
             "type": record["extra"].get("type", "default"),
+
+            # 你的核心需求：text 恒为空
             "text": "",
+
+            # 默认 message 为 Loguru 处理后的字符串
             "message": record["message"]
         }
 
-        # 2. 尝试解析 message 为对象
-        # 场景 A: bind(json_content=...)
-        if "json_content" in record["extra"]:
-            log_record["message"] = record["extra"]["json_content"]
+        # 2. 判断是否通过 bind 传入了 json_content
+        # 你的核心需求：只有 bind 了 json_content，message 才是对象
+        json_content = record["extra"].get("json_content")
+        if json_content is not None:
+            log_record["message"] = json_content
 
         # 3. 序列化
-        serialized = orjson_dumps(log_record, default=str, ensure_ascii=False)
+        # 注意：这里去掉了 ensure_ascii=False，因为 orjson 不支持该参数
+        # 你的 orjson_dumps 已经包含了 .decode("utf-8")，所以这里得到的是 str
+        serialized = orjson_dumps(log_record, default=str)
 
-        # 4. 将序列化后的字符串存回 extra (这是一个安全的副作用)
+        # 4. 存回 extra
         record["extra"]["serialized_json"] = serialized
 
-        # 5. 返回一个简单的模板，只引用上面存入的字段
+        # 5. 返回模板
         return "{extra[serialized_json]}\n"
 
     @staticmethod
