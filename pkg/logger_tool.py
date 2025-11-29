@@ -1,14 +1,11 @@
-import logging
 import os
 import sys
-import json
-import ast
 from pathlib import Path
 from typing import Any, Set
 
 import loguru
 
-from pkg import BASE_DIR
+from pkg import BASE_DIR, orjson_dumps
 
 
 class LogConfig:
@@ -22,9 +19,8 @@ class LogConfig:
     RETENTION: str = os.getenv("LOG_RETENTION", "30 days")
     COMPRESSION: str = "zip"
 
-    # Console 使用文本格式
     CONSOLE_FORMAT = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | <magenta>{extra[trace_id]}</magenta> | <yellow>{extra[type]}</yellow> - <level>{message}</level>"
-
+    FILE_FORMAT = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {extra[trace_id]} | {extra[type]} - {message}"
 
 class LoggerManager:
     """日志管理器"""
@@ -61,7 +57,7 @@ class LoggerManager:
                 retention=LogConfig.RETENTION,
                 compression=LogConfig.COMPRESSION,
                 enqueue=True,
-                format=LogConfig.CONSOLE_FORMAT,
+                format=LogConfig.FILE_FORMAT,
                 filter=self._filter_default
             )
             self._registered_types.add("default")
@@ -110,10 +106,8 @@ class LoggerManager:
                     retention=LogConfig.RETENTION,
                     compression=LogConfig.COMPRESSION,
                     enqueue=True,
-                    # --- 关键修改 ---
-                    # 使用自定义函数，该函数内部计算 JSON 并返回引用模板
                     format=self._json_formatter,
-                    serialize=False,  # 必须关闭 Loguru 自带的序列化
+                    serialize=False,
                     filter=_specific_filter
                 )
 
@@ -145,25 +139,17 @@ class LoggerManager:
             "line": record["line"],
             "trace_id": record["extra"].get("trace_id", "-"),
             "type": record["extra"].get("type", "default"),
-            "text": "",  # 强制为空
-            "message": record["message"]  # 默认为原样
+            "text": "",
+            "message": record["message"]
         }
 
         # 2. 尝试解析 message 为对象
         # 场景 A: bind(json_content=...)
         if "json_content" in record["extra"]:
             log_record["message"] = record["extra"]["json_content"]
-        # 场景 B: logger.info({...}) 传入字典
-        else:
-            try:
-                val = ast.literal_eval(record["message"])
-                if isinstance(val, (dict, list)):
-                    log_record["message"] = val
-            except (ValueError, SyntaxError):
-                pass
 
         # 3. 序列化
-        serialized = json.dumps(log_record, default=str, ensure_ascii=False)
+        serialized = orjson_dumps(log_record, default=str, ensure_ascii=False)
 
         # 4. 将序列化后的字符串存回 extra (这是一个安全的副作用)
         record["extra"]["serialized_json"] = serialized
