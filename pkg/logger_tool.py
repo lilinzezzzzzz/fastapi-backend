@@ -95,11 +95,8 @@ class LoggerManager:
         return self._logger
 
     def get_dynamic_logger(
-            self,
-            log_type: str,
-            *,
-            write_to_file: bool = True,
-            write_to_console: bool = False,
+            self, log_type: str,
+            *, write_to_file: bool = True,
             save_json: bool = True
     ) -> "loguru.Logger":
         """获取动态类型的 Logger"""
@@ -123,16 +120,6 @@ class LoggerManager:
 
             def _specific_filter(record):
                 return record["extra"].get("type") == log_type
-
-            if write_to_console:
-                self._logger.add(
-                    sink=sys.stderr,
-                    format=self._console_formatter,
-                    level=self.LEVEL,
-                    enqueue=True,
-                    colorize=True,
-                    filter=_specific_filter
-                )
 
             if write_to_file:
                 # <--- 修改这里：如果 save_json 为 False，使用 _file_formatter
