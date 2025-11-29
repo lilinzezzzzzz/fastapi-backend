@@ -5,7 +5,11 @@ from pathlib import Path
 
 # ----------------------------------------------------------------------
 # 1. 环境准备
-from pkg.logger_tool import LoggerManager, LogConfig
+# ----------------------------------------------------------------------
+# 确保能导入项目根目录下的 pkg 包
+sys.path.append(str(Path(__file__).parent.parent))
+
+from pkg.logger_tool import LoggerManager
 
 
 # ----------------------------------------------------------------------
@@ -16,15 +20,22 @@ def logger_setup(tmp_path):
     """
     初始化 LoggerManager，并将日志输出重定向到 pytest 的临时目录。
     """
-    # 临时修改配置路径，防止污染项目真实日志
-    LogConfig.BASE_LOG_DIR = tmp_path / "logs"
-    LogConfig.DEFAULT_DIR = LogConfig.BASE_LOG_DIR / "default"
+    # --- 关键修改开始 ---
+    # 1. 修改 Base 路径到临时目录
+    LoggerManager.BASE_LOG_DIR = tmp_path / "logs"
+
+    # 2. 显式更新 SYSTEM_LOG_DIR
+    # 注意：Python 类属性在定义时已计算，仅修改 BASE_LOG_DIR 不会自动更新 SYSTEM_LOG_DIR
+    # 所以这里必须手动重新拼接，确保系统日志也写入临时目录
+    LoggerManager.SYSTEM_LOG_DIR = LoggerManager.BASE_LOG_DIR / LoggerManager.SYSTEM_LOG_TYPE
 
     manager = LoggerManager()
     # 初始化：只写文件，不写控制台
     manager.setup(write_to_file=True, write_to_console=False)
 
-    return manager, LogConfig.BASE_LOG_DIR
+    # 返回 manager 和 临时日志根目录 (直接使用 LoggerManager 的属性)
+    return manager, LoggerManager.BASE_LOG_DIR
+    # --- 关键修改结束 ---
 
 
 # ----------------------------------------------------------------------
@@ -41,7 +52,7 @@ def test_json_content_extraction_logic(logger_setup):
     manager, base_dir = logger_setup
     log_type = "extraction_test"
 
-    # 获取动态 logger
+    # 获取动态 logger (默认为 save_json=True)
     logger = manager.get_dynamic_logger(log_type)
 
     # ==========================================
@@ -127,9 +138,6 @@ def test_json_serialization_performance(logger_setup):
 
     # 包含 Set (orjson 原生不支持 set，需要 default=str 或 list 转换，
     # 你的代码里用了 default=str，orjson_dumps 应该能处理)
-    # 注意：orjson.dumps 对 set 的支持取决于版本和 option，
-    # 但我们之前的代码用了 default=str，set 会被转成字符串表示，或者你自己封装的 default 处理了。
-    # 这里我们传入一个 list 确保 100% 兼容测试。
     complex_data = {
         "tags": ["a", "b"],
         "nested": {"x": 1}
@@ -143,4 +151,5 @@ def test_json_serialization_performance(logger_setup):
 
     with open(log_file, "r", encoding="utf-8") as f:
         log = json.loads(f.readline())
+        # 验证列表内容
         assert log["json_content"]["tags"] == ["a", "b"]

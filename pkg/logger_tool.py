@@ -5,10 +5,8 @@ from typing import Any
 
 import loguru
 
+# 确保这里的导入路径与你的项目结构一致
 from pkg import BASE_DIR, orjson_dumps
-
-# --- 1. 定义系统日志类型的常量 (避免硬编码) ---
-SYSTEM_LOG_TYPE = "system"
 
 
 class LoggerManager:
@@ -17,12 +15,15 @@ class LoggerManager:
     集成了配置、初始化、动态Sink注册和自定义格式化功能。
     """
 
-    # --- 2. 配置部分 (原 LogConfig 合并至此) ---
+    # --- 1. 核心常量定义 ---
+    SYSTEM_LOG_TYPE: str = "system"
+
+    # --- 2. 配置部分 ---
     LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
     # 路径配置
     BASE_LOG_DIR: Path = BASE_DIR / "logs"
-    # 使用变量动态定义系统日志目录
+    # 直接在类定义中引用上面的 SYSTEM_LOG_TYPE
     SYSTEM_LOG_DIR: Path = BASE_LOG_DIR / SYSTEM_LOG_TYPE
 
     # 轮转与保留配置
@@ -58,8 +59,8 @@ class LoggerManager:
         self._logger.remove()
         self._registered_types.clear()
 
-        # 1. 设置默认 Context (使用变量 SYSTEM_LOG_TYPE)
-        self._logger.configure(extra={"trace_id": "-", "type": SYSTEM_LOG_TYPE, "json_content": None})
+        # 1. 设置默认 Context (使用 self.SYSTEM_LOG_TYPE)
+        self._logger.configure(extra={"trace_id": "-", "type": self.SYSTEM_LOG_TYPE, "json_content": None})
 
         # 2. Console 输出
         if write_to_console:
@@ -85,11 +86,11 @@ class LoggerManager:
                 compression=self.COMPRESSION,
                 enqueue=True,
                 format=self.FILE_FORMAT,
-                filter=self._filter_system  # 使用重命名后的过滤器
+                filter=self._filter_system  # 使用内部静态方法作为过滤器
             )
 
             # 记录 System 类型配置
-            self._registered_types[SYSTEM_LOG_TYPE] = {"save_json": False}
+            self._registered_types[self.SYSTEM_LOG_TYPE] = {"save_json": False}
 
         self._logger.info("Logger initialized successfully.")
         self._is_initialized = True
@@ -169,7 +170,7 @@ class LoggerManager:
         except Exception as e:
             # 发生错误时回退到 System 日志
             self._logger.error(f"System: Failed to register sink for '{log_type}'. Error: {e}")
-            return self._logger.bind(type=SYSTEM_LOG_TYPE, original_type=log_type)
+            return self._logger.bind(type=self.SYSTEM_LOG_TYPE, original_type=log_type)
 
         return self._logger.bind(type=log_type)
 
@@ -178,16 +179,10 @@ class LoggerManager:
         """
         自定义 JSON 格式化器
         """
-        # 使用 copy 避免污染原始 extra
         extra_data = record["extra"].copy()
-
-        # 提取 json_content
         json_content = extra_data.pop("json_content", None)
 
-        # 类型安全检查 (保持原有的严格检查逻辑)
         if not isinstance(json_content, (dict, list, str, type(None))):
-            # 为了生产环境健壮性，这里建议记录错误但不抛出异常导致程序崩溃，
-            # 或者将其强转为 str。但保留你原本的 raise 逻辑用于开发调试。
             raise TypeError(f"json_content must be a dict, list, str, or None. Got {type(json_content)}")
 
         log_record = {
@@ -204,7 +199,6 @@ class LoggerManager:
         if json_content is not None:
             log_record["json_content"] = json_content
 
-        # 序列化
         serialized = orjson_dumps(log_record, default=str)
         record["extra"]["serialized_json"] = serialized
 
@@ -212,8 +206,9 @@ class LoggerManager:
 
     @staticmethod
     def _filter_system(record: Any) -> bool:
-        """过滤系统默认日志 (原 _filter_default)"""
-        return record["extra"].get("type") == SYSTEM_LOG_TYPE
+        """过滤系统默认日志"""
+        # 静态方法中通过类名访问常量
+        return record["extra"].get("type") == LoggerManager.SYSTEM_LOG_TYPE
 
     @staticmethod
     def _ensure_dir(path: Path):
