@@ -1,7 +1,7 @@
 import os
 import sys
 from pathlib import Path
-from typing import Any, Set
+from typing import Any
 
 import loguru
 
@@ -20,7 +20,7 @@ class LogConfig:
     RETENTION: str = os.getenv("LOG_RETENTION", "30 days")
     COMPRESSION: str = "zip"
 
-    # Console 格式 (保持人类可读)
+    # Console 格式
     CONSOLE_FORMAT = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | <magenta>{extra[trace_id]}</magenta> | <yellow>{extra[type]}</yellow> - <level>{message}</level>"
 
     # File 格式 (文本模式使用)
@@ -32,7 +32,9 @@ class LoggerManager:
 
     def __init__(self):
         self._logger = loguru.logger
-        self._registered_types: Set[str] = set()
+        # 修改: Value 变为字典，用于存储详细配置信息
+        # 结构示例: {"payment": {"save_json": True, "path": "..."}}
+        self._registered_types: dict[str, dict[str, Any]] = {}
         self._is_initialized = False
 
     def setup(self, write_to_file: bool = True, write_to_console: bool = True) -> "loguru.Logger":
@@ -40,7 +42,6 @@ class LoggerManager:
         self._registered_types.clear()
 
         # 1. 设置默认 Context
-        # json_content 初始化为 None
         self._logger.configure(extra={"trace_id": "-", "type": "default", "json_content": None})
 
         # 2. Console 输出
@@ -57,7 +58,7 @@ class LoggerManager:
         # 3. File 输出 (Default)
         if write_to_file:
             self._ensure_dir(LogConfig.DEFAULT_DIR)
-            # 默认日志保持普通文本格式
+            # 默认日志目前配置为普通文本格式 (save_json=False)
             self._logger.add(
                 sink=LogConfig.DEFAULT_DIR / "{time:YYYY-MM-DD}.log",
                 level=LogConfig.LEVEL,
@@ -68,7 +69,8 @@ class LoggerManager:
                 format=LogConfig.FILE_FORMAT,
                 filter=self._filter_default
             )
-            self._registered_types.add("default")
+            # 修改: 注册默认类型，使用字典存储配置
+            self._registered_types["default"] = {"save_json": False}
 
         self._logger.info("Logger initialized successfully.")
         self._is_initialized = True
@@ -80,15 +82,25 @@ class LoggerManager:
             *,
             write_to_file: bool = True,
             write_to_console: bool = False,
-            save_json: bool = True  # <--- 新增参数：控制是否为 JSON 格式，默认为 True
+            save_json: bool = True  # 修改: 参数名 is_json -> save_json
     ) -> "loguru.Logger":
 
         if not self._is_initialized:
             raise RuntimeError("LoggerManager is not initialized!")
 
-        # 注意：如果同一个 log_type 已经被注册过，这里会直接返回之前的配置。
-        # 也就是说，第一次调用决定了该 type 是 JSON 还是文本，后续调用改变 is_json 无效，除非重启应用。
+        # --- 校验逻辑 ---
         if log_type in self._registered_types:
+            # 获取已存在的配置
+            existing_config = self._registered_types[log_type]
+            existing_save_json = existing_config.get("save_json")
+
+            # 对比配置是否冲突
+            if existing_save_json != save_json:
+                raise ValueError(
+                    f"Log type '{log_type}' is already registered with save_json={existing_save_json}, "
+                    f"but requested with save_json={save_json}. "
+                    f"Configuration conflict!"
+                )
             return self._logger.bind(type=log_type)
 
         try:
@@ -110,7 +122,7 @@ class LoggerManager:
                 )
 
             if write_to_file:
-                # --- 根据参数选择格式化器 ---
+                # 根据参数选择格式化器
                 if save_json:
                     log_format = self._json_formatter
                 else:
@@ -123,13 +135,19 @@ class LoggerManager:
                     retention=LogConfig.RETENTION,
                     compression=LogConfig.COMPRESSION,
                     enqueue=True,
-                    # 应用选择的格式化器
                     format=log_format,
                     serialize=False,
                     filter=_specific_filter
                 )
 
-            self._registered_types.add(log_type)
+            # 修改: 注册新类型，存入字典配置
+            self._registered_types[log_type] = {
+                "save_json": save_json,
+                # 你以后可以在这里扩展更多字段，例如:
+                # "path": str(sink_path),
+                # "retention": LogConfig.RETENTION
+            }
+
             self._logger.info(f"System: Registered new log sink for type '{log_type}' (save_json={save_json})")
 
         except Exception as e:
@@ -141,9 +159,7 @@ class LoggerManager:
     @staticmethod
     def _json_formatter(record: Any) -> str:
         """
-        自定义 JSON 格式化器：
-        1. 提取 extra 中的 json_content 至根节点。
-        2. text 字段为空。
+        自定义 JSON 格式化器
         """
         extra_data = record["extra"].copy()
         json_content = extra_data.pop("json_content", None)
