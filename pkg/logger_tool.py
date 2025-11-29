@@ -74,7 +74,7 @@ class LoggerManager:
                 retention=LogConfig.RETENTION,
                 compression=LogConfig.COMPRESSION,
                 enqueue=True,
-                serialize=True,  # 开启 JSON
+                format=LogConfig.FILE_FORMAT,
                 filter=self._filter_default
             )
 
@@ -84,14 +84,18 @@ class LoggerManager:
         self._is_initialized = True
         return self._logger
 
-    def get_dynamic_logger(self, log_type: str) -> "loguru.Logger":
+    def get_dynamic_logger(
+            self,
+            log_type: str,
+            *,
+            write_to_file: bool = True,
+            write_to_console: bool = False
+    ) -> "loguru.Logger":
         """
         获取动态类型的 Logger (相当于之前的 get_logger_by_dynamic_type)
         如果该类型是第一次出现，会自动注册对应的文件 Sink
         """
         if not self._is_initialized:
-            # 防止忘记调用 setup，这里可以做一个隐式初始化，或者报错
-            # 这里选择打印警告
             raise RuntimeError("LoggerManager is not initialized! You MUST call 'logger_manager.setup()' first.")
 
         # 1. 缓存命中，直接返回
@@ -106,19 +110,31 @@ class LoggerManager:
             sink_path = log_dir / "{time:YYYY-MM-DD}.log"
 
             # 使用闭包锁定当前的 log_type
-            def specific_filter(record):
+            def _specific_filter(record):
                 return record["extra"].get("type") == log_type
 
-            self._logger.add(
-                sink=sink_path,
-                level=LogConfig.LEVEL,
-                rotation=LogConfig.ROTATION,
-                retention=LogConfig.RETENTION,
-                compression=LogConfig.COMPRESSION,
-                enqueue=True,
-                serialize=True,  # 开启 JSON
-                filter=specific_filter
-            )
+            if write_to_console:
+                self._logger.add(
+                    sink=sys.stderr,
+                    format=LogConfig.CONSOLE_FORMAT,
+                    level=LogConfig.LEVEL,
+                    enqueue=True,
+                    colorize=True,
+                    diagnose=True,
+                    filter=_specific_filter
+                )
+
+            if write_to_file:
+                self._logger.add(
+                    sink=sink_path,
+                    level=LogConfig.LEVEL,
+                    rotation=LogConfig.ROTATION,
+                    retention=LogConfig.RETENTION,
+                    compression=LogConfig.COMPRESSION,
+                    enqueue=True,
+                    format=LogConfig.FILE_FORMAT,
+                    filter=_specific_filter
+                )
 
             self._registered_types.add(log_type)
 
@@ -131,6 +147,14 @@ class LoggerManager:
             return self._logger.bind(type="default", original_type=log_type)
 
         return self._logger.bind(type=log_type)
+
+    @staticmethod
+    def _empty_format(_: Any) -> str:
+        """
+        返回空字符串。
+        当 serialize=True 时，format 函数的返回值会被赋值给 JSON 日志中的 "text" 字段。
+        """
+        return ""
 
     @staticmethod
     def _filter_default(record: Any) -> bool:
@@ -155,17 +179,9 @@ class LoggerManager:
         return self._logger
 
 
-# --- 单例模式导出 ---
-
 # 1. 实例化管理器
 logger_manager = LoggerManager()
-
 # 2. 执行初始化 (模块加载时执行)
-# 这样外部 import logger 时，已经是配置好的状态
-logger = logger_manager.setup()
-
+default_logger = logger_manager.setup()
 # 3. 导出常用的动态 logger 获取方法，保持 API 简洁
-get_logger = logger_manager.get_dynamic_logger
-
-# 4. 预置 LLM Logger
-llm_logger = logger_manager.get_dynamic_logger("llm")
+get_dynamic_logger = logger_manager.get_dynamic_logger
