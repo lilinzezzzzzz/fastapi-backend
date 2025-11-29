@@ -58,11 +58,11 @@ class LoggerManager:
             *,
             write_to_file: bool = True,
             write_to_console: bool = True,
-            use_utc: bool = True
+            force_use_utc: bool = True
     ) -> "loguru.Logger":
         """
         初始化系统日志 (System Logger)
-        :param use_utc: 是否强制使用 UTC 时间 (影响控制台、文件时间戳及文件名)
+        :param force_use_utc: 是否强制使用 UTC 时间 (影响控制台、文件时间戳及文件名)
         :param write_to_console
         :param write_to_file
         """
@@ -70,12 +70,12 @@ class LoggerManager:
         self._registered_types.clear()
 
         # 1. 准备基础配置
-        config_params = {
+        config_params: dict[str, Any] = {
             "extra": {"trace_id": "-", "type": self.SYSTEM_LOG_TYPE, "json_content": None}
         }
 
         # 2. 根据参数决定是否挂载 UTC 补丁
-        if use_utc:
+        if force_use_utc:
             config_params["patcher"] = self._utc_time_patcher
 
         self._logger.configure(**config_params)
@@ -109,7 +109,7 @@ class LoggerManager:
             # 记录 System 类型配置
             self._registered_types[self.SYSTEM_LOG_TYPE] = {"save_json": False}
 
-        mode_str = "UTC" if use_utc else "Local Time"
+        mode_str = "UTC" if force_use_utc else "Local Time"
         self._logger.info(f"Logger initialized successfully ({mode_str} Mode).")
         self._is_initialized = True
         return self._logger
@@ -228,6 +228,6 @@ class LoggerManager:
 logger_manager = LoggerManager()
 
 # 显式指定使用 UTC
-logger = logger_manager.setup(use_utc=True)
+logger = logger_manager.setup(force_use_utc=True)
 
 get_dynamic_logger = logger_manager.get_dynamic_logger
