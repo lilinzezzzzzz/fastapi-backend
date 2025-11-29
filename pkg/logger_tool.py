@@ -1,12 +1,13 @@
 import logging
 import os
 import sys
+import json
+import ast  # 用于将字典字符串安全还原为对象
 from pathlib import Path
 from typing import Any, Set
 
 import loguru
 
-# 假设 pkg 导入路径
 from pkg import BASE_DIR
 
 
@@ -22,15 +23,14 @@ class LogConfig:
     RETENTION: str = os.getenv("LOG_RETENTION", "30 days")
     COMPRESSION: str = "zip"
 
-    # 格式配置
-    # Console 使用文本格式 (方便看)
+    # Console 格式
     CONSOLE_FORMAT = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | <magenta>{extra[trace_id]}</magenta> | <yellow>{extra[type]}</yellow> - <level>{message}</level>"
     # File 使用 JSON 序列化，FORMAT 参数在 serialize=True 时会被 loguru 忽略或作为 text 字段，此处保留供参考
     FILE_FORMAT = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {extra[trace_id]} | {extra[type]} - {message}"
 
 
 class LoggerManager:
-    """日志管理器：负责 Loguru 的初始化、Sink 注册和动态日志获取"""
+    """日志管理器"""
 
     def __init__(self):
         self._logger = loguru.logger
@@ -38,20 +38,13 @@ class LoggerManager:
         self._is_initialized = False
 
     def setup(self, write_to_file: bool = True, write_to_console: bool = True) -> "loguru.Logger":
-        """
-        初始化日志配置 (相当于之前的 _init_logger)
-        """
-        # 防止重复初始化
         self._logger.remove()
         self._registered_types.clear()
 
-        # 1. 清除第三方库(uvicorn)的默认 handler
-        # self._remove_uvicorn_handlers()
-
-        # 2. 设置默认 Context (type='default')
+        # 设置默认 Context
         self._logger.configure(extra={"trace_id": "-", "type": "default"})
 
-        # 3. 配置控制台输出 (Human Readable)
+        # 3. 配置控制台输出
         if write_to_console:
             self._logger.add(
                 sink=sys.stderr,
@@ -62,11 +55,11 @@ class LoggerManager:
                 diagnose=True
             )
 
-        # 4. 配置文件输出 (JSON)
+        # 4. 配置文件输出 (Default)
+        # 如果你也希望默认日志也是这种 JSON 格式，可以将这里的 format 改为 self._json_formatter
+        # 并去掉 serialize=True (因为 _json_formatter 内部已经做了序列化)
         if write_to_file:
             self._ensure_dir(LogConfig.DEFAULT_DIR)
-
-            # --- Sink A: 静态默认日志 (type=default) ---
             self._logger.add(
                 sink=LogConfig.DEFAULT_DIR / "app_{time:YYYY-MM-DD}.log",
                 level=LogConfig.LEVEL,
@@ -77,7 +70,6 @@ class LoggerManager:
                 format=LogConfig.FILE_FORMAT,
                 filter=self._filter_default
             )
-
             self._registered_types.add("default")
 
         self._logger.info("Logger initialized successfully.")
@@ -92,24 +84,19 @@ class LoggerManager:
             write_to_console: bool = False
     ) -> "loguru.Logger":
         """
-        获取动态类型的 Logger (相当于之前的 get_logger_by_dynamic_type)
-        如果该类型是第一次出现，会自动注册对应的文件 Sink
+        获取动态类型的 Logger，写入 JSON 文件
         """
         if not self._is_initialized:
-            raise RuntimeError("LoggerManager is not initialized! You MUST call 'logger_manager.setup()' first.")
+            raise RuntimeError("LoggerManager is not initialized!")
 
-        # 1. 缓存命中，直接返回
         if log_type in self._registered_types:
             return self._logger.bind(type=log_type)
 
-        # 2. 动态注册新 Sink
         try:
             log_dir = LogConfig.BASE_LOG_DIR / log_type
             self._ensure_dir(log_dir)
-
             sink_path = log_dir / "{time:YYYY-MM-DD}.log"
 
-            # 使用闭包锁定当前的 log_type
             def _specific_filter(record):
                 return record["extra"].get("type") == log_type
 
@@ -120,11 +107,11 @@ class LoggerManager:
                     level=LogConfig.LEVEL,
                     enqueue=True,
                     colorize=True,
-                    diagnose=True,
                     filter=_specific_filter
                 )
 
             if write_to_file:
+                # --- 关键修改 ---
                 self._logger.add(
                     sink=sink_path,
                     level=LogConfig.LEVEL,
@@ -132,8 +119,10 @@ class LoggerManager:
                     retention=LogConfig.RETENTION,
                     compression=LogConfig.COMPRESSION,
                     enqueue=True,
-                    format=self._empty_format,
-                    serialize=True,
+                    # 使用自定义 JSON 格式化器，而不使用 serialize=True
+                    format=self._json_formatter,
+                    # serialize 必须设为 False，否则 Loguru 会再次把我们的 JSON 字符串转义
+                    serialize=False,
                     filter=_specific_filter
                 )
 
@@ -150,12 +139,49 @@ class LoggerManager:
         return self._logger.bind(type=log_type)
 
     @staticmethod
-    def _empty_format(_: Any) -> str:
+    def _json_formatter(record: dict) -> str:
         """
-        返回空字符串。
-        当 serialize=True 时，format 函数的返回值会被赋值给 JSON 日志中的 "text" 字段。
+        自定义 JSON 格式化器。
+        将日志记录转换为符合要求的 JSON 字符串。
         """
-        return ""
+        # 1. 提取基础信息
+        log_record = {
+            "time": record["time"].strftime("%Y-%m-%d %H:%M:%S.%f"),
+            "level": record["level"].name,
+            "name": record["name"],
+            "function": record["function"],
+            "line": record["line"],
+            "trace_id": record["extra"].get("trace_id", "-"),
+            "type": record["extra"].get("type", "default"),
+
+            # 要求：text 字段为空字符串
+            "text": "",
+
+            # 默认 message 为字符串
+            "message": record["message"]
+        }
+
+        # 2. 处理 message 字段，使其成为 JSON 对象
+        # 场景 A: 用户使用 logger.bind(json_content={...}).info(...)
+        if "json_content" in record["extra"]:
+            log_record["message"] = record["extra"]["json_content"]
+
+        # 场景 B: 用户直接使用 logger.info({'a': 1})
+        # Loguru 会将字典转换为字符串 "{'a': 1}" (注意是单引号，这是 Python 的 repr)
+        # 我们尝试将其解析回字典对象
+        else:
+            try:
+                # 使用 ast.literal_eval 安全地解析 Python 字典字符串
+                # 如果 message 看起来像字典或列表，尝试转换
+                val = ast.literal_eval(record["message"])
+                if isinstance(val, (dict, list)):
+                    log_record["message"] = val
+            except (ValueError, SyntaxError):
+                # 解析失败，保持原样（普通字符串日志）
+                pass
+
+        # 3. 序列化为 JSON 字符串并添加换行符
+        return json.dumps(log_record, default=str, ensure_ascii=False) + "\n"
 
     @staticmethod
     def _filter_default(record: Any) -> bool:
@@ -173,11 +199,6 @@ class LoggerManager:
             path.mkdir(parents=True, exist_ok=True)
         except OSError:
             pass
-
-    @property
-    def server_logger(self):
-        """返回原始的 loguru logger 对象"""
-        return self._logger
 
 
 # 1. 实例化管理器
