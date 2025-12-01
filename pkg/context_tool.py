@@ -33,7 +33,7 @@ def set_trace_id_context_var(trace_id: str):
 
 
 def get_trace_id_context_var() -> str:
-    """获取 trace_id，如果未设置，则返回 None"""
+    """获取 trace_id"""
     try:
         trace_id = trace_id_context_var.get()
     except LookupError:
@@ -60,8 +60,5 @@ def get_user_id_context_var() -> int:
     except LookupError:
         logger.warning("user_id is not set")
         raise
-
-    # if user_id == -1:
-    #     raise AppException(code=400, detail="user_id is unknown")
 
     return user_id
