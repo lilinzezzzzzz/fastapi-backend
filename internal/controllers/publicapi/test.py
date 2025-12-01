@@ -16,6 +16,7 @@ from pkg.anyio_task_manager import anyio_task_manager
 from pkg.logger_tool import logger
 from pkg.orm_tool.builder import new_cls_querier, new_cls_updater, new_counter
 from pkg.resp_tool import response_factory
+from pkg.stream_tool import TimeoutControlRoute, stream_with_dual_control
 
 router = APIRouter(prefix="/test", tags=["public v1 test"])
 
@@ -251,7 +252,7 @@ async def text_generator():
         await asyncio.sleep(0.05)
 
 
-@router.get("/test-sse", summary="测试SSE")
+@router.get("/test/sse-stream", summary="测试SSE")
 async def test_sse():
     async def event_generator():
         # 1. 请求进入，先返回：hello，正在查询资料
@@ -280,3 +281,24 @@ async def test_sse():
         yield "data: 回答结束\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+async def fake_stream_generator():
+    for i in range(5):
+        yield f"data: chunk {i}\n\n"
+        await asyncio.sleep(3)
+
+
+@router.get("/chat/sse-stream/timeout", summary= "测试SSE超时控制")
+async def chat_endpoint(request: Request):
+    # 【关键】在此处设置该接口特定的超时时间
+    # request.state.chunk_timeout = 2.0  # 单次卡顿不超过2秒
+    # request.state.total_timeout = 10.0  # 总共不超过10秒
+    wrapped_generator = stream_with_dual_control(
+        generator=fake_stream_generator(),
+        chunk_timeout=2.0,
+        total_timeout=10.0,
+        error_callback=lambda t, v: print(f"[Timeout] {t} limit {v}s reached"),
+        is_sse=True
+    )
+    return StreamingResponse(wrapped_generator, media_type="text/event-stream")

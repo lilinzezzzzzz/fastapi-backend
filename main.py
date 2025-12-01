@@ -8,7 +8,7 @@ app = create_app()
 
 if __name__ == "__main__":
     # 1. 创建配置对象 (参数和 uvicorn.run 一样)
-    config = uvicorn.Config("main:app", host="0.0.0.0", port=8080, reload=False)
+    config = uvicorn.Config("main:app", host="0.0.0.0", port=8000, reload=False)
 
     # 2. 实例化服务器
     server = uvicorn.Server(config)
