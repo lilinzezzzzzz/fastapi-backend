@@ -1,15 +1,13 @@
 import json
+
 import pytest
-import sys
-from pathlib import Path
+
+from pkg.logger_tool import LoggerManager
+
 
 # ----------------------------------------------------------------------
 # 1. 环境准备
 # ----------------------------------------------------------------------
-# 确保能导入项目根目录下的 pkg 包
-sys.path.append(str(Path(__file__).parent.parent))
-
-from pkg.logger_tool import LoggerManager
 
 
 # ----------------------------------------------------------------------
