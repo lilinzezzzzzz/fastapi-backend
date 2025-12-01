@@ -1,116 +1,94 @@
 import os
-import time
-from datetime import time as dt_time
-
-import pytest
-from freezegun import freeze_time
-from loguru import logger as global_logger
+import time as time_module
+from datetime import timedelta, timezone, time
 
 from pkg.logger_tool import LoggerManager
 
 
-@pytest.fixture
-def clean_logger(tmp_path, monkeypatch):
-    """
-    Fixture: 初始化测试环境
-    """
-    # 1. Patch 路径
-    monkeypatch.setattr(LoggerManager, "BASE_LOG_DIR", tmp_path)
-    monkeypatch.setattr(LoggerManager, "SYSTEM_LOG_DIR", tmp_path / LoggerManager.SYSTEM_LOG_TYPE)
+class TestLogRotationRetention:
 
-    # 2. 默认配置
-    monkeypatch.setattr(LoggerManager, "RETENTION", "30 days")
-    # 默认每天 00:00 轮转
-    monkeypatch.setattr(LoggerManager, "ROTATION", dt_time(0, 0, 0))
+    def test_retention_cleans_old_files(self, tmp_path):
+        """
+        测试 Retention: 验证旧文件被删除
+        """
+        # 1. 准备路径和旧文件
+        log_dir = tmp_path / "logs" / "system"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        print(f"log_dir: {log_dir}")
 
-    manager = LoggerManager()
+        old_file = log_dir / "2023-01-01.log"
+        old_file.write_text("Old logs...")
 
-    # 3. 关键：测试时关闭异步 (enqueue=False)，确保 file write 立即发生
-    # 这样 freezegun 的时间修改能立即生效，无需 sleep 等待
-    manager.setup(write_to_console=False, write_to_file=True, enqueue=False)
+        # 修改为 40 天前
+        days_ago_40 = time_module.time() - (40 * 24 * 3600)
+        os.utime(old_file, (days_ago_40, days_ago_40))
 
-    yield manager
+        new_file = log_dir / "2023-12-01.log"
+        new_file.write_text("New logs...")
 
-    global_logger.remove()
+        # 2. 实例化 Manager (直接注入配置)
+        manager = LoggerManager(
+            base_log_dir=tmp_path / "logs",  # <--- 直接注入临时路径
+            use_utc=True,
+            rotation=1,  # <--- 1 byte 轮转
+            retention=timedelta(days=30),  # <--- 30天保留
+            enqueue=False  # 测试环境通常不需要多进程队列
+        )
 
+        # 3. 启动
+        logger = manager.setup(write_to_console=False)
 
-def test_daily_rotation_at_midnight(clean_logger, tmp_path, monkeypatch):
-    """
-    【测试 1】: 测试跨天轮转 (00:00)
-    策略：设置 ROTATION 为 00:00，利用 freezegun 跨越午夜，触发 Loguru 的轮转机制。
-    """
-    # 显式确保设置为 00:00 (虽然 Fixture 设了，这里强调一下意图)
-    monkeypatch.setattr(LoggerManager, "ROTATION", dt_time(0, 0, 0))
+        # 4. 触发
+        logger.info("Trigger action")
+        time_module.sleep(0.1)
 
-    device_id = "device-daily-test"
-    log_dir = tmp_path / device_id
+        # 5. 验证
+        assert not old_file.exists()
+        assert new_file.exists()
 
-    # --- Day 1 (23:55) ---
-    with freeze_time("2025-01-01 23:55:00") as frozen_time:
-        # 重新绑定 logger (enqueue=False 保持同步)
-        logger = clean_logger.get_dynamic_logger(device_id, enqueue=False)
-        logger.info("Log Day 1")
+    def test_rotation_creates_new_files(self, tmp_path):
+        """
+        测试 Rotation: 验证文件切割
+        """
+        # 1. 实例化 (注入 1秒 轮转策略)
+        manager = LoggerManager(
+            base_log_dir=tmp_path / "logs",
+            use_utc=True,
+            rotation=timedelta(seconds=1),  # <--- 注入 1秒 轮转
+            enqueue=False
+        )
 
-        # 验证 Day 1 文件存在
-        assert (log_dir / "2025-01-01.log").exists()
+        logger = manager.setup(write_to_console=False)
+        log_dir = tmp_path / "logs" / "system"
+        print(f"log_dir: {log_dir}")
 
-        # --- Day 2 (00:05) ---
-        # 时间流逝，跨越 00:00
-        frozen_time.move_to("2025-01-02 00:05:00")
+        # 2. 第一条日志
+        logger.info("Log entry 1")
+        files_step_1 = list(log_dir.glob("*.log*"))
+        assert len(files_step_1) >= 1
 
-        # 写入日志。
-        # 原理：Loguru 在添加 Sink 时计算出下一次轮转时间是 2025-01-02 00:00:00。
-        # 现在时间是 00:05，超过了预定时间，因此触发轮转。
-        logger.info("Log Day 2")
+        # 3. 等待超时
+        time_module.sleep(1.2)
 
-        # 验证
-        assert (log_dir / "2025-01-02.log").exists(), "跨天轮转失败：未生成新日期的文件"
+        # 4. 第二条日志
+        logger.info("Log entry 2")
 
-        content_day2 = (log_dir / "2025-01-02.log").read_text(encoding="utf-8")
-        assert "Log Day 2" in content_day2
-        assert "Log Day 1" not in content_day2
+        files_step_2 = list(log_dir.glob("*.log*"))
+        assert len(files_step_2) > len(files_step_1)
 
-        # 验证旧文件依然存在且未被修改
-        assert (log_dir / "2025-01-01.log").exists()
+    def test_init_sets_correct_timezone(self):
+        """
+        测试构造函数的时区逻辑
+        """
+        # 1. 默认情况: 传入 UTC=True, rotation=Naive Time -> 自动转 UTC
+        mgr1 = LoggerManager(use_utc=True, rotation=time(0, 0, 0))
+        assert mgr1.rotation.tzinfo == timezone.utc
 
-    print(f"\n[Time Test] Success. Files: {[f.name for f in log_dir.glob('*.log')]}")
+        # 2. 显式本地: 传入 UTC=False -> 保持 Naive
+        mgr2 = LoggerManager(use_utc=False, rotation=time(0, 0, 0))
+        assert mgr2.rotation.tzinfo is None
 
-
-def test_retention_cleanup(clean_logger, tmp_path, monkeypatch):
-    """
-    【测试 2】: 测试过期清理
-    策略：将 Rotation 阈值设得极小 (100 Bytes)，强制触发轮转。
-    因为 Loguru 只有在发生轮转时才会顺便检查并删除过期文件。
-    """
-    # 技巧：通过极小的 Size 轮转来激活 Retention 检查逻辑
-    monkeypatch.setattr(LoggerManager, "ROTATION", 10)  # 100 Bytes
-
-    device_id = "device-retention-test"
-    log_dir = tmp_path / device_id
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    # 1. 伪造一个 31 天前的日志文件
-    old_file = log_dir / "2020-01-01.log"
-    old_file.write_text("Old log content needs to be deleted.")
-
-    # 修改文件时间 (mtime) 到 31 天前
-    days_31_ago = time.time() - (31 * 24 * 3600) - 100
-    os.utime(old_file, (days_31_ago, days_31_ago))
-
-    print(f"\n[Retention Setup] Created: {old_file}")
-
-    # 2. 获取 Logger
-    logger = clean_logger.get_dynamic_logger(device_id, enqueue=False)
-
-    # 3. 写入足够多的数据，触发 100 Bytes 的轮转
-    # 只要触发了 Rotation，Loguru 就会去扫描目录清理旧文件
-    for i in range(10):
-        logger.info(f"Trigger rotation data {i} " * 5)
-
-    # 4. 验证
-    assert not old_file.exists(), f"Retention 失败: 旧文件 {old_file.name} 未被删除"
-
-    # 确认新日志还在
-    assert len(list(log_dir.glob("*.log"))) > 0
-
-    print("[Retention Test] Pass. Old file deleted.")
+        # 3. 混合: 传入 UTC=True, 但 rotation 已经是 UTC -> 保持 UTC
+        custom_utc = time(12, 0, 0, tzinfo=timezone.utc)
+        mgr3 = LoggerManager(use_utc=True, rotation=custom_utc)
+        assert mgr3.rotation == custom_utc

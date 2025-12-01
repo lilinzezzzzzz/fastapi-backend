@@ -5,99 +5,122 @@ from typing import Any
 
 import loguru
 
-# 确保这里的导入路径与你的项目结构一致
 from pkg import BASE_DIR, orjson_dumps
+
+# 类型别名
+RotationType = str | int | time | timedelta
+RetentionType = str | int | timedelta
 
 
 class LoggerManager:
     """
     日志管理器
-    集成了配置、初始化、动态Sink注册和自定义格式化功能。
+    配置在实例化 (__init__) 时传入，并在 setup() 时生效。
     """
 
-    # --- 1. 核心常量定义 ---
     SYSTEM_LOG_TYPE: str = "system"
 
-    # --- 2. 配置部分 ---
-    LEVEL: str = "INFO"
+    def __init__(
+            self,
+            level: str = "INFO",
+            base_log_dir: Path = BASE_DIR / "logs",
+            rotation: RotationType = time(0, 0, 0, tzinfo=timezone.utc),
+            retention: RetentionType = timedelta(days=30),
+            compression: str | None = None,
+            use_utc: bool = True,
+            enqueue: bool = True,
+    ):
+        """
+        构造函数：接收所有配置参数并存储为实例属性。
 
-    # 路径配置
-    BASE_LOG_DIR: Path = BASE_DIR / "logs"
-    SYSTEM_LOG_DIR: Path = BASE_LOG_DIR / SYSTEM_LOG_TYPE
-
-    # 轮转与保留配置
-    # 策略：文件名携带日期实现按天轮转
-    ROTATION: str | int | time | timedelta = None
-    RETENTION: str | int | timedelta = timedelta(days=30)
-    COMPRESSION: str = None  # "zip"
-
-    def __init__(self):
+        :param level: 日志等级 (e.g., "INFO", "DEBUG")
+        :param base_log_dir: 日志存放的根目录
+        :param rotation: 轮转策略 (默认: 每天 00:00, UTC时间)
+        :param retention: 保留策略 (默认: 30天)
+        :param compression: 压缩格式 (e.g., "zip")
+        :param use_utc: 是否强制使用 UTC 时间 (影响日志内容及轮转触发时间)
+        :param enqueue: 是否使用多进程安全的队列写入
+        """
         self._logger = loguru.logger
         self._registered_types: dict[str, dict[str, Any]] = {}
         self._is_initialized = False
+
+        # --- 配置属性 ---
+        self.level = level
+        self.base_log_dir = base_log_dir
+        self.system_log_dir = base_log_dir / self.SYSTEM_LOG_TYPE
+        self.retention = retention
+        self.compression = compression
+        self.use_utc = use_utc
+        self.enqueue = enqueue
+
+        # --- 轮转策略的特殊处理 ---
+        # 如果强制使用 UTC，且传入的 rotation 是默认的无时区 time 对象，
+        # 则自动为其添加 UTC 时区，确保轮转时刻与日志时间一致。
+        if self.use_utc and isinstance(rotation, time) and rotation.tzinfo is None:
+            self.rotation = rotation.replace(tzinfo=timezone.utc)
+        else:
+            self.rotation = rotation
 
     def setup(
             self,
             *,
             write_to_file: bool = True,
-            write_to_console: bool = True,
-            force_use_utc: bool = True,
-            enqueue: bool = True
+            write_to_console: bool = True
     ) -> "loguru.Logger":
         """
-        初始化系统日志 (System Logger) 及全局配置
+        应用配置并初始化系统日志。
+        注意：setup 不再接收配置参数，而是使用 __init__ 中保存的属性。
         """
         self._logger.remove()
         self._registered_types.clear()
 
         # 1. 准备基础配置
         config_params: dict[str, Any] = {
-            "extra": {"trace_id": "-", "type": self.SYSTEM_LOG_TYPE, "json_content": None}
+            "extra": {
+                "trace_id": "-",
+                "type": self.SYSTEM_LOG_TYPE,
+                "json_content": None,
+            }
         }
 
-        # 2. 根据参数决定是否挂载 UTC 补丁
-        if force_use_utc:
+        # 2. 根据实例属性决定是否挂载 UTC 补丁
+        if self.use_utc:
             config_params["patcher"] = self._utc_time_patcher
-            self.ROTATION = time(0, 0, 0, tzinfo=timezone.utc)
-        else:
-            self.ROTATION = time(0, 0, 0)
 
         self._logger.configure(**config_params)
 
-        # 3. Console 输出 (全局唯一，负责所有类型的控制台打印)
+        # 3. Console 输出
         if write_to_console:
             self._logger.add(
                 sink=sys.stderr,
                 format=self._console_formatter,
-                level=self.LEVEL,
-                enqueue=enqueue,
+                level=self.level,
+                enqueue=self.enqueue,
                 colorize=True,
-                diagnose=True
+                diagnose=True,
             )
 
         # 4. File 输出 (System Log)
         if write_to_file:
-            self._ensure_dir(self.SYSTEM_LOG_DIR)
+            self._ensure_dir(self.system_log_dir)
 
             self._logger.add(
-                # 文件名包含日期：Loguru 会在日期变更时自动轮转文件
-                sink=self.SYSTEM_LOG_DIR / "{time:YYYY-MM-DD}.log",
-                level=self.LEVEL,
-                # 大小限制：如果当天文件超过此大小，也会触发轮转
-                rotation=self.ROTATION,
-                retention=self.RETENTION,
-                compression=self.COMPRESSION,
-                enqueue=enqueue,
+                sink=self.system_log_dir / "{time:YYYY-MM-DD}.log",
+                level=self.level,
+                rotation=self.rotation,
+                retention=self.retention,
+                compression=self.compression,
+                enqueue=self.enqueue,
                 format=self._file_formatter,
-                filter=self._filter_system
+                filter=self._filter_system,
             )
 
-            # 记录 System 类型配置
             self._registered_types[self.SYSTEM_LOG_TYPE] = {"save_json": False}
 
-        mode_str = "UTC" if force_use_utc else "Local Time"
+        mode_str = "UTC" if self.use_utc else "Local Time"
         self._logger.info(
-            f"Logger initialized successfully ({mode_str} Mode). Rotation: {self.ROTATION}"
+            f"Logger initialized. Mode: {mode_str} | Rotation: {self.rotation} | Level: {self.level}"
         )
         self._is_initialized = True
         return self._logger
@@ -108,11 +131,10 @@ class LoggerManager:
             *,
             write_to_file: bool = True,
             save_json: bool = True,
-            enqueue: bool = True
     ) -> "loguru.Logger":
         """
-        获取动态类型的 Logger
-        注意：此方法只负责注册新的文件 Sink，控制台输出由 setup() 中的全局 Sink 统一处理。
+        获取动态类型的 Logger。
+        使用实例属性 (self.rotation, self.retention 等) 创建新的 Sink。
         """
         if not self._is_initialized:
             raise RuntimeError("LoggerManager is not initialized! Call setup() first.")
@@ -122,17 +144,16 @@ class LoggerManager:
             existing_config = self._registered_types[log_type]
             if (existing_save_json := existing_config.get("save_json")) != save_json:
                 raise ValueError(
-                    f"Log type '{log_type}' is already registered with save_json={existing_save_json}, "
-                    f"but requested with save_json={save_json}. Configuration conflict!"
+                    f"Log type '{log_type}' conflict: registered save_json={existing_save_json}, "
+                    f"requested save_json={save_json}."
                 )
             return self._logger.bind(type=log_type)
 
         # 2. 注册新的文件 Sink
         try:
-            log_dir = self.BASE_LOG_DIR / log_type
+            log_dir = self.base_log_dir / log_type
             self._ensure_dir(log_dir)
 
-            # 使用带日期的文件名模板
             sink_path = log_dir / "{time:YYYY-MM-DD}.log"
 
             def _specific_filter(record):
@@ -143,14 +164,14 @@ class LoggerManager:
 
                 self._logger.add(
                     sink=sink_path,
-                    level=self.LEVEL,
-                    rotation=self.ROTATION,
-                    retention=self.RETENTION,
-                    compression=self.COMPRESSION,
-                    enqueue=enqueue,
+                    level=self.level,
+                    rotation=self.rotation,
+                    retention=self.retention,
+                    compression=self.compression,
+                    enqueue=self.enqueue,
                     format=log_format,
                     serialize=False,
-                    filter=_specific_filter
+                    filter=_specific_filter,
                 )
 
             self._registered_types[log_type] = {"save_json": save_json}
@@ -166,7 +187,6 @@ class LoggerManager:
 
     @staticmethod
     def _console_formatter(record: Any) -> str:
-        """动态控制台格式化器"""
         fmt = (
             "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
             "<level>{level: <8}</level> | "
@@ -210,7 +230,7 @@ class LoggerManager:
         json_content = extra_data.pop("json_content", None)
 
         if not isinstance(json_content, (dict, list, str, type(None))):
-            raise TypeError(f"json_content must be a dict, list, str, or None. Got {type(json_content)}")
+            raise TypeError(f"json_content must be types or None. Got {type(json_content)}")
 
         log_record = {
             "time": record["time"].strftime("%Y-%m-%d %H:%M:%S.%f"),
@@ -231,7 +251,6 @@ class LoggerManager:
         return "{extra[serialized_json]}\n"
 
     # --- 辅助方法 ---
-
     @staticmethod
     def _utc_time_patcher(record: Any):
         record["time"] = record["time"].astimezone(timezone.utc)
@@ -248,7 +267,8 @@ class LoggerManager:
             pass
 
 
-# 实例化
-logger_manager = LoggerManager()
-logger = logger_manager.setup(force_use_utc=True)
+# 默认实例化（如果项目中有其他地方直接引用这个实例）
+# 你可以根据需要在 main.py 或 config.py 中重新实例化它
+logger_manager = LoggerManager(use_utc=True)
+logger = logger_manager.setup()
 get_dynamic_logger = logger_manager.get_dynamic_logger
