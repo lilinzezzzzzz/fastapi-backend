@@ -14,6 +14,7 @@ T = TypeVar("T")
 
 
 async def stream_with_dual_control(
+        _: Request,
         generator: AsyncIterable[T],
         chunk_timeout: float,
         total_timeout: float,

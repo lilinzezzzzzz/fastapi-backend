@@ -292,6 +292,7 @@ async def fake_stream_generator():
 @router.get("/chat/sse-stream/timeout", summary= "测试SSE超时控制")
 async def chat_endpoint(request: Request):
     wrapped_generator = stream_with_dual_control(
+        request,
         generator=fake_stream_generator(),
         chunk_timeout=2.0,
         total_timeout=10.0,
