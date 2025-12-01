@@ -21,6 +21,11 @@ class _RequestContext:
         :return: 最终使用的 trace_id
         """
         # 优化：如果没传 trace_id，自动生成一个，保证系统健壮性
+        if not trace_id:
+            raise ValueError("trace_id is mandatory and cannot be empty or None")
+
+        if not isinstance(trace_id, str):
+            raise ValueError("trace_id must be a string")
 
         _request_ctx_var.set(
             {
