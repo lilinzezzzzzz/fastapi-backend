@@ -1,11 +1,10 @@
-import uuid
 from contextvars import ContextVar
-from typing import Any, Dict
+from typing import Any
 
 from pkg.logger_tool import logger
 
 # --- 1. 核心 Context 定义 ---
-_request_ctx_var: ContextVar[Dict[str, Any]] = ContextVar("request_ctx")
+_request_ctx_var: ContextVar[dict[str, Any]] = ContextVar("request_ctx")
 
 
 class _RequestContext:
@@ -57,7 +56,7 @@ class _RequestContext:
         ctx[key] = value
 
     @staticmethod
-    def all() -> Dict[str, Any]:
+    def all() -> dict[str, Any]:
         try:
             return _request_ctx_var.get()
         except LookupError:
