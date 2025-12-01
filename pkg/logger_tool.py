@@ -27,7 +27,7 @@ class LoggerManager:
 
     # 轮转与保留配置
     # 策略：文件名携带日期实现按天轮转
-    ROTATION: str | int | time | timedelta = time(0, 0, 0)
+    ROTATION: str | int | time | timedelta = None
     RETENTION: str | int | timedelta = timedelta(days=30)
     COMPRESSION: str = None  # "zip"
 
@@ -58,6 +58,9 @@ class LoggerManager:
         # 2. 根据参数决定是否挂载 UTC 补丁
         if force_use_utc:
             config_params["patcher"] = self._utc_time_patcher
+            self.ROTATION = time(0, 0, 0, tzinfo=timezone.utc)
+        else:
+            self.ROTATION = time(0, 0, 0)
 
         self._logger.configure(**config_params)
 
