@@ -27,7 +27,8 @@ class LoggerManager:
     SYSTEM_LOG_DIR: Path = BASE_LOG_DIR / SYSTEM_LOG_TYPE
 
     # 轮转与保留配置
-    ROTATION: str = os.getenv("LOG_ROTATION", "00:00")
+    # 策略：文件名携带日期实现按天轮转；此处 rotation 设置大小限制防止单文件过大
+    ROTATION_SIZE: str = os.getenv("LOG_ROTATION_SIZE", "500 MB")
     RETENTION: str = os.getenv("LOG_RETENTION", "30 days")
     COMPRESSION: str = "zip"
 
@@ -44,7 +45,7 @@ class LoggerManager:
             force_use_utc: bool = True
     ) -> "loguru.Logger":
         """
-        初始化系统日志 (System Logger)
+        初始化系统日志 (System Logger) 及全局配置
         """
         self._logger.remove()
         self._registered_types.clear()
@@ -60,11 +61,11 @@ class LoggerManager:
 
         self._logger.configure(**config_params)
 
-        # 3. Console 输出
+        # 3. Console 输出 (全局唯一，负责所有类型的控制台打印)
         if write_to_console:
             self._logger.add(
                 sink=sys.stderr,
-                format=self._console_formatter,  # 使用动态 Console 格式化器
+                format=self._console_formatter,
                 level=self.LEVEL,
                 enqueue=True,
                 colorize=True,
@@ -76,13 +77,15 @@ class LoggerManager:
             self._ensure_dir(self.SYSTEM_LOG_DIR)
 
             self._logger.add(
+                # 文件名包含日期：Loguru 会在日期变更时自动轮转文件
                 sink=self.SYSTEM_LOG_DIR / "{time:YYYY-MM-DD}.log",
                 level=self.LEVEL,
-                rotation=self.ROTATION,
+                # 大小限制：如果当天文件超过此大小，也会触发轮转
+                rotation=self.ROTATION_SIZE,
                 retention=self.RETENTION,
                 compression=self.COMPRESSION,
                 enqueue=True,
-                format=self._file_formatter,  # <--- 修改这里：使用动态文件格式化器
+                format=self._file_formatter,
                 filter=self._filter_system
             )
 
@@ -90,22 +93,29 @@ class LoggerManager:
             self._registered_types[self.SYSTEM_LOG_TYPE] = {"save_json": False}
 
         mode_str = "UTC" if force_use_utc else "Local Time"
-        self._logger.info(f"Logger initialized successfully ({mode_str} Mode).")
+        self._logger.info(
+            f"Logger initialized successfully ({mode_str} Mode). Rotation: Time(Daily) & Size({self.ROTATION_SIZE})"
+        )
         self._is_initialized = True
         return self._logger
 
     def get_dynamic_logger(
-            self, log_type: str,
-            *, write_to_file: bool = True,
+            self,
+            log_type: str,
+            *,
+            write_to_file: bool = True,
             save_json: bool = True
     ) -> "loguru.Logger":
-        """获取动态类型的 Logger"""
+        """
+        获取动态类型的 Logger
+        注意：此方法只负责注册新的文件 Sink，控制台输出由 setup() 中的全局 Sink 统一处理。
+        """
         if not self._is_initialized:
             raise RuntimeError("LoggerManager is not initialized! Call setup() first.")
 
+        # 1. 检查是否已注册
         if log_type in self._registered_types:
             existing_config = self._registered_types[log_type]
-            existing_save_json = existing_config.get("save_json")
             if existing_config.get("save_json") != save_json:
                 raise ValueError(
                     f"Log type '{log_type}' is already registered with save_json={existing_save_json}, "
@@ -113,27 +123,29 @@ class LoggerManager:
                 )
             return self._logger.bind(type=log_type)
 
+        # 2. 注册新的文件 Sink
         try:
             log_dir = self.BASE_LOG_DIR / log_type
             self._ensure_dir(log_dir)
+
+            # 使用带日期的文件名模板
             sink_path = log_dir / "{time:YYYY-MM-DD}.log"
 
             def _specific_filter(record):
                 return record["extra"].get("type") == log_type
 
             if write_to_file:
-                # <--- 修改这里：如果 save_json 为 False，使用 _file_formatter
                 log_format = self._json_formatter if save_json else self._file_formatter
 
                 self._logger.add(
                     sink=sink_path,
                     level=self.LEVEL,
-                    rotation=self.ROTATION,
+                    rotation=self.ROTATION_SIZE,  # 兼顾大小限制
                     retention=self.RETENTION,
                     compression=self.COMPRESSION,
                     enqueue=True,
                     format=log_format,
-                    serialize=False,  # 注意：这里如果是 JSON 格式化器内部处理序列化，这里 False 是对的
+                    serialize=False,
                     filter=_specific_filter
                 )
 
@@ -146,14 +158,11 @@ class LoggerManager:
 
         return self._logger.bind(type=log_type)
 
-    # --- 格式化器更新 ---
+    # --- 格式化器 ---
+
     @staticmethod
     def _console_formatter(record: Any) -> str:
-        """
-        动态控制台格式化器
-        如果 extra 中包含非空的 json_content，则将其追加显示
-        """
-        # 基础格式
+        """动态控制台格式化器"""
         fmt = (
             "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
             "<level>{level: <8}</level> | "
@@ -166,7 +175,6 @@ class LoggerManager:
         if record["extra"].get("json_content") is not None:
             # 换行并以青色显示 JSON 内容
             # loguru 会自动调用字典的 __str__ 或 __repr__
-            # 如果你想在控制台看漂亮的 JSON，可以在这里把 json_content 先 dumps 一下
             fmt += "\n<cyan>{extra[json_content]}</cyan>"
         return fmt + "\n"
 
