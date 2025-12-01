@@ -81,10 +81,10 @@ async def stream_with_dual_control(
 
             break
 
-        except anyio.get_cancelled_exc_class():
+        except anyio.get_cancelled_exc_class() as e:
             # --- 5. 处理客户端断连 ---
-            # anyio.get_cancelled_exc_class() 获取当前环境下的取消异常类型
-            logger.info("Client disconnected (AnyIO cancellation).")
+            logger.info(
+                f"Client disconnected (AnyIO cancellation). Exception type: {type(e).__name__}, Message: {str(e)}")
             raise
 
         except Exception as e:
