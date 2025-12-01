@@ -1,12 +1,11 @@
-import asyncio
 import json
 import time
 from typing import AsyncIterable, TypeVar, Optional, Callable
 
+import anyio
 from fastapi import Request, Response
 from fastapi.routing import APIRoute
 from starlette.responses import StreamingResponse
-from starlette.background import BackgroundTask
 
 from pkg.logger_tool import logger
 
@@ -21,22 +20,16 @@ async def stream_with_dual_control(
         is_sse: bool = True
 ) -> AsyncIterable[T]:
     """
-    双重超时控制生成器 (Python 3.11+ Optimized)
-
-    Args:
-        generator: 原始数据生成器
-        chunk_timeout: 单次数据块最大间隔时间 (秒)
-        total_timeout: 整个流最大传输时间 (秒)
-        error_callback: 超时发生时的回调 (类型, 时间限制)
-        is_sse: 是否为 SSE 流。如果是，超时返回特定 JSON；否则直接断开。
+    基于 AnyIO 和 perf_counter 的双重超时控制
     """
-    # 获取异步迭代器
     iterator = generator.__aiter__()
-    start_time = time.time()
+
+    # 1. 使用 perf_counter 获取单调时钟起点
+    start_time = time.perf_counter()
 
     while True:
-        # 1. 计算剩余的总时间
-        elapsed_time = time.time() - start_time
+        # 2. 计算消耗的时间 (单调时钟差值)
+        elapsed_time = time.perf_counter() - start_time
         remaining_total_time = total_timeout - elapsed_time
 
         # --- 预检查：总时间耗尽 ---
@@ -45,34 +38,30 @@ async def stream_with_dual_control(
                 error_callback("total_timeout", total_timeout)
 
             if is_sse:
-                # 构造 SSE 格式的超时错误
-                err_payload = json.dumps({"code": 408, "message": "Total timeout exceeded"})
-                yield f"data: {err_payload}\n\n"
-
-            # 停止迭代
+                yield f"data: {json.dumps({"code": 408, "message": 'Total timeout exceeded'})}\n\n"
             break
 
-        # 2. 动态计算本次等待时间
-        # 取 "Chunk超时" 和 "剩余总时间" 的较小值
+        # 3. 决定本次超时时间
         current_wait_time = min(chunk_timeout, remaining_total_time)
 
         try:
-            # --- 关键优化：使用 Python 3.11+ 上下文管理器 ---
-            # asyncio.timeout 比 wait_for 更高效，不创建新的 Task
-            async with asyncio.timeout(current_wait_time):
+            # --- 4. 使用 anyio.fail_after ---
+            # AnyIO 会自动处理 Python 版本差异，且提供更安全的取消作用域
+            with anyio.fail_after(current_wait_time):
                 item = await iterator.__anext__()
 
             yield item
 
         except StopAsyncIteration:
-            # 生成器正常结束
             break
 
         except TimeoutError:
-            # --- 处理超时逻辑 ---
-            # 判断是哪种超时
-            now = time.time()
-            is_total_timeout = (now - start_time) >= total_timeout
+            # 注意：AnyIO 抛出的也是标准库的 TimeoutError (Python 3.11+) 或其兼容别名
+
+            # 重新计算时间以确认是哪种超时
+            now = time.perf_counter()
+            # 加上 0.01 的缓冲，避免浮点数精度导致的边界判断失误
+            is_total_timeout = (now - start_time) >= (total_timeout - 0.01)
 
             if is_total_timeout:
                 error_type = "total_timeout"
@@ -83,33 +72,26 @@ async def stream_with_dual_control(
                 limit_val = chunk_timeout
                 error_msg = f"Stream chunk timed out after {chunk_timeout}s"
 
-            # 触发回调
             if error_callback:
                 error_callback(error_type, limit_val)
 
-            # 如果是 SSE，尝试向客户端发送错误信息
             if is_sse:
                 err_data = {"code": 408, "message": error_msg}
                 yield f"data: {json.dumps(err_data)}\n\n"
 
-            # 无论是否发送了错误信息，超时后必须断开流
             break
 
-        except asyncio.CancelledError:
-            # --- 客户端断开连接 ---
-            # 必须重新抛出异常，以便 FastAPI/Starlette 能够感知连接中断
-            # 并触发 background task 的清理工作（如果有）
-            logger.info("Client disconnected during streaming.")
+        except anyio.get_cancelled_exc_class():
+            # --- 5. 处理客户端断连 ---
+            # anyio.get_cancelled_exc_class() 获取当前环境下的取消异常类型
+            logger.info("Client disconnected (AnyIO cancellation).")
             raise
 
         except Exception as e:
-            # --- 捕获业务逻辑崩溃 ---
             logger.error(f"Stream generation error: {e}", exc_info=True)
             if is_sse:
-                err_data = {"code": 500, "message": "Internal Stream Error"}
-                yield f"data: {json.dumps(err_data)}\n\n"
+                yield f"data: {json.dumps({"code": 500, "message": str(e)})}\n\n"
             break
-
 
 
 class TimeoutControlRoute(APIRoute):
