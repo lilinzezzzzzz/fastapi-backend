@@ -80,6 +80,7 @@ dev = [
     "mypy",
     "types-redis",
     "types-pytz",
+    "freezegun>=1.5.5",
 ]
 
 # CI 构建相关工具（可选，按需添加）
