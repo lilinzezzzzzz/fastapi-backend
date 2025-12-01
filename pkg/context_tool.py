@@ -12,21 +12,19 @@ class _RequestContext:
     """
     请求上下文管理工具类
     """
-    KEY_USER_ID = "user_id"
     KEY_TRACE_ID = "trace_id"
 
     @classmethod
-    def init(cls, trace_id: str = None):
+    def init(cls, trace_id: str):
         """
         初始化上下文
         :return: 最终使用的 trace_id
         """
         # 优化：如果没传 trace_id，自动生成一个，保证系统健壮性
-        final_trace_id = trace_id or str(uuid.uuid4())
 
         _request_ctx_var.set(
             {
-                cls.KEY_TRACE_ID: final_trace_id,
+                cls.KEY_TRACE_ID: trace_id,
             }
         )
 
@@ -73,11 +71,11 @@ context = _RequestContext
 # --- 2. 业务工具函数 (保持你的逻辑不变) ---
 
 def set_user_id(user_id: int):
-    context.set(context.KEY_USER_ID, user_id)
+    context.set("user_id", user_id)
 
 
 def get_user_id() -> int:
-    user_id = context.get(context.KEY_USER_ID)
+    user_id = context.get("user_id")
     if user_id is None:
         logger.warning("user_id is not set in current context")
         raise LookupError("user_id is not set")
