@@ -295,7 +295,6 @@ async def chat_endpoint(request: Request):
         generator=fake_stream_generator(),
         chunk_timeout=2.0,
         total_timeout=10.0,
-        error_callback=lambda t, v: print(f"[Timeout] {t} limit {v}s reached"),
         is_sse=True
     )
     return StreamingResponse(wrapped_generator, media_type="text/event-stream")

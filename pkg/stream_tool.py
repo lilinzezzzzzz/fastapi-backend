@@ -16,7 +16,6 @@ async def stream_with_dual_control(
         generator: AsyncIterable[T],
         chunk_timeout: float,
         total_timeout: float,
-        error_callback: Optional[Callable[[str, float], None]] = None,
         is_sse: bool = True
 ) -> AsyncIterable[T]:
     """
@@ -34,9 +33,7 @@ async def stream_with_dual_control(
 
         # --- 预检查：总时间耗尽 ---
         if remaining_total_time <= 0:
-            if error_callback:
-                error_callback("total_timeout", total_timeout)
-
+            logger.warning(f"Total timeout exceeded. Total timeout: {total_timeout}s")
             if is_sse:
                 yield f"data: {json.dumps({"code": 408, "message": 'Total timeout exceeded'})}\n\n"
             break
@@ -72,8 +69,7 @@ async def stream_with_dual_control(
                 limit_val = chunk_timeout
                 error_msg = f"Stream chunk timed out after {chunk_timeout}s"
 
-            if error_callback:
-                error_callback(error_type, limit_val)
+            logger.warning(f"[Timeout] Type:{error_type} Limit:{limit_val}s")
 
             if is_sse:
                 err_data = {"code": 408, "message": error_msg}
@@ -120,7 +116,6 @@ class TimeoutControlRoute(APIRoute):
                     response.body_iterator,
                     chunk_timeout=chunk_timeout,
                     total_timeout=total_timeout,
-                    error_callback=lambda t, v: print(f"[Timeout] Type:{t} Limit:{v}s | Path:{path}"),
                     is_sse=is_sse
                 )
 
