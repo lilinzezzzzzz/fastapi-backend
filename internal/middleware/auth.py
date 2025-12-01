@@ -3,7 +3,7 @@ from starlette.datastructures import MutableHeaders
 
 from internal.core.auth_token import verify_token
 from pkg.signature_tool import signature_auth_helper
-from pkg.context_tool import set_user_id_context_var
+from pkg.context_tool import set_user_id
 from pkg.logger_tool import logger
 from pkg.resp_tool import response_factory
 
@@ -33,7 +33,7 @@ class ASGIAuthMiddleware:
         # 1. 白名单放行
         if path.startswith("/v1/public") or path in auth_token_white or path.startswith("/test"):
             # 某些白名单也可能需要记录日志，可视情况添加
-            set_user_id_context_var(0)
+            set_user_id(0)
             await self.app(scope, receive, send)
             return
 
@@ -87,6 +87,6 @@ class ASGIAuthMiddleware:
 
         # 4. 设置上下文 (在 ASGI 中这里是安全的，会传递给 self.app)
         logger.info(f"set user_id to context: {user_id}")
-        set_user_id_context_var(user_id)
+        set_user_id(user_id)
 
         await self.app(scope, receive, send)
