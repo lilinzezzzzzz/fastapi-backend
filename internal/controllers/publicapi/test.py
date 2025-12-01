@@ -13,7 +13,7 @@ from internal.infra.default_db_session import get_session
 from internal.models.user import User
 from internal.core.exception import AppException
 from pkg.anyio_task_manager import anyio_task_manager
-from pkg.logger_tool import logger, llm_logger
+from pkg.logger_tool import logger
 from pkg.orm_tool.builder import new_cls_querier, new_cls_updater, new_counter
 from pkg.resp_tool import response_factory
 
@@ -124,12 +124,12 @@ async def test_dao():
     test_user: User = user_dao.init_by_phone(str(random.randint(10000000000, 99999999999)))
     test_user.account = f"lilinze_{unique_hex}"
     test_user.username = f"lilinze_{unique_hex}"
-    await test_user.save()
+    await test_user.save(session_provider=get_session)
 
     try:
         # 1. 验证基础查询
-        created_user: User = await new_cls_querier(User, session_provider=get_session).eq_(User.id,
-                                                                                           test_user.id).first()
+        created_user: User = await new_cls_querier(
+            User, session_provider=get_session).eq_(User.id, test_user.id).first()
         assert created_user.id == test_user.id
         logger.info(f"test created success")
 
@@ -240,7 +240,7 @@ async def test_dao():
         return response_factory.resp_200()
     finally:
         test_user.deleted_at = datetime.now()
-        await test_user.save()
+        await test_user.save(session_provider=get_session)
 
 
 async def text_generator():
@@ -280,10 +280,3 @@ async def test_sse():
         yield "data: 回答结束\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
-
-
-@router.get("/test-logger", summary="测试日志")
-async def test_logger():
-    logger.info("测试默认日志")
-    llm_logger.info("测试LLM日志")
-    return response_factory.resp_200()
