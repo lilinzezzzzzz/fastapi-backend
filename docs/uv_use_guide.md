@@ -255,6 +255,9 @@ uv run pytest
 
 
 ```shell
+# 安装uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
 # 初始化新项目 (生成 pyproject.toml)
 uv init <项目名>
 
