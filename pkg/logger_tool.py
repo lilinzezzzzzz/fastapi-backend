@@ -269,7 +269,6 @@ class LoggerManager:
 
 
 # 默认实例化（如果项目中有其他地方直接引用这个实例）
-# 你可以根据需要在 main.py 或 config.py 中重新实例化它
 logger_manager = LoggerManager(base_log_dir=BASE_DIR / "logs", use_utc=True)
 logger = logger_manager.setup()
 get_dynamic_logger = logger_manager.get_dynamic_logger
