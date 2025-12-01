@@ -1,13 +1,12 @@
-import uuid
 from contextvars import ContextVar
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pkg.logger_tool import logger
 
 # --- 1. 核心 Context 定义 ---
 
 # 定义全局 ContextVar，存储一个字典
-_request_ctx_var: ContextVar[Dict[str, Any]] = ContextVar("request_ctx", default={})
+_request_ctx_var: ContextVar[dict[str, Any]] = ContextVar("request_ctx", default={})
 
 
 class RequestContext:
@@ -42,7 +41,7 @@ class RequestContext:
         ctx[key] = value
 
     @staticmethod
-    def all() -> Dict[str, Any]:
+    def all() -> dict[str, Any]:
         return _request_ctx_var.get()
 
     @staticmethod
