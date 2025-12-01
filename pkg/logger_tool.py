@@ -27,10 +27,10 @@ class LoggerManager:
     SYSTEM_LOG_DIR: Path = BASE_LOG_DIR / SYSTEM_LOG_TYPE
 
     # 轮转与保留配置
-    # 策略：文件名携带日期实现按天轮转；此处 rotation 设置大小限制防止单文件过大
-    ROTATION_SIZE: str = os.getenv("LOG_ROTATION_SIZE", "500 MB")
+    # 策略：文件名携带日期实现按天轮转
+    ROTATION: str = os.getenv("LOG_ROTATION", "00:00")
     RETENTION: str = os.getenv("LOG_RETENTION", "30 days")
-    COMPRESSION: str = "zip"
+    COMPRESSION: str = None # "zip"
 
     def __init__(self):
         self._logger = loguru.logger
@@ -42,7 +42,8 @@ class LoggerManager:
             *,
             write_to_file: bool = True,
             write_to_console: bool = True,
-            force_use_utc: bool = True
+            force_use_utc: bool = True,
+            enqueue: bool = True
     ) -> "loguru.Logger":
         """
         初始化系统日志 (System Logger) 及全局配置
@@ -67,7 +68,7 @@ class LoggerManager:
                 sink=sys.stderr,
                 format=self._console_formatter,
                 level=self.LEVEL,
-                enqueue=True,
+                enqueue=enqueue,
                 colorize=True,
                 diagnose=True
             )
@@ -81,10 +82,10 @@ class LoggerManager:
                 sink=self.SYSTEM_LOG_DIR / "{time:YYYY-MM-DD}.log",
                 level=self.LEVEL,
                 # 大小限制：如果当天文件超过此大小，也会触发轮转
-                rotation=self.ROTATION_SIZE,
+                rotation=self.ROTATION,
                 retention=self.RETENTION,
                 compression=self.COMPRESSION,
-                enqueue=True,
+                enqueue=enqueue,
                 format=self._file_formatter,
                 filter=self._filter_system
             )
@@ -94,7 +95,7 @@ class LoggerManager:
 
         mode_str = "UTC" if force_use_utc else "Local Time"
         self._logger.info(
-            f"Logger initialized successfully ({mode_str} Mode). Rotation: Time(Daily) & Size({self.ROTATION_SIZE})"
+            f"Logger initialized successfully ({mode_str} Mode). Rotation: {self.ROTATION}"
         )
         self._is_initialized = True
         return self._logger
@@ -104,7 +105,8 @@ class LoggerManager:
             log_type: str,
             *,
             write_to_file: bool = True,
-            save_json: bool = True
+            save_json: bool = True,
+            enqueue: bool = True
     ) -> "loguru.Logger":
         """
         获取动态类型的 Logger
@@ -140,10 +142,10 @@ class LoggerManager:
                 self._logger.add(
                     sink=sink_path,
                     level=self.LEVEL,
-                    rotation=self.ROTATION_SIZE,  # 兼顾大小限制
+                    rotation=self.ROTATION,
                     retention=self.RETENTION,
                     compression=self.COMPRESSION,
-                    enqueue=True,
+                    enqueue=enqueue,
                     format=log_format,
                     serialize=False,
                     filter=_specific_filter
