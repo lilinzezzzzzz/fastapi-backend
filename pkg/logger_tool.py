@@ -116,7 +116,7 @@ class LoggerManager:
         # 1. 检查是否已注册
         if log_type in self._registered_types:
             existing_config = self._registered_types[log_type]
-            if existing_config.get("save_json") != save_json:
+            if (existing_save_json := existing_config.get("save_json")) != save_json:
                 raise ValueError(
                     f"Log type '{log_type}' is already registered with save_json={existing_save_json}, "
                     f"but requested with save_json={save_json}. Configuration conflict!"
