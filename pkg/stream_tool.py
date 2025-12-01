@@ -1,6 +1,7 @@
 import json
 import time
-from typing import AsyncIterable, TypeVar, Optional, Callable
+from collections.abc import AsyncIterable, Callable
+from typing import TypeVar
 
 import anyio
 from fastapi import Request, Response
@@ -104,8 +105,6 @@ class TimeoutControlRoute(APIRoute):
                 # 你可以在具体的 path operation 函数中通过 request.state.chunk_timeout = 5 来设置
                 chunk_timeout = getattr(request.state, "chunk_timeout", 60.0)  # 默认 60s
                 total_timeout = getattr(request.state, "total_timeout", 300.0)  # 默认 5min
-
-                path = request.url.path
 
                 # 4. 判断是否为 SSE 流 (根据 media_type)
                 # 常见的 SSE media type 是 text/event-stream
