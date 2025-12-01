@@ -2,18 +2,16 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, APIRouter
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 
 from internal.aps_tasks import apscheduler_manager
 from internal.config.setting import setting
 from internal.constants import REDIS_KEY_LOCK_PREFIX
-from internal.controllers import web
 from internal.infra.default_redis import cache_client
 from pkg import SYS_ENV, SYS_NAMESPACE
 from pkg.logger_tool import logger
 from pkg.resp_tool import response_factory
-from pkg.stream_tool import TimeoutControlRoute
 
 
 def create_app() -> FastAPI:
