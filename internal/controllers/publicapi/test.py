@@ -18,7 +18,7 @@ from pkg.orm_tool.builder import new_cls_querier, new_cls_updater, new_counter
 from pkg.resp_tool import response_factory
 from pkg.stream_tool import TimeoutControlRoute, stream_with_dual_control
 
-router = APIRouter(prefix="/test", tags=["public v1 test"])
+router = APIRouter(prefix="/test", tags=["public v1 test"], route_class=TimeoutControlRoute)
 
 
 @router.get("/test_raise_exception", summary="测试异常")
@@ -291,9 +291,6 @@ async def fake_stream_generator():
 
 @router.get("/chat/sse-stream/timeout", summary= "测试SSE超时控制")
 async def chat_endpoint(request: Request):
-    # 【关键】在此处设置该接口特定的超时时间
-    # request.state.chunk_timeout = 2.0  # 单次卡顿不超过2秒
-    # request.state.total_timeout = 10.0  # 总共不超过10秒
     wrapped_generator = stream_with_dual_control(
         generator=fake_stream_generator(),
         chunk_timeout=2.0,
