@@ -2,7 +2,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Any
-from datetime import timezone
+from datetime import timezone, time, timedelta
 
 import loguru
 
@@ -28,9 +28,9 @@ class LoggerManager:
 
     # 轮转与保留配置
     # 策略：文件名携带日期实现按天轮转
-    ROTATION: str = os.getenv("LOG_ROTATION", "00:00")
-    RETENTION: str = os.getenv("LOG_RETENTION", "30 days")
-    COMPRESSION: str = None # "zip"
+    ROTATION: str | int | time | timedelta = os.getenv("LOG_ROTATION") or time(0, 0, 0)
+    RETENTION: str | int | timedelta = os.getenv("LOG_RETENTION") or timedelta(days=30)
+    COMPRESSION: str = None  # "zip"
 
     def __init__(self):
         self._logger = loguru.logger
