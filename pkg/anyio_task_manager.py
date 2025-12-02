@@ -289,7 +289,7 @@ class AnyioTaskManager:
             args_tuple_list: list[tuple] | None = None,
             kwargs_dict_list: list[dict] | None = None,
             timeout: float | None = None,
-            cancellable: bool = False,
+            cancellable: bool = False
     ) -> list[Any]:
         """
         使用 AnyIO 线程池并发执行一批 *同步* 函数调用（不会阻塞事件循环）。
