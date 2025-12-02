@@ -43,8 +43,6 @@ class AnyioTaskManager:
         self.max_queue = ANYIO_TM_MAX_QUEUE
         self.default_timeout = DEFAULT_TIMEOUT
 
-        # self.max_tasks = max_tasks
-        # self._limiter = CapacityLimiter(max_tasks)
         self._tg: TaskGroup | None = None
         self._tg_started = False
         self._lock = anyio.Lock()
