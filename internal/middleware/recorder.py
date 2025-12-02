@@ -33,10 +33,12 @@ class ASGIRecordMiddleware:
             )
 
             start_time = time.perf_counter()
-
+            response_started = False
             # 定义 send_wrapper 来拦截响应，注入 Header
             async def send_wrapper(message):
+                nonlocal response_started
                 if message["type"] == "http.response.start":
+                    response_started = True
                     process_time = time.perf_counter() - start_time
 
                     # 注入响应头 (需要修改 message 中的 headers)
@@ -57,12 +59,15 @@ class ASGIRecordMiddleware:
                 # 如果你必须在这里拦截所有未处理异常并返回 JSON，需要手动发送 ASGI 消息。
 
                 logger.error(f"Unhandled exception, exc={get_last_exec_tb(exc)}")
+                if not response_started:
+                    # 手动构建错误响应
+                    error_resp = response_factory.response(
+                        code=error_code.InternalServerError,
+                        message=f"Unhandled Exception: {exc}"
+                    )
 
-                # 手动构建错误响应
-                error_resp = response_factory.response(
-                    code=error_code.InternalServerError,
-                    message=f"Unhandled Exception: {exc}"
-                )
-
-                # 使用 Starlette Response 对象来帮助我们发送 ASGI 消息 (比手写容易)
-                await error_resp(scope, receive, send)
+                    # 使用 Starlette Response 对象来帮助我们发送 ASGI 消息 (比手写容易)
+                    await error_resp(scope, receive, send)
+                else:
+                    logger.error(f"Response already started, cannot send 500 error response for trace_id={trace_id}")
+                    pass
