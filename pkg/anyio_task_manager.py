@@ -6,7 +6,7 @@ from functools import partial
 from typing import Any
 
 import anyio
-from anyio import CancelScope, CapacityLimiter, create_task_group, fail_after, to_process, to_thread
+from anyio import CancelScope, CapacityLimiter, create_task_group, fail_after, to_process, to_thread, move_on_after
 from anyio.abc import TaskGroup
 
 from pkg.logger_tool import logger
@@ -185,25 +185,30 @@ class AnyioTaskManager:
             self,
             coro_func: Callable[..., Awaitable[Any]],
             args_tuple_list: list[tuple],
-            timeout: float | None = None,
+            task_timeout: float | None = None,  # 改名：更明确，控制单个任务
+            global_timeout: float | None = None,  # 新增：控制整体耗时
             jitter: float | None = 3.0
     ) -> list[Any]:
         """
-        并发执行多个相同函数的不同参数，并支持整体超时控制
+        并发执行多个相同函数的不同参数，支持单个超时和整体超时。
 
         Args:
             coro_func: 异步函数
             args_tuple_list: 参数元组列表
-            timeout: 整体超时时间（秒）
-            jitter:
+            task_timeout: 单个任务的超时时间（秒）。如果单个任务超时，该任务结果为 None
+            global_timeout: 整体批量执行的超时时间（秒）。如果整体超时，未完成的任务结果为 None
+            jitter: 随机抖动等待时间（秒）
 
         Returns:
-            list[Any]: 结果列表，成功为结果值，失败为异常对象
+            list[Any]: 结果列表。成功为结果值，失败或超时为 None。
         """
         coro_name = self.get_coro_func_name(coro_func)
+        # 初始化结果列表，默认全为 None。
+        # 这样如果整体超时导致任务被取消，未执行的任务位置自然保留为 None
         results: list[Any] = [None] * len(args_tuple_list)
 
         async def _wrapped(index: int, args: tuple):
+            # jitter 逻辑保持不变
             if jitter and jitter > 0:
                 await anyio.sleep(random.uniform(0, jitter))
 
@@ -211,29 +216,44 @@ class AnyioTaskManager:
                 try:
                     logger.info(f"Task-{index} ({coro_name}, {args}) started.")
 
-                    # 单个任务的超时控制
-                    if timeout and timeout > 0:
-                        with fail_after(timeout):
+                    # --- 变更点1: 使用 task_timeout 控制单个任务 ---
+                    if task_timeout and task_timeout > 0:
+                        with fail_after(task_timeout):
                             res = await coro_func(*args)
                     else:
                         res = await coro_func(*args)
 
                     results[index] = res
                     logger.info(f"Task-{index} ({coro_name}, {args}) completed.")
-                except TimeoutError:
-                    results[index] = None
-                    logger.error(f"Task-{index} ({coro_name}, {args}) timed out after {timeout} seconds.")
-                except BaseException as e:
-                    results[index] = None
-                    logger.error(f"Task-{index} ({coro_name}, {args}) failed. err={e}")
 
-        # 使用任务组管理所有任务
-        async with create_task_group() as tg:
-            for i, args_tuple in enumerate(args_tuple_list):
-                tg.start_soon(_wrapped, i, args_tuple)
+                except TimeoutError:
+                    # 单个任务超时
+                    results[index] = None
+                    logger.error(f"Task-{index} ({coro_name}, {args}) timed out after {task_timeout}s.")
+                except BaseException as e:
+                    # 任务被取消 (包括整体超时触发的取消) 或其他异常
+                    # 注意：如果是整体超时触发的取消，这里会捕获到 CancelledError (包含在 BaseException 中)
+                    # anyio 的 CancelledError 通常不需要手动处理，结果保持 None 即可
+                    if isinstance(e, anyio.get_cancelled_exc_class()):
+                        logger.debug(f"Task-{index} ({coro_name}) cancelled (likely global timeout).")
+                    else:
+                        results[index] = None
+                        logger.error(f"Task-{index} ({coro_name}, {args}) failed. err={e}")
+
+        # 如果 global_timeout 为 None 或 <=0，move_on_after(None) 相当于没有超时限制
+        limit_scope = global_timeout if (global_timeout and global_timeout > 0) else None
+
+        with move_on_after(limit_scope) as scope:
+            async with create_task_group() as tg:
+                for i, args_tuple in enumerate(args_tuple_list):
+                    tg.start_soon(_wrapped, i, args_tuple)
+
+        # --- 变更点3: 检测是否触发了整体超时 ---
+        if scope.cancelled_caught:
+            logger.warning(
+                f"Batch task ({coro_name}) hit global timeout of {global_timeout}s. Returning partial results.")
 
         return results
-
     async def run_in_thread(
             self,
             sync_func: Callable[..., Any],
