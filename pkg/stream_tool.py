@@ -1,11 +1,9 @@
 import json
-from collections.abc import AsyncIterable, Callable
+from collections.abc import AsyncIterable
 from typing import TypeVar
 
 import anyio
-from fastapi import Request, Response
-from fastapi.routing import APIRoute
-from starlette.responses import StreamingResponse
+from fastapi import Request
 
 from pkg.logger_tool import logger
 
