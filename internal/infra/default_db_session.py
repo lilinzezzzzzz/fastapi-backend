@@ -22,7 +22,7 @@ engine = create_async_engine(
 )
 
 # 创建异步 session_maker
-AsyncSessionLocal = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+AsyncSessionLocal = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False, autoflush=True)
 
 
 @asynccontextmanager
