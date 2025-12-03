@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from pkg.context import context
+from pkg.context import ctx_manager
 
 # --- Mock 依赖 ---
 mock_logger = MagicMock()
@@ -23,7 +23,7 @@ from pkg.context.ctx import (
 # --- Fixture ---
 @pytest.fixture(autouse=True)
 def clean_context():
-    context.clear()
+    ctx_manager.clear()
     mock_logger.reset_mock()
     yield
 
@@ -33,7 +33,7 @@ def clean_context():
 def test_basic_lifecycle():
     """测试正常的生命周期"""
     tid = "trace-123"
-    context.init(trace_id=tid)  # 正常传入
+    ctx_manager.init(trace_id=tid)  # 正常传入
 
     assert get_trace_id() == tid
 
@@ -48,11 +48,11 @@ def test_init_validation_error():
     """
     # 验证：传入 None 应引发 ValueError
     with pytest.raises(ValueError, match="trace_id is mandatory"):
-        context.init(trace_id=None)
+        ctx_manager.init(trace_id=None)
 
     # 验证：传入空字符串 应引发 ValueError
     with pytest.raises(ValueError, match="trace_id is mandatory"):
-        context.init(trace_id="")
+        ctx_manager.init(trace_id="")
 
 
 def test_get_without_init():
@@ -77,10 +77,10 @@ def test_set_without_init_fallback():
     try:
         # 3. 执行测试：直接 Set
         # 此时 get() 会失败 -> 进入 except -> 初始化 dict -> 打印日志
-        context.set("temp_key", "temp_value")
+        ctx_manager.set("temp_key", "temp_value")
 
         # 验证值是否存进去了
-        assert context.get("temp_key") == "temp_value"
+        assert ctx_manager.get("temp_key") == "temp_value"
 
         # 4. 验证日志是否被调用
         mock_logger.warning.assert_called_with("RequestContext used without initialization! Check Middleware.")
@@ -95,7 +95,7 @@ async def test_async_context_isolation():
     """测试并发隔离性"""
 
     async def request_handler(trace_id, user_id, delay):
-        context.init(trace_id=trace_id)  # 必须传入有效的 trace_id
+        ctx_manager.init(trace_id=trace_id)  # 必须传入有效的 trace_id
         set_user_id(user_id)
         await asyncio.sleep(delay)
         return get_trace_id(), get_user_id()

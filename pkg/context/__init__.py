@@ -6,7 +6,7 @@ from pkg.logger_tool import logger
 _request_ctx_var: ContextVar[dict[str, Any]] = ContextVar("request_ctx")
 
 
-class _RequestContext:
+class _RequestCtxManager:
     """
     请求上下文管理工具类
     """
@@ -67,4 +67,4 @@ class _RequestContext:
         _request_ctx_var.set({})
 
 
-context = _RequestContext
+ctx_manager = _RequestCtxManager
