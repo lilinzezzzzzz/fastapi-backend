@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from redis.asyncio import ConnectionPool, Redis
 
 from internal.config.setting import setting
-from pkg.cache_tool.client import new_cache_client
+from pkg.cache.client import new_cache_client
 
 RedisConnectPool = ConnectionPool.from_url(
     setting.redis_url,

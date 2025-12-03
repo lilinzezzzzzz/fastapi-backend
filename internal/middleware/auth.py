@@ -3,7 +3,7 @@ from starlette.datastructures import MutableHeaders
 
 from internal.core.auth_token import verify_token
 from pkg.signature_tool import signature_auth_helper
-from pkg.context_tool import set_user_id
+from pkg.context.ctx import set_user_id
 from pkg.logger_tool import logger
 from pkg.resp_tool import response_factory
 

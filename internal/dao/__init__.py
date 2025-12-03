@@ -4,14 +4,14 @@
 from sqlalchemy import Subquery
 from sqlalchemy.orm import InstrumentedAttribute
 
-from pkg.orm_tool.model_mixin import ModelMixin, MixinModelType
+from pkg.orm.model_mixin import ModelMixin, MixinModelType
 from internal.core.exception import AppException
 from pkg.logger_tool import logger
-from pkg.orm_tool.builder import (CountBuilder, QueryBuilder, UpdateBuilder, new_cls_querier,
-                                  new_cls_updater,
-                                  new_col_counter, new_counter,
-                                  new_ins_updater, new_sub_querier)
-from pkg.orm_tool.types import SessionProvider
+from pkg.orm.builder import (CountBuilder, QueryBuilder, UpdateBuilder, new_cls_querier,
+                             new_cls_updater,
+                             new_col_counter, new_counter,
+                             new_ins_updater, new_sub_querier)
+from pkg.orm.types import SessionProvider
 
 
 class BaseDao:

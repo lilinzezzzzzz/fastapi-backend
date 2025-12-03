@@ -9,7 +9,7 @@ from orjson import JSONDecodeError
 
 from internal.core.exception import AppException
 from pkg import create_uuid_token, orjson_dumps, orjson_loads, token_cache_key, token_list_cache_key
-from pkg.cache_tool.types import SessionProvider
+from pkg.cache.types import SessionProvider
 
 
 class CacheClient:

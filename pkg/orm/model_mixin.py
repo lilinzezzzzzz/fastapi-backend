@@ -1,13 +1,14 @@
 from typing import TypeVar
 
 from sqlalchemy import Column, BigInteger, DateTime
-from sqlalchemy.orm import InstrumentedAttribute
+from sqlalchemy.orm import InstrumentedAttribute, declarative_base
 
-from pkg.orm_tool import Base
 from pkg import get_utc_without_tzinfo
-from pkg.context_tool import get_user_id_context_var
+from pkg.context import ctx
 from pkg.snowflake_tool import generate_snowflake_id
-from pkg.orm_tool.types import SessionProvider
+from pkg.orm.types import SessionProvider
+
+Base = declarative_base()
 
 
 class ModelMixin(Base):
@@ -76,7 +77,7 @@ class ModelMixin(Base):
             setattr(self, self.updated_at_column_name(), cur_datetime)
 
         if self.has_updater_id_column():
-            user_id = get_user_id_context_var()
+            user_id = ctx.get_user_id()
             setattr(self, self.updater_id_column_name(), user_id)
 
         try:
@@ -99,7 +100,7 @@ class ModelMixin(Base):
         if "id" not in kwargs:
             ins.id = generate_snowflake_id()
         if ins.has_creator_id_column() and getattr(ins, ins.creator_id_column_name()) is not None:
-            user_id = get_user_id_context_var()
+            user_id = ctx.get_user_id()
             setattr(ins, ins.creator_id_column_name(), user_id)
         if ins.has_updater_id_column():
             setattr(ins, ins.updater_id_column_name(), None)

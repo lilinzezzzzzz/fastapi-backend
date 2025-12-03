@@ -14,7 +14,7 @@ from internal.models.user import User
 from internal.core.exception import AppException
 from pkg.anyio_task_manager import anyio_task_manager
 from pkg.logger_tool import logger
-from pkg.orm_tool.builder import new_cls_querier, new_cls_updater, new_counter
+from pkg.orm.builder import new_cls_querier, new_cls_updater, new_counter
 from pkg.resp_tool import response_factory
 from pkg.stream_tool import TimeoutControlRoute, stream_with_dual_control
 
