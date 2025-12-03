@@ -1,7 +1,8 @@
+import time
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator
 
-from sqlalchemy import event, text
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from internal.config.setting import setting
@@ -45,38 +46,60 @@ async def get_session(autoflush: bool = True) -> AsyncGenerator[AsyncSession, An
                     raise e
 
 
-def before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+def _get_formatted_sql(context, statement, parameters) -> str:
     """
-    通用 SQL 日志记录函数，支持 MySQL 和 PostgreSQL (asyncpg)
+    辅助函数：统一处理 SQL 格式化逻辑 (兼容 MySQL 和 PG)
     """
     try:
-        # 1. 优先尝试使用 SQLAlchemy 的 Compiler 生成带参数的 SQL
-        # 这种方式最准确，它能处理不同数据库的方言差异
+        # 1. 优先尝试使用 SQLAlchemy 的 Compiler
         if context and context.compiled:
-            # 使用 literal_binds=True 将参数直接渲染进 SQL 字符串中
-            # 注意：这只是用于日志展示，实际执行时依然是参数化的，没有注入风险
-            compiled_statement = context.compiled.statement.compile(
+            return context.compiled.statement.compile(
                 dialect=context.dialect,
                 compile_kwargs={"literal_binds": True}
             )
-            logger.info(f"Executing SQL: {compiled_statement}")
 
-        # 2. 如果是原生 SQL (text) 或者没有 compiled 上下文，回退到普通打印
-        else:
-            if parameters:
-                # 对于 PostgreSQL (asyncpg)，statement 是 "SELECT ... WHERE id = $1"
-                # parameters 是 (1, )
-                # 很难手动完美拼接到一起，所以建议将 SQL 和 参数分开打印
-                logger.info(f"Executing SQL: {statement} | Params: {parameters}")
-            else:
-                logger.info(f"Executing SQL: {statement}")
-
+        # 2. 回退处理：手动展示
+        if parameters:
+            return f"{statement} | Params: {parameters}"
+        return str(statement)
     except Exception as e:
-        # 防止日志打印出错导致业务逻辑中断
-        logger.error(f"Error while printing SQL: {e}")
-        # 兜底：至少打印原始语句
-        logger.info(f"Executing SQL (raw): {statement} | Params: {parameters}")
+        return f"SQL_FORMAT_ERROR: {e} | Raw: {statement}"
 
 
-# 监听 before_cursor_execute 事件，将事件处理函数绑定到 Engine 上
+def before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+    """
+    只做一件事：记录开始时间。
+    极轻量，不影响性能。
+    """
+    if context:
+        # 直接给 context 对象动态添加一个属性，这是 Python 的黑魔法，但在这里非常标准且好用
+        setattr(context, "_query_start_time", time.perf_counter())
+
+
+def after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+    """
+    处理日志逻辑：计算耗时 -> 判断条件 -> 格式化 SQL -> 打印
+    """
+    if not context or not hasattr(context, "_query_start_time"):
+        return
+
+    # 计算耗时
+    elapsed = time.perf_counter() - getattr(context, "_query_start_time")
+    # 定义判断逻辑
+    is_slow = elapsed > getattr(setting, "SLOW_SQL_THRESHOLD", 0.5)
+    is_debug = getattr(setting, "DEBUG", False)
+
+    # 场景 1: 慢查询 (无论生产还是开发环境，都记录为 Warning)
+    if is_slow:
+        sql_str = _get_formatted_sql(context, statement, parameters)
+        logger.warning(f"SLOW SQL ({elapsed:.4f}s): {sql_str}")
+
+    # 场景 2: 开发环境 (记录所有普通查询为 Info，排除掉刚才已经记过的慢查询)
+    elif is_debug:
+        sql_str = _get_formatted_sql(context, statement, parameters)
+        logger.info(f"SQL ({elapsed:.4f}s): {sql_str}")
+
+
+# 注册事件
 event.listen(engine.sync_engine, "before_cursor_execute", before_cursor_execute)
+event.listen(engine.sync_engine, "after_cursor_execute", after_cursor_execute)
