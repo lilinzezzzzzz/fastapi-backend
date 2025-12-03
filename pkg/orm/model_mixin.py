@@ -39,6 +39,9 @@ class ModelMixin:
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), default=None)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), default=None)
 
+    def __init__(self, **kwargs: Any):
+        super().__init__(**kwargs)
+
     # --- 2. 批量操作方法 ---
 
     @classmethod
@@ -123,7 +126,7 @@ class ModelMixin:
         cur_datetime = get_utc_without_tzinfo()
 
         # 预设初始化参数
-        init_kwargs = {
+        init_kwargs: dict[str, Any] = {
             "created_at": cur_datetime,
             "updated_at": cur_datetime
         }
@@ -152,11 +155,9 @@ class ModelMixin:
         # 注意：这里会调用 DeclarativeBase 默认的 __init__，它接受 **kwargs
         # 为了避免传入非数据库字段报错，我们可以在这里做一层过滤，或者信任 kwargs 准确
         # 如果需要严格过滤，可以启用下面的逻辑：
-        # valid_cols = cls.get_column_names()
-        # clean_kwargs = {k: v for k, v in init_kwargs.items() if k in valid_cols}
-        # return cls(**clean_kwargs)
-
-        return cls(**init_kwargs)
+        valid_cols = cls.get_column_names()
+        clean_kwargs = {k: v for k, v in init_kwargs.items() if k in valid_cols}
+        return cls(**clean_kwargs)
 
     def populate(self, **kwargs):
         for column_name, value in kwargs.items():
