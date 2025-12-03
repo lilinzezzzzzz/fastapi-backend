@@ -11,6 +11,7 @@ class SignatureAuthHelper:
 
     def __init__(
             self,
+            *,
             secret_key: str,
             hash_algorithm: str = "sha256",
             timestamp_tolerance: int = 300
@@ -100,4 +101,4 @@ class SignatureAuthHelper:
         return True
 
 
-signature_auth_helper = SignatureAuthHelper("hqsk-ai-platform-xafcv01")
+signature_auth_helper = SignatureAuthHelper(secret_key="hqsk-ai-platform-xafcv01")

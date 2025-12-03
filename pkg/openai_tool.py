@@ -2,6 +2,7 @@ import time
 from typing import Any, AsyncGenerator, NamedTuple
 
 import openai
+from async_lru import alru_cache
 from openai import NOT_GIVEN
 from openai.types.chat import ChatCompletion, ChatCompletionAssistantMessageParam, ChatCompletionDeveloperMessageParam, \
     ChatCompletionFunctionMessageParam, ChatCompletionMessageParam, \
@@ -151,3 +152,13 @@ class OpenAIClient:
             delta = chunk.choices[0].delta
             if hasattr(delta, "content") and delta.content:
                 yield delta.content
+
+@alru_cache(maxsize=128, ttl=60)
+def new_openai_client(
+        *,
+        base_url: str,
+        model: str,
+        timeout: int = 180,
+        api_key: str = "password"
+) -> OpenAIClient:
+    return OpenAIClient(base_url, model, timeout, api_key)

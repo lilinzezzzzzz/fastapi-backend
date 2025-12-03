@@ -3,6 +3,7 @@ from pathlib import Path
 
 import anyio
 import pandas as pd
+from async_lru import alru_cache
 
 
 class AnyioFile:
@@ -130,6 +131,7 @@ class AnyioFile:
                 return n
 
 
+@alru_cache(maxsize=128, ttl=60)
 def new_anyio_file(file_path: str | Path) -> AnyioFile:
     """
     创建一个新的 AnyioFile 对象。
