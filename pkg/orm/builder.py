@@ -6,6 +6,7 @@ from sqlalchemy import (Column, ColumnExpressionArgument, Delete, Function, Sele
 from sqlalchemy.orm import InstrumentedAttribute, aliased
 from sqlalchemy.sql.elements import ClauseElement, ColumnElement
 
+from pkg.context import ctx
 from pkg.orm.model_mixin import ModelMixin
 from pkg import get_utc_without_tzinfo, unique_list
 from pkg.logger_tool import logger
@@ -289,7 +290,7 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
 
         self._update_dict.setdefault(updated_at_column_name, current_time)
 
-        user_id = get_user_id_context_var()
+        user_id = ctx.get_user_id()
         if self._model_cls.has_updater_id_column():
             self._update_dict.setdefault(
                 self._model_cls.updater_id_column_name(),
