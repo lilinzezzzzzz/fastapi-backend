@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import TypeVar, Optional, Any, Sequence
 
-from sqlalchemy import BigInteger, DateTime, inspect
+from sqlalchemy import BigInteger, DateTime, inspect, insert
 from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
@@ -23,7 +23,6 @@ class Base(DeclarativeBase):
 class ModelMixin:
     """
     通用模型 Mixin
-    使用 inspect(cls) 替代直接访问 cls.__table__，解决了 IDE 无法识别 Mixin 中 table 属性的问题。
     """
     __abstract__ = True
 
@@ -34,13 +33,51 @@ class ModelMixin:
     creator_id: Mapped[int] = mapped_column(BigInteger)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False))
 
-    # 可空字段，使用 Python 原生类型提示 | None
+    # 可空字段
     updater_id: Mapped[int | None] = mapped_column(BigInteger, default=None)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), default=None)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), default=None)
 
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
+
+    # --- 新增：核心逻辑抽取 ---
+
+    @classmethod
+    def _prepare_create_data(cls, raw_data: dict[str, Any]) -> dict[str, Any]:
+        """
+        [核心逻辑] 准备创建数据：注入ID、Context、时间戳，并过滤非数据库字段
+        返回：用于 insert 或 实例化的纯字典
+        """
+        # 1. 复制数据，避免修改引用
+        data = raw_data.copy()
+
+        cur_datetime = get_utc_without_tzinfo()
+
+        # 2. 注入时间戳 (如果未传入)
+        data.setdefault("created_at", cur_datetime)
+        data.setdefault("updated_at", cur_datetime)
+
+        # 3. 注入 Snowflake ID (如果未传入)
+        if "id" not in data:
+            data["id"] = generate_snowflake_id()
+
+        # 4. 注入 creator_id (从 Context)
+        if cls.has_creator_id_column() and "creator_id" not in data:
+            user_id = ctx.get_user_id()
+            if user_id is not None:
+                data["creator_id"] = user_id
+
+        # 5. 处理 updater_id (新建时通常为空，或者根据业务需求设置)
+        if cls.has_updater_id_column() and "updater_id" not in data:
+            data["updater_id"] = None
+
+        # 6. 字段过滤：仅保留数据库存在的列
+        # 这一步对于 insert 语句尤为重要，因为 insert 遇到未知列会报错
+        valid_cols = set(cls.get_column_names())
+        clean_data = {k: v for k, v in data.items() if k in valid_cols}
+
+        return clean_data
 
     # --- 2. 批量操作方法 ---
 
@@ -50,17 +87,26 @@ class ModelMixin:
             items: list[dict[str, Any]],
             session_provider: SessionProvider
     ) -> None:
+        """
+        高性能批量插入 (SQLAlchemy Core Insert)
+        """
         if not items:
             return
 
-        # 统一使用 create 方法实例化，确保 ID 和 Context 逻辑生效
-        ins_list = [cls.create(**item) for item in items]
+        # 1. 批量预处理数据 (注入 ID, Context 等)
+        # 注意：这里不再实例化 ORM 对象，而是生成纯字典列表
+        db_values = [cls._prepare_create_data(item) for item in items]
+
         try:
             async with session_provider() as sess:
                 async with sess.begin():
-                    sess.add_all(ins_list)
+                    # 2. 使用 Core Insert 语句
+                    # 这比 session.add_all(instances) 快得多
+                    stmt = insert(cls).values(db_values)
+                    await sess.execute(stmt)
+
         except Exception as e:
-            raise RuntimeError(f"{cls.__name__} add_all_dict failed: {e}") from e
+            raise RuntimeError(f"{cls.__name__} add_all_dict (insert) failed: {e}") from e
 
     @classmethod
     async def add_all_ins(
@@ -68,6 +114,9 @@ class ModelMixin:
             ins_list: Sequence["ModelMixin"],
             session_provider: SessionProvider
     ) -> None:
+        """
+        基于实例的批量插入 (保持原样，因为输入已经是实例)
+        """
         if not ins_list:
             return
 
@@ -112,7 +161,6 @@ class ModelMixin:
             raise RuntimeError(f"{self.__class__.__name__} update error: {e}") from e
 
     async def soft_delete(self, session_provider: SessionProvider) -> None:
-        """软删除：需传入 session_provider"""
         await self.update(
             session_provider,
             **{self.deleted_at_column_name(): get_utc_without_tzinfo()}
@@ -122,41 +170,15 @@ class ModelMixin:
 
     @classmethod
     def create(cls, **kwargs) -> "ModelMixin":
-        """工厂方法：负责注入 ID、时间、Context 信息"""
-        cur_datetime = get_utc_without_tzinfo()
+        """
+        工厂方法：负责注入 ID、时间、Context 信息
+        现已重构为调用 _prepare_create_data 以保持逻辑统一
+        """
+        # 1. 调用统一的数据预处理逻辑
+        clean_kwargs = cls._prepare_create_data(kwargs)
 
-        # 预设初始化参数
-        init_kwargs: dict[str, Any] = {
-            "created_at": cur_datetime,
-            "updated_at": cur_datetime
-        }
-
-        # 注入 Snowflake ID
-        if "id" not in kwargs:
-            init_kwargs["id"] = generate_snowflake_id()
-
-        # 注入 creator_id
-        if cls.has_creator_id_column():
-            if "creator_id" in kwargs:
-                init_kwargs["creator_id"] = kwargs.pop("creator_id")
-            else:
-                user_id = ctx.get_user_id()
-                if user_id is not None:
-                    init_kwargs["creator_id"] = user_id
-
-        # 注入 updater_id
-        if cls.has_updater_id_column():
-            init_kwargs["updater_id"] = None
-
-        # 合并用户参数 (覆盖默认值)
-        init_kwargs.update(kwargs)
-
-        # 实例化对象
-        # 注意：这里会调用 DeclarativeBase 默认的 __init__，它接受 **kwargs
-        # 为了避免传入非数据库字段报错，我们可以在这里做一层过滤，或者信任 kwargs 准确
-        # 如果需要严格过滤，可以启用下面的逻辑：
-        valid_cols = cls.get_column_names()
-        clean_kwargs = {k: v for k, v in init_kwargs.items() if k in valid_cols}
+        # 2. 实例化对象
+        # 因为 _prepare_create_data 已经过滤了字段，这里直接解包非常安全
         return cls(**clean_kwargs)
 
     def populate(self, **kwargs):
@@ -167,7 +189,6 @@ class ModelMixin:
 
     def to_dict(self, *, exclude_column: list[str] = None) -> dict[str, Any]:
         d = {}
-        # get_column_names 内部现在使用了 inspect，所以这里也是安全的
         for column_name in self.get_column_names():
             if exclude_column and column_name in exclude_column:
                 continue
@@ -187,7 +208,7 @@ class ModelMixin:
                 return field, False
         return "", True
 
-    # --- 5. 辅助 / 反射方法 (使用 inspect 替代 __table__) ---
+    # --- 5. 辅助 / 反射方法 ---
 
     @staticmethod
     def updater_id_column_name() -> str:
@@ -221,17 +242,9 @@ class ModelMixin:
     def has_updater_id_column(cls) -> bool:
         return cls.has_column(cls.updater_id_column_name())
 
-    # --- 重点修改区域：使用 inspect ---
-
     @classmethod
     def has_column(cls, column_name: str) -> bool:
-        """
-        判断是否为真实数据库字段
-        使用 inspect(cls).columns 替代 cls.__table__.columns
-        """
         mapper = inspect(cls)
-        # inspect(cls) 在运行时对映射类调用时返回 Mapper 对象
-        # Mapper.columns 是一个 ColumnCollection
         return column_name in mapper.columns
 
     @classmethod
