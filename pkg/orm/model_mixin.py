@@ -1,17 +1,19 @@
 from typing import TypeVar
 
 from sqlalchemy import Column, BigInteger, DateTime
-from sqlalchemy.orm import InstrumentedAttribute, declarative_base
+from sqlalchemy.orm import InstrumentedAttribute, DeclarativeBase
 
 from pkg import get_utc_without_tzinfo
 from pkg.context import ctx
-from pkg.snowflake_tool import generate_snowflake_id
 from pkg.orm.types import SessionProvider
+from pkg.snowflake_tool import generate_snowflake_id
 
-Base = declarative_base()
+
+class Base(DeclarativeBase):
+    pass
 
 
-class ModelMixin(Base):
+class ModelMixin(DeclarativeBase):
     __abstract__ = True
 
     id = Column(BigInteger, primary_key=True)
