@@ -1,13 +1,10 @@
 from pathlib import Path
 
-from async_lru import alru_cache
-
 from internal.config import BaseConfig, DevelopmentConfig, LocalConfig, ProductionConfig, TestingConfig
 from pkg import BASE_DIR, SYS_ENV, SYS_NAMESPACE
 from pkg.logger_tool import logger
 
 
-@alru_cache
 def init_setting() -> BaseConfig:
     logger.info("Init setting...")
     logger.info(f"Current environment: {SYS_ENV}.")

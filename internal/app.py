@@ -93,21 +93,10 @@ async def lifespan(_app: FastAPI):
     # 初始化 APScheduler
     init_apscheduler()
 
-    is_scheduler_master = False
-    if SYS_NAMESPACE in ["dev", "test", "canary", "prod"]:
-        ...
-        # is_scheduler_master = await start_scheduler(cur_pid)
-    else:
-        # dump_routes_and_middleware(app)
-        ...
-
     logger.info("Check completed, Application will start.")
 
     yield
 
-    if is_scheduler_master:
-        ...
-        # await shutdown_scheduler(cur_pid)
     # 关闭时的清理逻辑
     await close_db()
     await close_redis()
