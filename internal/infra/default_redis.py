@@ -4,14 +4,14 @@ from contextlib import asynccontextmanager
 from redis.asyncio import ConnectionPool, Redis
 
 from internal.config.setting import setting
-from pkg.cache.client import new_cache_client
+from pkg.cache.client import new_cache_client, CacheClient
 from pkg.logger_tool import logger
 
 # 1. 定义全局变量，初始为 None
 _redis_pool: ConnectionPool | None = None
 _redis_client: Redis | None = None
 # cache_client 也改为全局变量，在 init 中初始化
-_cache_client = None
+_cache_client: CacheClient | None = None
 
 
 def init_redis() -> None:
@@ -39,7 +39,7 @@ def init_redis() -> None:
 
     # 初始化缓存客户端封装 (假设 new_cache_client 接受 session_provider)
     # 注意：我们传入 get_redis 函数本身，它是一个稳定的引用
-    _cache_client = new_cache_client(session_provider=get_redis)
+    _cache_client: CacheClient = new_cache_client(session_provider=get_redis)
 
     logger.info("Redis initialized successfully.")
 
@@ -49,7 +49,7 @@ async def close_redis() -> None:
     global _redis_client, _redis_pool, _cache_client
 
     if _redis_client:
-        await _redis_client.aclose()  # 异步关闭客户端
+        await _redis_client.close()  # 异步关闭客户端
         logger.info("Redis connection closed.")
 
     # 清理引用
@@ -75,7 +75,7 @@ async def get_redis() -> AsyncGenerator[Redis, None]:
         raise e
 
 
-def get_cache_client():
+def get_cache_client() -> CacheClient:
     """
     获取全局缓存客户端实例的 Helper 函数
     替代直接 import cache_client 变量，防止 import 时为 None 的问题

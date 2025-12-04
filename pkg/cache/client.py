@@ -276,5 +276,5 @@ class CacheClient:
         return None
 
 
-def new_cache_client(*, session_provider: SessionProvider):
+def new_cache_client(*, session_provider: SessionProvider) -> CacheClient:
     return CacheClient(session_provider=session_provider)
