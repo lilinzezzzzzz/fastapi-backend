@@ -1,4 +1,3 @@
-# 创建全局的连接池实例
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -6,23 +5,81 @@ from redis.asyncio import ConnectionPool, Redis
 
 from internal.config.setting import setting
 from pkg.cache.client import new_cache_client
+from pkg.logger_tool import logger
 
-RedisConnectPool = ConnectionPool.from_url(
-    setting.redis_url,
-    encoding="utf-8",
-    decode_responses=True,
-    max_connections=20
-)
+# 1. 定义全局变量，初始为 None
+_redis_pool: ConnectionPool | None = None
+_redis_client: Redis | None = None
+# cache_client 也改为全局变量，在 init 中初始化
+_cache_client = None
 
-_redis = Redis(connection_pool=RedisConnectPool)
+
+def init_redis() -> None:
+    """
+    初始化 Redis 连接池。
+    应在 FastAPI lifespan 或 Celery worker_process_init 中调用。
+    """
+    global _redis_pool, _redis_client, _cache_client
+
+    if _redis_client is not None:
+        return  # 幂等：防止重复初始化
+
+    logger.info("Initializing Redis connection...")
+
+    # 创建连接池
+    _redis_pool = ConnectionPool.from_url(
+        setting.redis_url,
+        encoding="utf-8",
+        decode_responses=True,
+        max_connections=getattr(setting, "REDIS_MAX_CONNECTIONS", 20)
+    )
+
+    # 创建客户端实例
+    _redis_client = Redis(connection_pool=_redis_pool)
+
+    # 初始化缓存客户端封装 (假设 new_cache_client 接受 session_provider)
+    # 注意：我们传入 get_redis 函数本身，它是一个稳定的引用
+    _cache_client = new_cache_client(session_provider=get_redis)
+
+    logger.info("Redis initialized successfully.")
+
+
+async def close_redis() -> None:
+    """关闭 Redis 连接"""
+    global _redis_client, _redis_pool, _cache_client
+
+    if _redis_client:
+        await _redis_client.aclose()  # 异步关闭客户端
+        logger.info("Redis connection closed.")
+
+    # 清理引用
+    _redis_client = None
+    _redis_pool = None
+    _cache_client = None
 
 
 @asynccontextmanager
 async def get_redis() -> AsyncGenerator[Redis, None]:
+    """
+    Redis Session 获取上下文管理器
+    """
+    if _redis_client is None:
+        raise RuntimeError("Redis is not initialized. Call init_redis() first.")
+
     try:
-        yield _redis
+        yield _redis_client
     except Exception as e:
-        raise Exception(f"Redis operation failed, err={e}")
+        # 这里通常不需要做太多回滚操作，Redis 操作多为原子的或即时的
+        # 但可以记录日志
+        logger.error(f"Redis operation failed: {e}")
+        raise e
 
 
-cache_client = new_cache_client(session_provider=get_redis)
+def get_cache_client():
+    """
+    获取全局缓存客户端实例的 Helper 函数
+    替代直接 import cache_client 变量，防止 import 时为 None 的问题
+    """
+    if _cache_client is None:
+        raise RuntimeError("Redis/Cache is not initialized. Call init_redis() first.")
+    return _cache_client
