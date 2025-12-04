@@ -436,10 +436,10 @@ class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
 
     def paginate(self, *, page: int, limit: int) -> "QueryBuilder[T]":
 
-        if isinstance(page, int) or page < 1:
+        if not isinstance(page, int) or page < 1:
             raise ValueError("page must be greater than or equal to 1")
 
-        if isinstance(limit, int) or limit < 1:
+        if not isinstance(limit, int) or limit < 1:
             raise ValueError("limit must be greater than or equal to 1")
 
         self._stmt = self._stmt.offset((page - 1) * limit).limit(limit)
