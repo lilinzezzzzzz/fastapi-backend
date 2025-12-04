@@ -124,7 +124,7 @@ class ModelMixin(Base):
         try:
             async with session_provider() as sess:
                 async with sess.begin():
-                    await sess.execute(insert(cls).values(db_values).return_defaults())
+                    await sess.execute(insert(cls).values(db_values))
         except Exception as e:
             raise RuntimeError(f"{cls.__name__} insert_rows failed: {e}") from e
 
@@ -142,7 +142,7 @@ class ModelMixin(Base):
         try:
             async with session_provider() as sess:
                 async with sess.begin():
-                    await sess.execute(insert(cls).values(db_values).return_defaults())
+                    await sess.execute(insert(cls).values(db_values))
         except Exception as e:
             raise RuntimeError(f"{cls.__name__} insert_instances failed: {e}") from e
 
