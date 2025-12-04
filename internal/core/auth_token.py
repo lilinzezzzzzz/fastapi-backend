@@ -1,4 +1,4 @@
-from internal.infra.default_redis import cache_client
+from internal.infra.redis import cache_client
 from pkg import token_list_cache_key
 from pkg.logger_tool import logger
 
