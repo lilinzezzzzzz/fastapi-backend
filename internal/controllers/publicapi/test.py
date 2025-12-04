@@ -129,7 +129,7 @@ async def test_dao():
 
     try:
         # 1. 验证基础查询
-        created_user: User = await new_cls_querier(
+        created_user: User = await user_dao.create(
             User, session_provider=get_session).eq_(User.id, test_user.id).first()
         assert created_user.id == test_user.id
         logger.info(f"test created success")

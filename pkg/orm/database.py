@@ -280,6 +280,7 @@ class ModelMixin(Base):
             for col in self.get_column_names()
             if not exclude_column or col not in exclude_column
         }
+
     # ==========================================================================
     # 4. 反射与元数据工具
     # ==========================================================================
@@ -508,12 +509,13 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
 # ==============================================================================
 
 class BaseDao[T: ModelMixin]:
-    _model_cls: type[T] = None
+    _model_cls: type[T]
 
-    def __init__(self, *, session_provider: SessionProvider):
+    def __init__(self, *, session_provider: SessionProvider, model_cls: type[T]):
         if not self._model_cls:
             raise ValueError(f"DAO {self.__class__.__name__} must define _model_cls")
         self._session_provider = session_provider
+        self._model_cls = model_cls
 
     @property
     def model_cls(self) -> type[T]:
