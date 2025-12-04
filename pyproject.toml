@@ -56,6 +56,7 @@ dependencies = [
     "uvloop>=0.22.1; sys_platform != 'win32'",
     "httptools",
     "async-lru>=2.0.5",
+    "celery-redbeat>=2.3.3",
 ]
 
 # 分组依赖 —— 开发环境才需要
