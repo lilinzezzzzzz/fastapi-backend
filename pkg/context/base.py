@@ -10,26 +10,17 @@ class _RequestCtxManager:
     """
     请求上下文管理工具类
     """
-    KEY_TRACE_ID = "trace_id"
 
     @classmethod
-    def init(cls, trace_id: str):
+    def init(cls) -> dict[str, Any]:
         """
         初始化上下文
         :return: 最终使用的 trace_id
         """
         # 优化：如果没传 trace_id，自动生成一个，保证系统健壮性
-        if not trace_id:
-            raise ValueError("trace_id is mandatory and cannot be empty or None")
-
-        if not isinstance(trace_id, str):
-            raise ValueError("trace_id must be a string")
-
-        _request_ctx_var.set(
-            {
-                cls.KEY_TRACE_ID: trace_id,
-            }
-        )
+        ctx = {}
+        _request_ctx_var.set(ctx)
+        return ctx
 
     @staticmethod
     def get(key: str, default: Any = None) -> Any:
@@ -41,15 +32,14 @@ class _RequestCtxManager:
 
         return ctx.get(key, default)
 
-    @staticmethod
-    def set(key: str, value: Any):
+    @classmethod
+    def set(cls, key: str, value: Any):
         try:
             ctx = _request_ctx_var.get()
         except LookupError:
             # 严重错误：说明中间件没有运行！
             # 这种情况下，为了防止报错，可以初始化一个临时的（虽然这不应该发生）
-            ctx = {}
-            _request_ctx_var.set(ctx)
+            ctx = cls.init()
             logger.warning("RequestContext used without initialization! Check Middleware.")
 
         ctx[key] = value
