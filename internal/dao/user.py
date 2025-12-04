@@ -1,4 +1,4 @@
-from internal.dao import BaseDao
+from pkg.orm.dao import BaseDao
 from internal.infra.database import get_session
 from internal.models.user import User
 
