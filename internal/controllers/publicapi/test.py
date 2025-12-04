@@ -9,16 +9,16 @@ from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
 from internal.dao.user import user_dao
-from internal.infra.default_db_session import get_session
+from internal.infra.database import get_session
 from internal.models.user import User
 from internal.core.exception import AppException
 from pkg.anyio_task_manager import anyio_task_manager
 from pkg.logger_tool import logger
 from pkg.orm.builder import new_cls_querier, new_cls_updater, new_counter
 from pkg.resp_tool import response_factory
-from pkg.stream_tool import TimeoutControlRoute, stream_with_dual_control
+from pkg.stream_tool import stream_with_chunk_control
 
-router = APIRouter(prefix="/test", tags=["public v1 test"], route_class=TimeoutControlRoute)
+router = APIRouter(prefix="/test", tags=["public v1 test"])
 
 
 @router.get("/test_raise_exception", summary="测试异常")
@@ -291,11 +291,10 @@ async def fake_stream_generator():
 
 @router.get("/chat/sse-stream/timeout", summary= "测试SSE超时控制")
 async def chat_endpoint(request: Request):
-    wrapped_generator = stream_with_dual_control(
+    wrapped_generator = stream_with_chunk_control(
         request,
         generator=fake_stream_generator(),
         chunk_timeout=2.0,
-        total_timeout=10.0,
         is_sse=True
     )
     return StreamingResponse(wrapped_generator, media_type="text/event-stream")
