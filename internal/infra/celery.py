@@ -1,6 +1,8 @@
 import asyncio
 
 from celery import Celery
+from celery.schedules import crontab
+
 from internal.config.setting import setting
 from internal.infra.database import init_db, close_db
 from internal.infra.redis import init_redis, close_redis
@@ -16,6 +18,32 @@ CELERY_INCLUDE_MODULES = [
 CELERY_TASK_ROUTES = {
     "internal.aps_tasks.*": {"queue": "cron_queue"},
     "internal.business.video.transcode": {"queue": "video_queue", "priority": 10},
+}
+
+# =========================================================
+# 定义静态定时任务表
+# =========================================================
+STATIC_BEAT_SCHEDULE = {
+    # 案例 1：Cron 风格 - 每隔 15 分钟执行一次
+    "task_sum_every_15_min": {
+        "task": "math.number_sum",  # 必须与 @task(name=...) 中的名字完全一致
+        "schedule": crontab(minute="*/15"),
+        "args": (10, 20),  # 位置参数 (x, y)
+    },
+
+    # 案例 2：Cron 风格 - 每天早上 8:30 执行
+    "task_daily_report_morning": {
+        "task": "math.number_sum",
+        "schedule": crontab(hour=8, minute=30),
+        "kwargs": {"x": 100, "y": 200},  # 关键字参数
+    },
+
+    # 案例 3：Interval 风格 - 每 30 秒执行一次
+    "task_heartbeat_30s": {
+        "task": "math.number_sum",
+        "schedule": 30.0,  # 直接写数字，单位为秒
+        "args": (1, 1),
+    }
 }
 
 
@@ -73,8 +101,7 @@ celery_client = CeleryClient(
     task_routes=CELERY_TASK_ROUTES,
     task_default_queue="default",
 
-    timezone="Asia/Shanghai",
-    redbeat_redis_url=setting.redis_url,
+    timezone="Asia/Shanghai"
 )
 
 celery_client.register_worker_hooks(
@@ -112,6 +139,6 @@ def ping_celery():
 启动 Worker (负责真正执行任务):
 celery -A internal.infra.celery.celery_app worker -l info
 
-启动 Beat (负责通过 RedBeat 读取 Redis 配置并派发任务):
-celery -A internal.infra.celery.celery_app beat -l info -S redbeat.RedBeatScheduler
+启动 Beat (负责按时间派发任务):
+celery -A internal.infra.celery.celery_app beat -l info
 """

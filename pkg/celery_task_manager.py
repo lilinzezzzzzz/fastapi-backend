@@ -36,6 +36,7 @@ class CeleryClient:
             task_default_queue: str = "default",
             timezone: str = "UTC",
             enable_utc: bool = True,
+            beat_schedule: dict[str, Any] | None = None,
             redbeat_redis_url: str | None = None,  # 新增：用于动态定时任务
             **extra_conf: Any,
     ) -> None:
@@ -48,12 +49,13 @@ class CeleryClient:
             "enable_utc": enable_utc,
             "task_default_queue": task_default_queue,
             "task_routes": task_routes or {},
+            "beat_schedule": beat_schedule or {},
             "task_serializer": "json",
             "accept_content": ["json"],
             "result_serializer": "json",
             "worker_hijack_root_logger": False,
             "broker_connection_retry_on_startup": True,
-            "result_extended": True,
+            "result_extended": True
         }
 
         # --- 动态定时任务配置 (RedBeat) ---
@@ -63,9 +65,6 @@ class CeleryClient:
             else:
                 conf["redbeat_redis_url"] = redbeat_redis_url
                 conf["redbeat_key_prefix"] = f"{app_name}:redbeat"
-                # 指定 Scheduler 为 RedBeat
-                # 注意：启动 beat 时需要指定: celery -A ... beat -S redbeat.RedBeatScheduler
-                # 这里仅做配置，实际生效取决于 Beat 进程的启动方式
 
         conf.update(extra_conf or {})
         self.app.conf.update(conf)
