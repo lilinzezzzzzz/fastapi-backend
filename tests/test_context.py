@@ -4,8 +4,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import pkg.context.manager
-from pkg.context.manager import ctx_manager
+import pkg.context.base
+from pkg.context.base import ctx_manager
 
 # --- Mock 依赖 ---
 mock_logger = MagicMock()
