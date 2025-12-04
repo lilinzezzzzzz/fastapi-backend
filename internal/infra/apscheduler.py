@@ -10,9 +10,9 @@ def init_apscheduler():
     logger.info("Initializing APScheduler...")
     if _apscheduler_manager is not None:
         logger.warning("APScheduler has already been initialized.")
-        return
+    else:
+        _apscheduler_manager: ApsSchedulerManager = ApsSchedulerManager(timezone="UTC", max_instances=50)
 
-    _apscheduler_manager: ApsSchedulerManager = ApsSchedulerManager(timezone="UTC", max_instances=50)
     _apscheduler_manager.register_cron(
         number_sum,
         cron_kwargs={"minute": "*/15", "second": 0}
