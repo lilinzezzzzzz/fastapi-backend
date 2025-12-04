@@ -133,8 +133,8 @@ class CeleryClient:
             task_name: str,
             schedule_type: str,  # 'cron' or 'interval'
             schedule_value: dict | int,
-            args: tuple = (),
-            kwargs: dict = None,
+            args_tuple: tuple = (),
+            kwargs_dict: dict = None,
             name: str = None
     ):
         """
@@ -174,8 +174,8 @@ class CeleryClient:
                     name=name,
                     task=task_name,
                     schedule=check_schedule,
-                    args=args,
-                    kwargs=kwargs,
+                    args=args_tuple,
+                    kwargs=kwargs_dict,
                     app=self.app
                 )
                 entry.save()
@@ -192,8 +192,8 @@ class CeleryClient:
             self.app.conf.beat_schedule[name] = {
                 "task": task_name,
                 "schedule": check_schedule,
-                "args": args,
-                "kwargs": kwargs
+                "args": args_tuple,
+                "kwargs": kwargs_dict
             }
             return name
 
