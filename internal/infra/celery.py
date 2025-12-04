@@ -6,7 +6,7 @@ from celery.schedules import crontab
 from internal.config.setting import setting
 from internal.infra.database import init_db, close_db
 from internal.infra.redis import init_redis, close_redis
-from pkg.celery_task_manager import CeleryClient
+from pkg.celery_task import CeleryClient
 from pkg.logger_tool import logger
 
 # 1. 定义模块
