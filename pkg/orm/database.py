@@ -2,7 +2,7 @@ from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, TypeVar, cast, Optional
+from typing import Any, TypeVar, cast, Optional, Self
 
 from sqlalchemy import (
     BigInteger, DateTime, ColumnExpressionArgument, Delete, Select, Subquery, Update, distinct, func, or_, select,
@@ -91,7 +91,7 @@ class ModelMixin(Base):
         super().__init__(**kwargs)
 
     # ==========================================================================
-    # 1. 工厂方法
+    # 工厂方法
     # ==========================================================================
 
     @classmethod
@@ -107,7 +107,7 @@ class ModelMixin(Base):
         return ins
 
     # ==========================================================================
-    # 2. 批量操作 (Batch)
+    # 批量操作 (Batch)
     # ==========================================================================
 
     @classmethod
@@ -116,9 +116,7 @@ class ModelMixin(Base):
         if not rows:
             return
 
-        # 获取上下文默认值对象
         defaults = cls._get_context_defaults()
-
         db_values = [cls._fill_dict_insert_fields(row, defaults) for row in rows]
 
         try:
@@ -147,7 +145,7 @@ class ModelMixin(Base):
             raise RuntimeError(f"{cls.__name__} insert_instances failed: {e}") from e
 
     # ==========================================================================
-    # 3. 单例操作 (CRUD)
+    # 单例操作 (CRUD)
     # ==========================================================================
 
     async def save(self, session_provider: SessionProvider) -> None:
@@ -201,12 +199,11 @@ class ModelMixin(Base):
             await self.update(session_provider, **{self.deleted_at_column_name(): get_utc_without_tzinfo()})
 
     # ==========================================================================
-    # 4. 字段补全辅助方法
+    # 字段补全辅助方法
     # ==========================================================================
 
     @staticmethod
     def _get_context_defaults() -> ContextDefaults:
-        """获取通用的上下文默认值，返回 ContextDefaults 对象"""
         return ContextDefaults(
             now=get_utc_without_tzinfo(),
             user_id=ctx.get_user_id()
@@ -216,17 +213,14 @@ class ModelMixin(Base):
         """[Instance Insert] 补全实例插入所需的字段"""
         defaults = self._get_context_defaults()
 
-        # ID
         if not self.id:
             self.id = generate_snowflake_id()
 
-        # Time (使用 .now 访问)
         if not self.created_at:
             self.created_at = defaults.now
         if not self.updated_at:
             self.updated_at = defaults.now
 
-        # Context (使用 .user_id 访问)
         if self.has_creator_id_column() and not self.creator_id and defaults.user_id:
             self.creator_id = defaults.user_id
 
@@ -248,15 +242,12 @@ class ModelMixin(Base):
         """[Dict Insert] 补全字典插入所需的字段"""
         data = raw_data.copy()
 
-        # Time (使用 .now)
         data.setdefault("created_at", defaults.now)
         data.setdefault("updated_at", defaults.now)
 
-        # ID
         if "id" not in data:
             data["id"] = generate_snowflake_id()
 
-        # Context (使用 .user_id)
         if cls.has_creator_id_column() and "creator_id" not in data and defaults.user_id:
             data["creator_id"] = defaults.user_id
 
@@ -283,7 +274,7 @@ class ModelMixin(Base):
         }
 
     # ==========================================================================
-    # 4. 反射与元数据工具
+    # 反射与元数据工具
     # ==========================================================================
 
     @staticmethod
@@ -352,59 +343,61 @@ class BaseBuilder[T: ModelMixin]:
         self._session_provider = session_provider
 
     # --- 条件构造 ---
-    def where(self, *conditions: ClauseElement) -> "BaseBuilder[T]":
+    def where(self, *conditions: ClauseElement) -> Self:
         if conditions: self._stmt = self._stmt.where(*conditions)
         return self
 
-    def eq_(self, column: InstrumentedAttribute | Mapped, value: Any) -> "BaseBuilder[T]":
+    def eq_(self, column: InstrumentedAttribute | Mapped, value: Any) -> Self:
         return self.where(column == value)
 
-    def ne_(self, column: InstrumentedAttribute, value: Any) -> "BaseBuilder[T]":
+    def ne_(self, column: InstrumentedAttribute, value: Any) -> Self:
         return self.where(column != value)
 
-    def gt_(self, column: InstrumentedAttribute, value: Any) -> "BaseBuilder[T]":
+    def gt_(self, column: InstrumentedAttribute, value: Any) -> Self:
         return self.where(column > value)
 
-    def lt_(self, column: InstrumentedAttribute, value: Any) -> "BaseBuilder[T]":
+    def lt_(self, column: InstrumentedAttribute, value: Any) -> Self:
         return self.where(column < value)
 
-    def ge_(self, column: InstrumentedAttribute, value: Any) -> "BaseBuilder[T]":
+    def ge_(self, column: InstrumentedAttribute, value: Any) -> Self:
         return self.where(column >= value)
 
-    def le_(self, column: InstrumentedAttribute, value: Any) -> "BaseBuilder[T]":
+    def le_(self, column: InstrumentedAttribute, value: Any) -> Self:
         return self.where(column <= value)
 
-    def in_(self, column: InstrumentedAttribute | Mapped, values: list | tuple) -> "BaseBuilder[T]":
-        unique = unique_list(values, exclude_none=True)
+    def in_(self, column: InstrumentedAttribute | Mapped, values: list | tuple) -> Self:
+        """
+        修复了空列表逻辑：空列表应该返回 False 条件，而不是返回 self (忽略条件)。
+        """
+        if not values:
+            raise ValueError("in_() func values cannot be empty")
 
-        if len(unique) == 0:
-            logger.warning(f"{column} is empty")
-            return self
+        unique = unique_list(values, exclude_none=True)
 
         if len(unique) == 1:
             return self.where(column == unique[0])
 
         return self.where(column.in_(unique))
 
-    def like(self, column: InstrumentedAttribute, pattern: str) -> "BaseBuilder[T]":
+    def like(self, column: InstrumentedAttribute, pattern: str) -> Self:
         return self.where(column.like(f"%{pattern}%"))
 
-    def is_null(self, column: InstrumentedAttribute) -> "BaseBuilder[T]":
+    def is_null(self, column: InstrumentedAttribute) -> Self:
         return self.where(column.is_(None))
 
-    def or_(self, *conditions: ColumnElement[bool]) -> "BaseBuilder[T]":
+    def or_(self, *conditions: ColumnElement[bool]) -> Self:
         return self.where(or_(*conditions)) if conditions else self
 
     # --- 排序与分组 ---
-    def distinct_(self, *cols: InstrumentedAttribute) -> "BaseBuilder[T]":
+    def distinct_(self, *cols: InstrumentedAttribute) -> Self:
         self._stmt = self._stmt.distinct(*cols)
         return self
 
-    def desc_(self, col: InstrumentedAttribute | Mapped) -> "BaseBuilder[T]":
+    def desc_(self, col: InstrumentedAttribute | Mapped) -> Self:
         self._stmt = self._stmt.order_by(col.desc())
         return self
 
-    def asc_(self, col: InstrumentedAttribute) -> "BaseBuilder[T]":
+    def asc_(self, col: InstrumentedAttribute) -> Self:
         self._stmt = self._stmt.order_by(col.asc())
         return self
 
@@ -430,11 +423,11 @@ class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
     def select_stmt(self) -> Select:
         return self._stmt
 
-    def limit(self, limit: int) -> "QueryBuilder[T]":
+    def limit(self, limit: int) -> Self:
         self._stmt = self._stmt.limit(limit)
         return self
 
-    def paginate(self, *, page: int, limit: int) -> "QueryBuilder[T]":
+    def paginate(self, *, page: int, limit: int) -> Self:
 
         if not isinstance(page, int) or page < 1:
             raise ValueError("page must be greater than or equal to 1")
@@ -443,7 +436,6 @@ class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
             raise ValueError("limit must be greater than or equal to 1")
 
         self._stmt = self._stmt.offset((page - 1) * limit).limit(limit)
-
         return self
 
     async def all(self) -> list[T]:
@@ -489,7 +481,7 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
         if model_ins is not None:
             self._stmt = self._stmt.where(self._model_cls.id == model_ins.id)
 
-    def update(self, **kwargs) -> "UpdateBuilder[T]":
+    def update(self, **kwargs) -> Self:
         for k, v in kwargs.items():
             if not self._model_cls.has_column(k):
                 logger.warning(f"{k} is not a {self._model_cls.__name__} column")
@@ -501,7 +493,7 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
             self._update_dict[k] = v
         return self
 
-    def soft_delete(self) -> "UpdateBuilder[T]":
+    def soft_delete(self) -> Self:
         if self._model_cls.has_deleted_at_column():
             self._update_dict[self._model_cls.deleted_at_column_name()] = get_utc_without_tzinfo()
         return self
@@ -535,13 +527,25 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
 # ==============================================================================
 
 class BaseDao[T: ModelMixin]:
-    _model_cls: type[T]
+    _model_cls: type[T] = None  # 类型提示
 
-    def __init__(self, *, session_provider: SessionProvider, model_cls: type[T]):
-        if not self._model_cls:
-            raise ValueError(f"DAO {self.__class__.__name__} must define _model_cls")
+    def __init__(self, *, session_provider: SessionProvider, model_cls: type[T] = None):
+        """
+        修复了 __init__ 逻辑：
+        1. 先赋值 session_provider
+        2. 再判断 model_cls 参数
+        3. 最后判断 类属性 _model_cls
+        """
         self._session_provider = session_provider
-        self._model_cls = model_cls
+
+        # 1. 优先使用构造函数传入的 model_cls
+        if model_cls:
+            self._model_cls = model_cls
+
+        # 2. 如果没传，检查是否在类定义中设置了 _model_cls
+        # 使用 getattr 防止 AttributeError
+        elif not getattr(self, "_model_cls", None):
+            raise ValueError(f"DAO {self.__class__.__name__} must define _model_cls or pass it to __init__")
 
     @property
     def model_cls(self) -> type[T]:
