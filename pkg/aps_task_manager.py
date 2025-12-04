@@ -1,9 +1,8 @@
-# pkg/aps_task_manager.py
-
 from collections import deque
 from collections.abc import Callable
 from typing import Any
 
+from apscheduler.job import Job
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
@@ -13,205 +12,216 @@ from pkg.logger_tool import logger
 
 
 class ApsSchedulerManager:
-    """一个简单稳妥的 AsyncIO APScheduler 封装。
+    """
+    AsyncIO APScheduler 封装管理器。
 
     特性：
-    - 统一 start()/shutdown()，可重复调用且幂等
-    - 新增 register_* 系列：先登记、后启动；也支持已启动后即时添加
-    - 支持按任务默认：max_instances / jitter / coalesce / misfire_grace_time
-    - 逐个出队灌入 pending 任务，避免“部分成功”后的重复添加
-    - 允许按需暴露底层 scheduler
-
-    术语说明：
-    - jitter（秒）：每次触发点随机偏移 ±jitter 秒，打散集中触发
-    - coalesce：当调度被阻塞导致错过多次触发时，是否合并为一次执行
-    - misfire_grace_time（秒）：错过触发点后，在这个宽限期内仍允许立即补跑
+    1. 延迟启动：支持在 start() 之前注册任务，启动时自动加载。
+    2. 全局配置：统一管理 jitter, max_instances 等默认参数。
+    3. 简便封装：提供 Cron/Interval/Date 的快捷注册方法。
     """
 
     def __init__(
-        self,
-        *,
-        timezone: str = "UTC",
-        job_defaults: dict[str, Any] | None = None,
-        max_instances: int = 50,
-        # 新增：类级默认（可被单个 job 覆盖）
-        default_jitter: int | None = 7,
-        default_coalesce: bool | None = True,
-        default_misfire_grace_time: int | None = 60
+            self,
+            *,
+            timezone: str = "UTC",
+            max_instances: int = 50,
+            default_jitter: int | None = 5,
+            default_coalesce: bool = True,
+            default_misfire_grace_time: int = 60,
+            extra_config: dict[str, Any] | None = None,
     ) -> None:
-        # 组合调度器层面的 job_defaults（只设置未显式传入的项）
-        base_job_defaults = dict(job_defaults or {})
-        if "coalesce" not in base_job_defaults and default_coalesce is not None:
-            base_job_defaults["coalesce"] = default_coalesce
-        if "misfire_grace_time" not in base_job_defaults and default_misfire_grace_time is not None:
-            base_job_defaults["misfire_grace_time"] = default_misfire_grace_time
-        # 不在 scheduler 的 job_defaults 里设置 max_instances / jitter
-        # max_instances 继续由本类统一填充，jitter 由本类做版本兼容填充
+        """
+        :param timezone: 时区，如 "Asia/Shanghai" 或 "UTC"
+        :param max_instances: 单个任务最大并发实例数
+        :param default_jitter: 默认抖动时间（秒），防止整点并发高峰
+        :param default_coalesce: 积压任务是否合并执行
+        :param default_misfire_grace_time: 错过执行时间的宽限期（秒）
+        :param extra_config: 传递给 Scheduler 的其他配置
+        """
+        # 1. 组装 APScheduler 原生支持的全局 job_defaults
+        # 这样就不需要在每次 add_job 时手动填充了
+        job_defaults = {
+            "coalesce": default_coalesce,
+            "max_instances": max_instances,
+            "misfire_grace_time": default_misfire_grace_time,
+        }
 
-        self._scheduler = AsyncIOScheduler(timezone=timezone, job_defaults=base_job_defaults)
+        # 2. 初始化调度器
+        self._scheduler = AsyncIOScheduler(
+            timezone=timezone,
+            job_defaults=job_defaults,
+            **(extra_config or {})
+        )
 
-        # 给所有 job 的默认 max_instances；单个 job 可覆盖
-        self._default_max_instances = max_instances
+        # 3. 记录自定义的全局默认值 (APScheduler job_defaults 不支持全局 jitter，需手动处理)
         self._default_jitter = default_jitter
-        self._default_coalesce = default_coalesce
-        self._default_misfire_grace_time = default_misfire_grace_time
 
         self._started: bool = False
+        # 待处理任务队列: (func, args, kwargs)
+        self._pending_jobs: deque[tuple[Callable, tuple, dict]] = deque()
 
-        # 在 start() 前登记任务（存放“调用 add_job 的参数”）
-        # 元素: tuple[func, args(tuple), kwargs(dict)]
-        self._pending_jobs: deque[
-            tuple[Callable[..., Any], tuple[Any, ...], dict[str, Any]]
-        ] = deque()
+    # ------------------------- 生命周期管理 -------------------------
 
-    # ------------------------- 基础生命周期 -------------------------
     def start(self) -> None:
-        """启动 Scheduler（幂等）。"""
+        """启动调度器，并加载所有积压的任务。"""
         if self._started:
-            logger.debug("Scheduler already started; skip start().")
             return
 
-        # 在真正 start() 之前，把 pending 的任务逐个出队并 add_job()
-        while self._pending_jobs:
-            func, args, kwargs = self._pending_jobs.popleft()
-            job = self._scheduler.add_job(func, *args, **kwargs)
-            logger.info(f"[startup] Added job: id={job.id}, trigger={job.trigger}")
+        logger.info(f"Starting APScheduler... (Pending jobs: {len(self._pending_jobs)})")
 
-        logger.info("Starting scheduler…")
+        # 1. 先启动调度器
         try:
             self._scheduler.start()
             self._started = True
-        except Exception as e:  # noqa: BLE001
-            logger.error(f"Scheduler startup error: {e}")
-            raise
-        logger.info("Scheduler started successfully")
+        except Exception as e:
+            logger.critical(f"Failed to start APScheduler: {e}")
+            raise e
 
-    async def shutdown(self, *, wait: bool = True) -> None:
-        """关闭 Scheduler（幂等）。"""
+        # 2. 再加载积压的任务 (防止 start 失败导致任务丢失，或 start 过程中事件循环未就绪)
+        while self._pending_jobs:
+            func, args, kwargs = self._pending_jobs.popleft()
+            try:
+                self._add_job_internal(func, *args, **kwargs)
+            except Exception as e:
+                logger.error(f"Failed to load pending job {kwargs.get('id')}: {e}")
+
+        logger.info("APScheduler started successfully.")
+
+    async def shutdown(self, wait: bool = True) -> None:
+        """关闭调度器。"""
         if not self._started:
-            logger.debug("Scheduler not started; skip shutdown().")
             return
-        logger.info("Stopping scheduler…")
+
+        logger.info("Shutting down APScheduler...")
         try:
             self._scheduler.shutdown(wait=wait)
-        except Exception as e:  # noqa: BLE001
-            logger.error(f"Scheduler shutdown error: {e}")
-            raise
-        else:
-            logger.info("Scheduler stopped gracefully")
+        except Exception as e:
+            logger.error(f"Error during APScheduler shutdown: {e}")
         finally:
             self._started = False
+            logger.info("APScheduler stopped.")
 
-    # ------------------------- 新增：先登记、后启动 -------------------------
-    def _ensure_default_job_options(self, kwargs: dict[str, Any]) -> None:
-        """为单个 job 填充缺省选项（若调用方未设置）。"""
-        kwargs.setdefault("max_instances", self._default_max_instances)
-        if self._default_jitter is not None:
-            kwargs.setdefault("jitter", self._default_jitter)
-        if self._default_coalesce is not None:
-            kwargs.setdefault("coalesce", self._default_coalesce)
-        if self._default_misfire_grace_time is not None:
-            kwargs.setdefault("misfire_grace_time", self._default_misfire_grace_time)
+    # ------------------------- 核心注册逻辑 -------------------------
 
-    def register_job(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> str:
-        """登记一个任务。未启动时进入队列；已启动则立即添加。
+    def _add_job_internal(self, func: Callable, *args: Any, **kwargs: Any) -> Job:
+        """内部方法：直接向 scheduler 添加任务"""
+        # 注入全局默认 jitter (如果任务未指定)
+        if self._default_jitter is not None and "jitter" not in kwargs:
+            kwargs["jitter"] = self._default_jitter
 
-        用法与 `scheduler.add_job` 等价：
-            register_job(my_func, 'interval', seconds=5, id='foo')
-            register_job(my_func, 'trigger', minutes=30, id='bar')
-            register_job(my_func, 'date', run_date=datetime(...), id='baz')
+        job = self._scheduler.add_job(func, *args, **kwargs)
+        logger.info(f"Job added: id={job.id} trigger={job.trigger} next_run={job.next_run_time}")
+        return job
 
-        可在 kwargs 覆盖：
-            id / replace_existing / max_instances / jitter / coalesce / misfire_grace_time / executor / name ...
+    def register_job(self, func: Callable[..., Any], trigger: Any = None, **kwargs: Any) -> str:
         """
-        self._ensure_default_job_options(kwargs)
+        通用注册方法 (add_job 的封装)。
+        如果 Scheduler 未启动，先加入队列；否则立即添加。
+        """
         job_id = kwargs.get("id", func.__name__)
+        kwargs.setdefault("id", job_id)
+
+        if trigger:
+            kwargs["trigger"] = trigger
 
         if self._started:
-            job = self._scheduler.add_job(func, *args, **kwargs)
-            logger.info(f"Added job: id={job.id}, trigger={job.trigger}")
+            self._add_job_internal(func, **kwargs)
         else:
-            self._pending_jobs.append((func, args, kwargs))
-            # 尽量打印有辨识度的触发器信息
-            trigger = kwargs.get("trigger", args[0] if args else None)
-            logger.info(f"Registered (pending) job: id={job_id}, trigger={trigger}")
+            self._pending_jobs.append((func, (), kwargs))
+            logger.info(f"Job registered (pending): id={job_id}")
 
         return job_id
 
-    def register_cron_job(
-        self,
-        func: Callable[..., Any],
-        *,
-        job_id: str | None = None,
-        replace_existing: bool = True,
-        cron_kwargs: dict[str, Any],
-        **job_options: Any,
+    # ------------------------- 快捷注册方法 -------------------------
+
+    def register_cron(
+            self,
+            func: Callable,
+            *,
+            job_id: str | None = None,
+            replace_existing: bool = True,
+            **cron_args: Any
     ) -> str:
-        """登记一个 Cron 任务。"""
-        if not cron_kwargs:
-            raise ValueError("cron_kwargs cannot be empty")
-        trigger = CronTrigger(**cron_kwargs)
+        """
+        注册 Cron 任务 (类 Linux Crontab)。
+        用法: register_cron(my_func, minute='*/5', hour='8-18')
+        """
+        trigger = CronTrigger(**cron_args)
         return self.register_job(
             func,
             trigger=trigger,
-            id=(job_id or func.__name__),
-            replace_existing=replace_existing,
-            **job_options,
+            id=job_id or func.__name__,
+            replace_existing=replace_existing
         )
 
-    def register_interval_job(
-        self,
-        func: Callable[..., Any],
-        *,
-        job_id: str | None = None,
-        replace_existing: bool = True,
-        interval_kwargs: dict[str, Any],
-        **job_options: Any,
+    def register_interval(
+            self,
+            func: Callable,
+            *,
+            job_id: str | None = None,
+            replace_existing: bool = True,
+            seconds: int = 0,
+            minutes: int = 0,
+            hours: int = 0,
+            days: int = 0,
+            **job_options: Any
     ) -> str:
-        """登记一个 Interval 任务。"""
-        if not interval_kwargs:
-            raise ValueError("interval_kwargs cannot be empty")
-        trigger = IntervalTrigger(**interval_kwargs)
+        """
+        注册间隔任务。
+        用法: register_interval(my_func, seconds=30)
+        """
+        trigger = IntervalTrigger(days=days, hours=hours, minutes=minutes, seconds=seconds)
         return self.register_job(
             func,
             trigger=trigger,
-            id=(job_id or func.__name__),
+            id=job_id or func.__name__,
             replace_existing=replace_existing,
-            **job_options,
+            **job_options
         )
 
-    def register_date_job(
-        self,
-        func: Callable[..., Any],
-        *,
-        job_id: str | None = None,
-        replace_existing: bool = True,
-        date_kwargs: dict[str, Any],
-        **job_options: Any,
+    def register_date(
+            self,
+            func: Callable,
+            run_date: str | Any,
+            *,
+            job_id: str | None = None,
+            replace_existing: bool = True,
+            **job_options: Any
     ) -> str:
-        """登记一个 Date 一次性任务。"""
-        if not date_kwargs:
-            raise ValueError("date_kwargs cannot be empty")
-        trigger = DateTrigger(**date_kwargs)
+        """
+        注册一次性任务。
+        用法: register_date(my_func, run_date='2023-12-01 12:00:00')
+        """
+        trigger = DateTrigger(run_date=run_date)
         return self.register_job(
             func,
             trigger=trigger,
-            id=(job_id or func.__name__),
+            id=job_id or func.__name__,
             replace_existing=replace_existing,
-            **job_options,
+            **job_options
         )
 
-    # ------------------------- 查询/控制 -------------------------
+    # ------------------------- 管理与查询 -------------------------
+
     @property
     def scheduler(self) -> AsyncIOScheduler:
+        """暴露底层 Scheduler 以便使用高级功能"""
         return self._scheduler
 
-    def get_job(self, job_id: str):
+    def get_job(self, job_id: str) -> Job | None:
         return self._scheduler.get_job(job_id)
 
+    def get_jobs(self) -> list[Job]:
+        return self._scheduler.get_jobs()
+
     def remove_job(self, job_id: str) -> None:
-        self._scheduler.remove_job(job_id)
-        logger.info(f"Removed job: id={job_id}")
+        """移除任务（静默处理不存在的情况）"""
+        try:
+            self._scheduler.remove_job(job_id)
+            logger.info(f"Removed job: id={job_id}")
+        except Exception as e:
+            logger.warning(f"Attempted to remove non-existent job: {job_id}, error: {e}")
 
     def pause_job(self, job_id: str) -> None:
         self._scheduler.pause_job(job_id)
@@ -221,31 +231,13 @@ class ApsSchedulerManager:
         self._scheduler.resume_job(job_id)
         logger.info(f"Resumed job: id={job_id}")
 
-    def running(self) -> bool:
-        return self._started
+    def modify_job(self, job_id: str, **changes) -> None:
+        """修改运行中任务的属性"""
+        self._scheduler.modify_job(job_id, **changes)
+        logger.info(f"Modified job: id={job_id}, changes={changes}")
 
 
-def new_aps_scheduler_tool(
-    timezone: str,
-    job_defaults: dict[str, Any] | None = None,
-    max_instances: int = 50,
-    *,
-    default_jitter: int | None = None,
-    default_coalesce: bool | None = True,
-    default_misfire_grace_time: int | None = 60,
-) -> ApsSchedulerManager:
-    """工厂方法，便于集中配置默认行为。"""
-    return ApsSchedulerManager(
-        timezone=timezone,
-        job_defaults=job_defaults,
-        max_instances=max_instances,
-        default_jitter=default_jitter,
-        default_coalesce=default_coalesce,
-        default_misfire_grace_time=default_misfire_grace_time,
-    )
-
-
-# ------------------------- 用法示例（可删） -------------------------
+# ------------------------- 用法示例 -------------------------
 # from datetime import datetime, timedelta
 # tool = new_aps_scheduler_tool(
 #     timezone="UTC",
