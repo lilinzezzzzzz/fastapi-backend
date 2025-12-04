@@ -18,6 +18,7 @@ from sqlalchemy.sql.elements import ClauseElement, ColumnElement
 
 from pkg import orjson_dumps, orjson_loads_types, orjson_loads, get_utc_without_tzinfo, unique_list
 from pkg.context import ctx
+from pkg.logger_tool import logger
 from pkg.snowflake_tool import generate_snowflake_id
 
 # ==============================================================================
@@ -375,7 +376,14 @@ class BaseBuilder[T: ModelMixin]:
 
     def in_(self, column: InstrumentedAttribute | Mapped, values: list | tuple) -> "BaseBuilder[T]":
         unique = unique_list(values, exclude_none=True)
-        if len(unique) == 1: return self.where(column == unique[0])
+
+        if len(unique) == 0:
+            logger.warning(f"{column} is empty")
+            return self
+
+        if len(unique) == 1:
+            return self.where(column == unique[0])
+
         return self.where(column.in_(unique))
 
     def like(self, column: InstrumentedAttribute, pattern: str) -> "BaseBuilder[T]":
@@ -427,6 +435,15 @@ class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
         return self
 
     def paginate(self, *, page: int | None = None, limit: int | None = None) -> "QueryBuilder[T]":
+        page = page or 1
+        limit = limit or 10
+
+        if page < 1:
+            raise ValueError("page must be greater than or equal to 1")
+
+        if limit < 1:
+            raise ValueError("limit must be greater than or equal to 1")
+
         if page and limit: self._stmt = self._stmt.offset((page - 1) * limit).limit(limit)
         return self
 
@@ -459,8 +476,13 @@ class CountBuilder[T: ModelMixin](BaseBuilder[T]):
 
 
 class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
-    def __init__(self, *, model_cls: type[T] | None = None, model_ins: T | None = None,
-                 session_provider: SessionProvider):
+    def __init__(
+            self,
+            *,
+            model_cls: type[T] | None = None,
+            model_ins: T | None = None,
+            session_provider: SessionProvider
+    ):
         target_cls = model_cls if model_cls is not None else model_ins.__class__
         super().__init__(target_cls, session_provider=session_provider)
         self._stmt = update(self._model_cls)
@@ -470,9 +492,14 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
 
     def update(self, **kwargs) -> "UpdateBuilder[T]":
         for k, v in kwargs.items():
-            if self._model_cls.has_column(k):
-                if isinstance(v, datetime) and v.tzinfo: v = v.replace(tzinfo=None)
-                self._update_dict[k] = v
+            if not self._model_cls.has_column(k):
+                logger.warning(f"{k} is not a {self._model_cls.__name__} column")
+                continue
+
+            if isinstance(v, datetime) and v.tzinfo:
+                v = v.replace(tzinfo=None)
+
+            self._update_dict[k] = v
         return self
 
     def soft_delete(self) -> "UpdateBuilder[T]":
