@@ -1,4 +1,4 @@
-from internal.aps_tasks.tasks import number_sum
+from internal.tasks.apscheduler.tasks import number_sum
 from pkg.aps_task import ApsSchedulerManager
 from pkg.logger_tool import logger
 

@@ -11,12 +11,12 @@ from pkg.logger_tool import logger
 
 # 1. 定义模块
 CELERY_INCLUDE_MODULES = [
-    "internal.aps_tasks.tasks",
+    "internal.apscheduler.tasks",
 ]
 
 # 2. 定义路由
 CELERY_TASK_ROUTES = {
-    "internal.aps_tasks.*": {"queue": "cron_queue"},
+    "internal.apscheduler.*": {"queue": "cron_queue"},
     "internal.business.video.transcode": {"queue": "video_queue", "priority": 10},
 }
 
