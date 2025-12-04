@@ -6,11 +6,11 @@ from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
-    create_async_engine,
 )
 
 from internal.config.setting import setting
 from pkg import orjson_dumps, orjson_loads
+from pkg.orm.base import new_async_engine, new_async_session_maker
 
 # 进程内单例（不要在模块导入时构造）
 _engine: AsyncEngine | None = None
@@ -27,8 +27,8 @@ def init_async_celery_db():
     if _engine is not None:
         return  # 幂等
 
-    _engine = create_async_engine(
-        url=setting.sqlalchemy_database_uri,
+    _engine = new_async_engine(
+        database_uri=setting.sqlalchemy_database_uri,
         echo=setting.sqlalchemy_echo,
         pool_pre_ping=True,
         pool_size=10,
@@ -38,7 +38,7 @@ def init_async_celery_db():
         json_serializer=orjson_dumps,
         json_deserializer=orjson_loads
     )
-    _SessionMaker = async_sessionmaker(bind=_engine, class_=AsyncSession, expire_on_commit=False)
+    _SessionMaker = new_async_session_maker(engine=_engine)
 
 
 def _ensure_initialized() -> async_sessionmaker[AsyncSession]:

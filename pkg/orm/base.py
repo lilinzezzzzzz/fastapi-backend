@@ -2,7 +2,7 @@ from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker, AsyncEngine
 
 from pkg import orjson_dumps, orjson_loads, orjson_loads_types
 
@@ -33,3 +33,11 @@ def new_async_engine(
         json_deserializer=json_deserializer
     )
     return engine
+
+
+def new_async_session_maker(
+        *,
+        engine: AsyncEngine,
+):
+    session_maker = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False, autoflush=True)
+    return session_maker

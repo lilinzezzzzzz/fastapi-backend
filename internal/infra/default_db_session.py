@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from internal.config.setting import setting
 from pkg import orjson_dumps, orjson_loads
 from pkg.logger_tool import logger
-from pkg.orm.base import new_async_engine
+from pkg.orm.base import new_async_engine, new_async_session_maker
 
 # 创建异步引擎
 engine = new_async_engine(
@@ -24,12 +24,12 @@ engine = new_async_engine(
 )
 
 # 创建异步 session_maker
-AsyncSessionLocal = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False, autoflush=True)
+session_maker = new_async_session_maker(engine=engine)
 
 
 @asynccontextmanager
 async def get_session(autoflush: bool = True) -> AsyncGenerator[AsyncSession, Any]:
-    async with AsyncSessionLocal() as session:
+    async with session_maker() as session:
         if autoflush:
             try:
                 yield session
