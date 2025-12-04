@@ -10,7 +10,7 @@ from pkg.context import ctx
 from pkg.orm.model_mixin import ModelMixin
 from pkg import get_utc_without_tzinfo, unique_list
 from pkg.logger_tool import logger
-from pkg.orm.types import SessionProvider
+from pkg.orm.base import SessionProvider
 
 
 class BaseBuilder[T: ModelMixin]:

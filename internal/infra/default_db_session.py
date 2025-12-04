@@ -8,10 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from internal.config.setting import setting
 from pkg import orjson_dumps, orjson_loads
 from pkg.logger_tool import logger
+from pkg.orm.base import new_async_engine
 
 # 创建异步引擎
-engine = create_async_engine(
-    url=setting.sqlalchemy_database_uri,
+engine = new_async_engine(
+    database_uri=setting.sqlalchemy_database_uri,
     echo=False,
     pool_pre_ping=True,
     pool_size=10,

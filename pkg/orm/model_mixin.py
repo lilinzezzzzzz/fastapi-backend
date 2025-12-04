@@ -11,7 +11,7 @@ from sqlalchemy.orm import (
 
 from pkg import get_utc_without_tzinfo
 from pkg.context import ctx
-from pkg.orm.types import SessionProvider
+from pkg.orm.base import SessionProvider
 from pkg.snowflake_tool import generate_snowflake_id
 
 

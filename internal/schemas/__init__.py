@@ -1,93 +1,60 @@
-"""该目录重要用于定义各种schema"""
+from typing import Annotated, Union, Any
 from datetime import datetime
-from typing import Any, Annotated
+from pydantic import BeforeValidator, WithJsonSchema
 
-from pydantic import GetCoreSchemaHandler, BeforeValidator
-from pydantic.json_schema import JsonSchemaValue
-from pydantic_core.core_schema import CoreSchema, no_info_plain_validator_function
+# ==========================================
+# 1. FlexibleInt
+# ==========================================
+def _validate_flexible_int(v: Any) -> int:
+    if isinstance(v, str) and v.isdigit():
+        return int(v)
+    return v
 
-
-class FlexibleInt(int):
-    """
-    灵活的整数类型：
-    输入：可以是 int，也可以是数字字符串（如 "123"）。
-    输出（后端使用）：int 类型。
-    场景：用于处理 Query Parameters 或前端传来的不规范 JSON。
-    """
-
-    @classmethod
-    def __get_pydantic_core_schema__(cls, source_type: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
-        return no_info_plain_validator_function(cls.validate)
-
-    @classmethod
-    def __get_pydantic_json_schema__(cls, core_schema: CoreSchema, handler: Any) -> JsonSchemaValue:
-        return {"type": "integer", "title": "FlexibleInt",
-                "description": "Accepts int or digit string, converts to int"}
-
-    @classmethod
-    def validate(cls, v: Any) -> int:
-        if isinstance(v, int):
-            return v
-        if isinstance(v, str) and v.isdigit():
-            return int(v)
-        raise ValueError("Must be an integer or numeric string")
+# 定义：最终类型是 int，但在验证前执行转换，且 JSON Schema 显示为 integer
+FlexibleInt = Annotated[
+    int, 
+    BeforeValidator(_validate_flexible_int),
+    WithJsonSchema({"type": "integer", "title": "FlexibleInt", "description": "Accepts int or digit string"})
+]
 
 
-class BigIntStr(str):
-    """
-    大整数安全字符串：
-    输入（后端赋值）：可以是超长 int (Snowflake/UUIDv7 int)。
-    输出（前端接收）：str 类型。
-    场景：用于 Response，防止 JavaScript 丢失精度。
-    """
+# ==========================================
+# 2. BigIntStr (原 StringId)
+# ==========================================
+def _validate_bigint_str(v: Any) -> str:
+    # 核心逻辑：无论输入什么，强制转为字符串
+    return str(v)
 
-    @classmethod
-    def __get_pydantic_core_schema__(cls, source_type: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
-        return no_info_plain_validator_function(cls.validate)
-
-    @classmethod
-    def __get_pydantic_json_schema__(cls, core_schema: CoreSchema, handler: Any) -> JsonSchemaValue:
-        return {
-            "type": "string",
-            "title": "BigIntStr",
-            "description": "Large integer serialized as string to prevent precision loss",
-            "example": "115603251198457884"
-        }
-
-    @classmethod
-    def validate(cls, v: Any) -> str:
-        if v is None:
-            raise ValueError("Value cannot be None")
-        return str(v)
+# 定义：最终类型是 str，但在验证前执行转换，且允许输入 Union[str, int]
+BigIntStr = Annotated[
+    Union[str, int],  # 关键点：这里告诉 IDE，输入 int 也是合法的！
+    BeforeValidator(_validate_bigint_str),
+    WithJsonSchema({
+        "type": "string", 
+        "title": "BigIntStr", 
+        "description": "Large integer serialized as string", 
+        "example": "115603251198457884"
+    })
+]
 
 
-class FlexibleDatetime(datetime):
-    """
-    灵活的时间类型：
-    输入：可以是 datetime 对象，也可以是 ISO 字符串。
-    输出（后端使用）：无时区 (naive) 的 datetime 对象。
-    """
+# ==========================================
+# 3. FlexibleDatetime
+# ==========================================
+def _validate_flexible_datetime(v: Any) -> datetime:
+    if isinstance(v, datetime):
+        return v.replace(tzinfo=None)
+    if isinstance(v, str):
+        try:
+            # 兼容带 Z 或不带 Z 的 ISO 格式
+            dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
+            return dt.replace(tzinfo=None)
+        except ValueError:
+            raise ValueError("Invalid ISO 8601 datetime string")
+    return v
 
-    @classmethod
-    def __get_pydantic_core_schema__(cls, source_type: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
-        return no_info_plain_validator_function(cls.validate)
-
-    @classmethod
-    def __get_pydantic_json_schema__(cls, core_schema: CoreSchema, handler: Any) -> JsonSchemaValue:
-        return {
-            "type": "string",
-            "format": "date-time",
-            "example": "2025-05-07T14:30:00Z"
-        }
-
-    @classmethod
-    def validate(cls, v: Any) -> datetime:
-        if isinstance(v, datetime):
-            return v.replace(tzinfo=None)  # 去掉时区
-        if isinstance(v, str):
-            try:
-                dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
-                return dt.replace(tzinfo=None)  # 去掉时区信息
-            except ValueError:
-                raise ValueError("Must be a valid ISO 8601 datetime string")
-        raise ValueError("Must be a datetime or ISO datetime string")
+FlexibleDatetime = Annotated[
+    Union[datetime, str],
+    BeforeValidator(_validate_flexible_datetime),
+    WithJsonSchema({"type": "string", "format": "date-time", "example": "2025-05-07T14:30:00Z"})
+]

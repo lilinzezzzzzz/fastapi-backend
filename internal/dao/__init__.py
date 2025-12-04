@@ -11,7 +11,7 @@ from pkg.orm.builder import (CountBuilder, QueryBuilder, UpdateBuilder, new_cls_
                              new_cls_updater,
                              new_col_counter, new_counter,
                              new_ins_updater, new_sub_querier)
-from pkg.orm.types import SessionProvider
+from pkg.orm.base import SessionProvider
 
 
 class BaseDao:
