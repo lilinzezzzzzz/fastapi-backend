@@ -1,5 +1,9 @@
+import asyncio
+
 from celery import Celery
 from internal.config.setting import setting
+from internal.infra.database import init_db, close_db
+from internal.infra.redis import init_redis, close_redis
 from pkg.celery_task_manager import CeleryClient
 from pkg.logger_tool import logger
 
@@ -14,6 +18,50 @@ CELERY_TASK_ROUTES = {
     "internal.business.video.transcode": {"queue": "video_queue", "priority": 10},
 }
 
+
+# =========================================================
+# 3. 定义聚合函数 (Wrapper Functions)
+# =========================================================
+
+def _worker_startup():
+    """
+    聚合启动钩子：按顺序初始化所有资源
+    """
+    logger.info(">>> Worker Process Starting: Initializing resources...")
+
+    # 1. 初始化 DB
+    init_db()
+
+    # 2. 初始化 Redis
+    init_redis()
+
+    logger.info("<<< Worker Process Resources Initialized.")
+
+
+async def _worker_shutdown():
+    """
+    聚合关闭钩子：关闭所有资源
+    """
+    logger.info(">>> Worker Process Stopping: Releasing resources...")
+
+    # 方式 A：顺序关闭 (简单稳健)
+    # await close_redis()
+    # await close_db()
+
+    # 方式 B：并发关闭 (推荐，速度更快)
+    # 使用 asyncio.gather 同时关闭 DB 和 Redis，节省时间
+    try:
+        await asyncio.gather(
+            close_redis(),
+            close_db(),
+            return_exceptions=True  # 防止其中一个报错影响另一个
+        )
+    except Exception as e:
+        logger.error(f"Error during resource shutdown: {e}")
+
+    logger.info("<<< Worker Process Resources Released.")
+
+
 # 3. 【关键】立即实例化 (Global Scope)
 # 必须在模块层级直接赋值，否则 'celery -A ...' 命令行找不到它
 celery_client = CeleryClient(
@@ -27,6 +75,11 @@ celery_client = CeleryClient(
 
     timezone="Asia/Shanghai",
     redbeat_redis_url=setting.redis_url,
+)
+
+celery_client.register_worker_hooks(
+    on_startup=_worker_startup,  # 传入聚合后的启动函数
+    on_shutdown=_worker_shutdown  # 传入聚合后的关闭函数
 )
 
 # 导出这个对象给 Celery CLI 使用
@@ -53,3 +106,12 @@ def ping_celery():
     except Exception as e:
         # 视情况决定是否要抛出异常阻断启动
         logger.error(f"Celery Broker connection warning: {e}")
+
+
+"""
+启动 Worker (负责真正执行任务):
+celery -A internal.infra.celery.celery_app worker -l info
+
+启动 Beat (负责通过 RedBeat 读取 Redis 配置并派发任务):
+celery -A internal.infra.celery.celery_app beat -l info -S redbeat.RedBeatScheduler
+"""

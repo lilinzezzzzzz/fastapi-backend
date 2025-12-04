@@ -1,16 +1,13 @@
 import asyncio
-from collections.abc import Iterable, Mapping, Sequence
-from datetime import datetime, timedelta
-from typing import Any, cast, Union
+from collections.abc import Mapping, Sequence, Callable, Coroutine
+from datetime import datetime
+from typing import Any
 
-from celery import Celery, chain, chord, group, signals, states
+from celery import Celery, chain, chord, group, signals
 from celery.result import AsyncResult, GroupResult
 from celery.schedules import crontab, schedule
 from kombu.utils.uuid import uuid
 
-# 引入之前的数据库/Redis管理函数 (确保路径正确)
-from internal.infra.database import init_db, close_db
-from internal.infra.redis import init_redis, close_redis  # 如果需要Redis
 from pkg.logger_tool import logger
 
 try:
@@ -20,6 +17,8 @@ try:
     HAS_REDBEAT = True
 except ImportError:
     HAS_REDBEAT = False
+
+LifecycleHook = Callable[[], Any] | Callable[[], Coroutine[Any, Any, Any]]
 
 
 class CeleryClient:
@@ -113,15 +112,18 @@ class CeleryClient:
             **exec_options
         )
 
-    def chain(self, *signatures) -> AsyncResult:
+    @staticmethod
+    def chain(*signatures) -> AsyncResult:
         """链式调用: task1 -> task2 -> task3"""
         return chain(*signatures).apply_async()
 
-    def group(self, *signatures) -> GroupResult:
+    @staticmethod
+    def group(*signatures) -> GroupResult:
         """并发调用: [task1, task2, task3]"""
         return group(*signatures).apply_async()
 
-    def chord(self, header, body) -> AsyncResult:
+    @staticmethod
+    def chord(header, body) -> AsyncResult:
         """回调模式: group(header) 完成后 -> body"""
         return chord(header)(body).apply_async()
 
@@ -139,8 +141,8 @@ class CeleryClient:
     ):
         """
         动态添加定时任务 (建议配合 celery-redbeat 使用)
-        : param args
-        : param kwargs
+        :param args_tuple
+        :param kwargs_dict
         :param task_name: 具体的任务函数名 'tasks.add'
         :param schedule_type: 'cron' 或 'interval'
         :param schedule_value:
@@ -229,55 +231,55 @@ class CeleryClient:
     def revoke(self, task_id: str, terminate: bool = False):
         self.app.control.revoke(task_id, terminate=terminate)
 
+    @staticmethod
+    def register_worker_hooks(
+            on_startup: LifecycleHook | None = None,
+            on_shutdown: LifecycleHook | None = None
+    ):
+        """
+        注册 Worker 进程生命周期钩子（依赖注入）。
+        用户可以将数据库初始化、Redis 连接等逻辑通过参数传入。
 
-# =============================================================================
-# 信号处理 (Signal Handlers) - 自动管理 DB 连接
-# =============================================================================
+        :param on_startup: Worker 子进程启动时执行 (通常用于 init_db)
+        :param on_shutdown: Worker 子进程关闭时执行 (通常用于 close_db)
+        """
 
-@signals.worker_process_init.connect
-def setup_worker_process_resources(**kwargs):
-    """
-    【重要】子进程初始化
-    每个 Worker 进程(Fork出来的)启动时，初始化独立的数据库连接池。
-    """
-    try:
-        logger.info(f"Initializing DB for worker process (PID: {import_os().getpid()})...")
-        init_db()
-        init_redis()
-    except Exception as e:
-        logger.critical(f"Worker process initialization failed: {e}")
-        raise e
+        # --- 1. 定义 Startup Handler ---
+        if on_startup:
+            @signals.worker_process_init.connect(weak=False)
+            def _wrapper_startup(**kwargs):
+                logger.info("Executing registered worker startup hook...")
+                try:
+                    # 判断是否是异步函数 (虽然 worker_init 通常建议同步，但也兼容一下)
+                    if asyncio.iscoroutinefunction(on_startup):
+                        # 注意：Celery process init 时 loop 可能未准备好，通常运行同步代码更稳
+                        # 这里简单处理，如果真的是 async，尝试 run
+                        asyncio.run(on_startup())
+                    else:
+                        on_startup()
+                    logger.info("Worker startup hook executed successfully.")
+                except Exception as e:
+                    logger.critical(f"Worker startup hook failed: {e}")
+                    raise e
 
-
-@signals.worker_process_shutdown.connect
-def teardown_worker_process_resources(**kwargs):
-    """
-    【重要】子进程关闭
-    """
-    logger.info("Closing DB for worker process...")
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            loop.create_task(close_db())
-            loop.create_task(close_redis())
-        else:
-            asyncio.run(close_db())
-            asyncio.run(close_redis())
-    except Exception as e:
-        # 进程即将销毁，记录日志即可
-        logger.warning(f"Error closing DB in worker: {e}")
-
-
-@signals.worker_init.connect
-def setup_main_process(**kwargs):
-    """父进程启动 (Main Process) - 通常不做数据库连接"""
-    logger.info("Celery Main Process Started.")
-
-
-@signals.worker_shutdown.connect
-def teardown_main_process(**kwargs):
-    """父进程关闭"""
-    logger.info("Celery Main Process Stopped.")
+        # --- 2. 定义 Shutdown Handler ---
+        if on_shutdown:
+            @signals.worker_process_shutdown.connect(weak=False)
+            def _wrapper_shutdown(**kwargs):
+                logger.info("Executing registered worker shutdown hook...")
+                try:
+                    if asyncio.iscoroutinefunction(on_shutdown):
+                        # 处理异步关闭的通用逻辑
+                        loop = asyncio.get_event_loop_policy().get_event_loop()
+                        if loop.is_running():
+                            loop.create_task(on_shutdown())
+                        else:
+                            loop.run_until_complete(on_shutdown())
+                    else:
+                        on_shutdown()
+                    logger.info("Worker shutdown hook executed successfully.")
+                except Exception as e:
+                    logger.warning(f"Worker shutdown hook error: {e}")
 
 
 def import_os():
