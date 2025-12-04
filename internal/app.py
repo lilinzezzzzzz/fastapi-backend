@@ -5,11 +5,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 
-from internal.aps_tasks import apscheduler_manager
+from internal.aps_tasks import init_apscheduler
 from internal.config.setting import setting
-from internal.constants import REDIS_KEY_LOCK_PREFIX
 from internal.infra.database import init_db, close_db
-from internal.infra.redis import cache_client, init_redis, close_redis
+from internal.infra.redis import init_redis, close_redis
 from pkg import SYS_ENV, SYS_NAMESPACE
 from pkg.logger_tool import logger
 from pkg.resp_tool import response_factory
@@ -77,30 +76,6 @@ def register_middleware(app: FastAPI):
     app.add_middleware(ASGIRecordMiddleware)
 
 
-async def start_scheduler(pid: int):
-    scheduler_lock_key = f"{REDIS_KEY_LOCK_PREFIX}:scheduler:master"
-    # 只有一个 worker 能获得锁，成为 scheduler master
-    lock_id = await cache_client.acquire_lock(
-        scheduler_lock_key,
-        expire_ms=180000,  # 3 分钟, 避免锁死
-        timeout_ms=1000,  # 最多等 1 秒获取锁
-        retry_interval_ms=200  # 可略调
-    )
-    if lock_id:
-        logger.info(f"Current process {pid} acquired scheduler master lock, starting APScheduler")
-        apscheduler_manager.start()
-        return True
-    else:
-        logger.info(f"Current process {pid} did not acquire scheduler master lock, skipping scheduler")
-        return False
-
-
-async def shutdown_scheduler(pid: int):
-    logger.info(f"Current process {pid} Shutting down APScheduler...")
-    await apscheduler_manager.shutdown()
-    logger.info(f"Current process {pid} Shutting down APScheduler successfully")
-
-
 # 定义 lifespan 事件处理器
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
@@ -115,6 +90,8 @@ async def lifespan(_app: FastAPI):
     init_db()
     # 初始化 Redis
     init_redis()
+    # 初始化 APScheduler
+    init_apscheduler()
 
     is_scheduler_master = False
     if SYS_NAMESPACE in ["dev", "test", "canary", "prod"]:
