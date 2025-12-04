@@ -12,7 +12,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from pkg.logger_tool import logger
 
 
-class ApsSchedulerTool:
+class ApsSchedulerManager:
     """一个简单稳妥的 AsyncIO APScheduler 封装。
 
     特性：
@@ -233,9 +233,9 @@ def new_aps_scheduler_tool(
     default_jitter: int | None = None,
     default_coalesce: bool | None = True,
     default_misfire_grace_time: int | None = 60,
-) -> ApsSchedulerTool:
+) -> ApsSchedulerManager:
     """工厂方法，便于集中配置默认行为。"""
-    return ApsSchedulerTool(
+    return ApsSchedulerManager(
         timezone=timezone,
         job_defaults=job_defaults,
         max_instances=max_instances,
