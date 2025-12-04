@@ -1,4 +1,4 @@
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 from datetime import datetime
 from typing import Any, TypeVar, cast, Optional
@@ -82,38 +82,33 @@ class ModelMixin(Base):
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
 
-    # --- 核心逻辑 ---
-
     @classmethod
-    def _prepare_create_data(cls, raw_data: dict[str, Any]) -> dict[str, Any]:
-        """准备创建数据：注入ID、Context、时间戳，并过滤非数据库字段"""
-        data = raw_data.copy()
-        cur_datetime = get_utc_without_tzinfo()
-
-        data.setdefault("created_at", cur_datetime)
-        data.setdefault("updated_at", cur_datetime)
-
-        if "id" not in data:
-            data["id"] = generate_snowflake_id()
-
-        if cls.has_creator_id_column() and "creator_id" not in data:
-            user_id = ctx.get_user_id()
-            if user_id is not None:
-                data["creator_id"] = user_id
-
-        if cls.has_updater_id_column() and "updater_id" not in data:
-            data["updater_id"] = None
-
+    def create(cls, **kwargs) -> "ModelMixin":
+        """
+        创建一个新的、填充好默认值的实例（Transient 状态）。
+        注意：此时尚未写入数据库。
+        """
+        # 1. 过滤掉非数据库列的参数，防止报错
         valid_cols = set(cls.get_column_names())
-        return {k: v for k, v in data.items() if k in valid_cols}
+        clean_kwargs = {k: v for k, v in kwargs.items() if k in valid_cols}
+
+        # 2. 实例化
+        ins = cls(**clean_kwargs)
+
+        # 3. 预先填充 ID 和 时间戳
+        # 这样即使不立刻 save，对象也是数据完整的
+        ins._fill_default_fields()
+
+        return ins
 
     # --- 批量操作 ---
 
     @classmethod
-    async def insert_batch(cls, *, items: list[dict[str, Any]], session_provider: SessionProvider) -> None:
+    async def insert(cls, *, items: list[dict[str, Any]], session_provider: SessionProvider) -> None:
         """高性能批量插入 (Core Insert)"""
         if not items:
             return
+
         db_values = [cls._prepare_create_data(item) for item in items]
         try:
             async with session_provider() as sess:
@@ -122,27 +117,44 @@ class ModelMixin(Base):
         except Exception as e:
             raise RuntimeError(f"{cls.__name__} insert_batch failed: {e}") from e
 
-    @classmethod
-    async def add_batch(cls, ins_list: Sequence["ModelMixin"], session_provider: SessionProvider) -> None:
-        """基于实例的批量插入"""
-        if not ins_list:
-            return
-        try:
-            async with session_provider() as sess:
-                async with sess.begin():
-                    sess.add_all(ins_list)
-        except Exception as e:
-            raise RuntimeError(f"{cls.__name__} add_batch failed: {e}") from e
-
     # --- 实例操作 ---
 
     async def save(self, session_provider: SessionProvider) -> None:
-        try:
-            async with session_provider() as sess:
-                async with sess.begin():
-                    sess.add(self)
-        except Exception as e:
-            raise RuntimeError(f"{self.__class__.__name__} save error: {e}") from e
+        """
+        智能保存：
+        - 如果是新对象 (Create出来的) -> 转为字典，使用 INSERT 语句 (高性能)
+        - 如果是旧对象 (查询出来的) -> 使用 session.add (ORM 更新)
+        """
+        state = inspect(self)
+
+        # --- 场景 A: 插入 (Transient) ---
+        if state.transient:
+            # 确保字段都有值 (以防用户是手动 User() 出来的而非 create())
+            self._fill_default_fields()
+
+            # 转为字典
+            data = self._extract_db_values()
+
+            try:
+                async with session_provider() as sess:
+                    async with sess.begin():
+                        # 使用 Core Insert，极大提升性能
+                        await sess.execute(insert(self.__class__).values(data))
+                        # 此时数据库已有数据，self 对象属性依然保持，可直接被业务代码读取
+            except Exception as e:
+                raise RuntimeError(f"{self.__class__.__name__} save(insert) error: {e}") from e
+
+        # --- 场景 B: 更新 (Persistent / Detached) ---
+        else:
+            # 更新时间戳和操作人
+            self._update_track_fields()
+
+            try:
+                async with session_provider() as sess:
+                    async with sess.begin():
+                        sess.add(self)  # 触发 ORM 的脏检查和 Update
+            except Exception as e:
+                raise RuntimeError(f"{self.__class__.__name__} save(update) error: {e}") from e
 
     async def update(self, session_provider: SessionProvider, **kwargs) -> None:
         for column_name, value in kwargs.items():
@@ -166,13 +178,6 @@ class ModelMixin(Base):
     async def soft_delete(self, session_provider: SessionProvider) -> None:
         if self.has_deleted_at_column():
             await self.update(session_provider, **{self.deleted_at_column_name(): get_utc_without_tzinfo()})
-
-    # --- 工厂与工具方法 ---
-
-    @classmethod
-    def create(cls, **kwargs) -> "ModelMixin":
-        clean_kwargs = cls._prepare_create_data(kwargs)
-        return cls(**clean_kwargs)
 
     def to_dict(self, *, exclude_column: list[str] = None) -> dict[str, Any]:
         return {
@@ -228,6 +233,76 @@ class ModelMixin(Base):
     @classmethod
     def get_creator_id_column(cls) -> Optional[InstrumentedAttribute]:
         return cls.get_column_or_none(cls.creator_id_column_name())
+
+    @classmethod
+    def _prepare_create_data(cls, raw_data: dict[str, Any]) -> dict[str, Any]:
+        """准备创建数据：注入ID、Context、时间戳，并过滤非数据库字段"""
+        data = raw_data.copy()
+        cur_datetime = get_utc_without_tzinfo()
+
+        data.setdefault("created_at", cur_datetime)
+        data.setdefault("updated_at", cur_datetime)
+
+        if "id" not in data:
+            data["id"] = generate_snowflake_id()
+
+        if cls.has_creator_id_column() and "creator_id" not in data:
+            user_id = ctx.get_user_id()
+            if user_id is not None:
+                data["creator_id"] = user_id
+
+        if cls.has_updater_id_column() and "updater_id" not in data:
+            data["updater_id"] = None
+
+        valid_cols = set(cls.get_column_names())
+        return {k: v for k, v in data.items() if k in valid_cols}
+
+    def _fill_default_fields(self):
+        """[内部] 补全 ID、时间戳、创建人等信息"""
+        cur_datetime = get_utc_without_tzinfo()
+
+        # 补全 ID
+        if not self.id:
+            self.id = generate_snowflake_id()
+
+        # 补全时间
+        if not self.created_at:
+            self.created_at = cur_datetime
+        if not self.updated_at:
+            self.updated_at = cur_datetime
+
+        # 补全 Context 信息
+        user_id = ctx.get_user_id()
+        if self.has_creator_id_column() and not self.creator_id and user_id:
+            self.creator_id = user_id
+
+        # 新对象 updater_id 默认为空或与 creator 一致
+        if self.has_updater_id_column() and not self.updater_id:
+            self.updater_id = None
+
+    def _update_track_fields(self):
+        """[内部] 更新 修改时间 和 修改人"""
+        if self.has_updated_at_column():
+            setattr(self, self.updated_at_column_name(), get_utc_without_tzinfo())
+
+        if self.has_updater_id_column():
+            setattr(self, self.updater_id_column_name(), ctx.get_user_id())
+
+    def _extract_db_values(self) -> dict[str, Any]:
+        """[内部] 将对象转为纯字典，供 Core Insert 使用"""
+        values = {}
+        # 只提取实际存在的列
+        valid_cols = set(self.get_column_names())
+
+        # 遍历对象的属性 (__dict__ 可能包含非数据库字段，所以要过滤)
+        # 这里使用 SQLAlchemy 的 inspect 来获取属性值更安全
+        mapper = inspect(self.__class__)
+        for col_name in valid_cols:
+            # 仅提取已加载/已赋值的属性
+            if hasattr(self, col_name):
+                val = getattr(self, col_name)
+                values[col_name] = val
+        return values
 
 
 MixinModelType = TypeVar("MixinModelType", bound=ModelMixin)
