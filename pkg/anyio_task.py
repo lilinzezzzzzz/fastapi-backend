@@ -254,6 +254,7 @@ class AnyioTaskManager:
                 f"Batch task ({coro_name}) hit global timeout of {global_timeout}s. Returning partial results.")
 
         return results
+
     async def run_in_thread(
             self,
             sync_func: Callable[..., Any],
@@ -418,14 +419,3 @@ class AnyioTaskManager:
                 else:
                     logger.error(f"{prefix}-{index} ({func_name}) failed. err={e}")
                 results[index] = None
-
-
-def new_anyio_task_manager() -> AnyioTaskManager:
-    """
-    创建一个新的 AnyioTaskManager 实例。
-    """
-    return AnyioTaskManager()
-
-
-# 全局实例（注意：需在 FastAPI 启动时 start，在关闭时 shutdown）
-anyio_task_manager = AnyioTaskManager()

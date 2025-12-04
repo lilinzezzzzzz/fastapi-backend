@@ -274,7 +274,3 @@ class CacheClient:
                 await asyncio.sleep(retry_interval_ms / 1000)
 
         return None
-
-
-def new_cache_client(*, session_provider: SessionProvider) -> CacheClient:
-    return CacheClient(session_provider=session_provider)

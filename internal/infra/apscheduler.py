@@ -1,5 +1,5 @@
 from internal.aps_tasks.tasks import number_sum
-from pkg.aps_task_manager import ApsSchedulerManager, new_aps_scheduler_tool
+from pkg.aps_task import ApsSchedulerManager
 from pkg.logger_tool import logger
 
 _apscheduler_manager: ApsSchedulerManager | None = None
@@ -9,10 +9,11 @@ def init_apscheduler():
     global _apscheduler_manager
     logger.info("Initializing APScheduler...")
     if _apscheduler_manager is not None:
+        logger.warning("APScheduler has already been initialized.")
         return
 
-    _apscheduler_manager: ApsSchedulerManager = new_aps_scheduler_tool(timezone="UTC", max_instances=50)
-    _apscheduler_manager.register_cron_job(
+    _apscheduler_manager: ApsSchedulerManager = ApsSchedulerManager(timezone="UTC", max_instances=50)
+    _apscheduler_manager.register_cron(
         number_sum,
         cron_kwargs={"minute": "*/15", "second": 0}
     )

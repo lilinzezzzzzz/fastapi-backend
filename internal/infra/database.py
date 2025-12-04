@@ -27,7 +27,7 @@ def init_db() -> None:
     应在 FastAPI lifespan 或 Celery worker_process_init 中调用。
     """
     global _engine, _session_maker
-
+    logger.info("Initializing Database Connection...")
     # 幂等性检查：如果已经初始化，直接返回
     if _engine is not None:
         logger.info("Database connection already initialized.")

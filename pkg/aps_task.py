@@ -114,7 +114,7 @@ class ApsSchedulerManager:
         logger.info(f"Job added: id={job.id} trigger={job.trigger} next_run={job.next_run_time}")
         return job
 
-    def register_job(self, func: Callable[..., Any], trigger: Any = None, **kwargs: Any) -> str:
+    def _register_job(self, func: Callable[..., Any], trigger: Any = None, **kwargs: Any) -> str:
         """
         通用注册方法 (add_job 的封装)。
         如果 Scheduler 未启动，先加入队列；否则立即添加。
@@ -148,7 +148,7 @@ class ApsSchedulerManager:
         用法: register_cron(my_func, minute='*/5', hour='8-18')
         """
         trigger = CronTrigger(**cron_args)
-        return self.register_job(
+        return self._register_job(
             func,
             trigger=trigger,
             id=job_id or func.__name__,
@@ -172,7 +172,7 @@ class ApsSchedulerManager:
         用法: register_interval(my_func, seconds=30)
         """
         trigger = IntervalTrigger(days=days, hours=hours, minutes=minutes, seconds=seconds)
-        return self.register_job(
+        return self._register_job(
             func,
             trigger=trigger,
             id=job_id or func.__name__,
@@ -194,7 +194,7 @@ class ApsSchedulerManager:
         用法: register_date(my_func, run_date='2023-12-01 12:00:00')
         """
         trigger = DateTrigger(run_date=run_date)
-        return self.register_job(
+        return self._register_job(
             func,
             trigger=trigger,
             id=job_id or func.__name__,

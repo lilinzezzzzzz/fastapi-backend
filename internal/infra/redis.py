@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from redis.asyncio import ConnectionPool, Redis
 
 from internal.config.setting import setting
-from pkg.cache.client import new_cache_client, CacheClient
+from pkg.cache.client import CacheClient
 from pkg.logger_tool import logger
 
 # 1. 定义全局变量，初始为 None
@@ -39,7 +39,7 @@ def init_redis() -> None:
     # 初始化缓存客户端封装 (假设 new_cache_client 接受 session_provider)
     # 注意：我们传入 get_redis 函数本身，它是一个稳定的引用
     if cache_client is None:
-        cache_client = new_cache_client(session_provider=get_redis)
+        cache_client = CacheClient(session_provider=get_redis)
 
     logger.info("Redis initialized successfully.")
 

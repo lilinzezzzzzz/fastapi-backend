@@ -9,10 +9,10 @@ from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
 from internal.dao.user import user_dao
+from internal.infra.anyio_task import anyio_task_manager
 from internal.infra.database import get_session
 from internal.models.user import User
 from internal.core.exception import AppException
-from pkg.anyio_task_manager import anyio_task_manager
 from pkg.logger_tool import logger
 from pkg.orm.builder import new_cls_querier, new_cls_updater, new_counter
 from pkg.resp_tool import response_factory
@@ -115,7 +115,7 @@ async def async_task():
 
 @router.get("/test_contextvars_on_asyncio_task", summary="测试Contextvars在Asyncio任务")
 async def test_contextvars_on_asyncio_task():
-    await  anyio_task_manager.add_task("test", async_task)
+    await  anyio_task_manager.add_task("test", coro_func=async_task)
     return response_factory.resp_200()
 
 
@@ -289,7 +289,7 @@ async def fake_stream_generator():
         await asyncio.sleep(3)
 
 
-@router.get("/chat/sse-stream/timeout", summary= "测试SSE超时控制")
+@router.get("/chat/sse-stream/timeout", summary="测试SSE超时控制")
 async def chat_endpoint(request: Request):
     wrapped_generator = stream_with_chunk_control(
         request,

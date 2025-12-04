@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 
 from internal.config.setting import setting
+from internal.infra.anyio_task import init_anyio_task_manager
 from internal.infra.database import init_db, close_db
 from internal.infra.redis import init_redis, close_redis
 from pkg import SYS_ENV
@@ -89,6 +90,8 @@ async def lifespan(_app: FastAPI):
     init_db()
     # 初始化 Redis
     init_redis()
+    # 初始化 AnyIO Task Manager
+    init_anyio_task_manager()
 
     logger.info("Check completed, Application will start.")
 
