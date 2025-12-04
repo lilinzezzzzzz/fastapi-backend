@@ -370,7 +370,7 @@ class BaseBuilder[T: ModelMixin]:
         修复了空列表逻辑：空列表应该返回 False 条件，而不是返回 self (忽略条件)。
         """
         if not values:
-            raise ValueError("in_() func values cannot be empty")
+            raise ValueError(f"in_() func values cannot be empty for column {column}")
 
         unique = unique_list(values, exclude_none=True)
 
