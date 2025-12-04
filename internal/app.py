@@ -5,11 +5,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 
-from internal.aps_tasks import init_apscheduler
 from internal.config.setting import setting
 from internal.infra.database import init_db, close_db
 from internal.infra.redis import init_redis, close_redis
-from pkg import SYS_ENV, SYS_NAMESPACE
+from pkg import SYS_ENV
 from pkg.logger_tool import logger
 from pkg.resp_tool import response_factory
 
@@ -90,8 +89,6 @@ async def lifespan(_app: FastAPI):
     init_db()
     # 初始化 Redis
     init_redis()
-    # 初始化 APScheduler
-    init_apscheduler()
 
     logger.info("Check completed, Application will start.")
 
