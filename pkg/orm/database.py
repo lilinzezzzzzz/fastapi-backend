@@ -67,9 +67,6 @@ class Base(DeclarativeBase):
 class ModelMixin(Base):
     """
     通用模型 Mixin
-    优化点：
-    1. save 只做 INSERT，update 只做 UPDATE
-    2. 字段补全逻辑统一，减少冗余代码
     """
     __abstract__ = True
 
@@ -86,7 +83,7 @@ class ModelMixin(Base):
         super().__init__(**kwargs)
 
     # ==========================================================================
-    # 1. 工厂与批量操作
+    # 1. 工厂方法
     # ==========================================================================
 
     @classmethod
@@ -94,49 +91,75 @@ class ModelMixin(Base):
         """
         创建一个新的、填充好默认值的实例（Transient 状态）。
         """
-        # 1. 过滤参数
         valid_cols = set(cls.get_column_names())
         clean_kwargs = {k: v for k, v in kwargs.items() if k in valid_cols}
 
-        # 2. 实例化
         ins = cls(**clean_kwargs)
-
-        # 3. 补全字段 (ID, Time, Context)
-        ins._fill_insert_fields()
-
+        # 补全实例插入所需的默认值
+        ins._fill_ins_insert_fields()
         return ins
 
+    # ==========================================================================
+    # 2. 批量操作 (Batch)
+    # ==========================================================================
+
     @classmethod
-    async def insert(cls, *, items: list[dict[str, Any]], session_provider: SessionProvider) -> None:
+    async def insert_rows(cls, *, rows: list[dict[str, Any]], session_provider: SessionProvider) -> None:
         """
-        高性能批量插入 (Core Insert)。
-        会自动补全 ID, created_at, updated_at, creator_id 等。
+        [Batch Dict] 高性能批量插入字典。
+        命名为 insert_rows 以明确输入是行数据(字典)。
         """
-        if not items:
+        if not rows:
             return
 
-        # 获取一次公共默认值，稍微提升循环效率
+        # 预获取公共默认值 (时间, UserID)
         defaults = cls._get_context_defaults()
 
-        # 处理每一条数据
-        db_values = [cls._prepare_batch_data(item, defaults) for item in items]
+        # 处理字典数据
+        db_values = [cls._fill_dict_insert_fields(row, defaults) for row in rows]
 
         try:
             async with session_provider() as sess:
                 async with sess.begin():
                     await sess.execute(insert(cls).values(db_values))
         except Exception as e:
-            raise RuntimeError(f"{cls.__name__} insert failed: {e}") from e
+            raise RuntimeError(f"{cls.__name__} insert_rows failed: {e}") from e
+
+    @classmethod
+    async def insert_instances(cls, *, items: list["ModelMixin"], session_provider: SessionProvider) -> None:
+        """
+        [Batch Instance] 高性能批量插入对象实例。
+        适用于：使用 create() 创建了多个对象，想要一次性写入数据库。
+        """
+        if not items:
+            return
+
+        db_values = []
+        for ins in items:
+            # 1. 确保每个实例的 ID 和 时间戳 都已填充
+            #    (即使用户手动 User() 出来的，这里也会补全)
+            ins._fill_ins_insert_fields()
+
+            # 2. 提取为字典
+            db_values.append(ins._extract_db_values())
+
+        try:
+            async with session_provider() as sess:
+                async with sess.begin():
+                    # 3. 使用 Core Insert 批量写入
+                    await sess.execute(insert(cls).values(db_values))
+                    # 注意：执行后，items 列表中的 python 对象依然保持 Transient 状态，
+                    # 但它们身上的 ID 和数据是完整的，可用于只读业务逻辑。
+        except Exception as e:
+            raise RuntimeError(f"{cls.__name__} insert_instances failed: {e}") from e
 
     # ==========================================================================
-    # 2. 实例操作 (CRUD)
+    # 3. 单例操作 (CRUD)
     # ==========================================================================
 
     async def save(self, session_provider: SessionProvider) -> None:
         """
         [Strict Insert] 仅用于保存新对象。
-        如果是新对象 -> Core Insert (高性能)
-        如果是旧对象 -> 抛出异常 (强制使用 update)
         """
         state = inspect(self)
 
@@ -148,13 +171,12 @@ class ModelMixin(Base):
                 f"Please use update() instead."
             )
 
-        # 1. 确保字段补全 (防止用户是手动 User() 而非 create() 出来的)
-        self._fill_insert_fields()
+        # 1. 补全实例插入字段
+        self._fill_ins_insert_fields()
 
         # 2. 提取纯字典
         data = self._extract_db_values()
 
-        # 3. 执行 Core Insert
         try:
             async with session_provider() as sess:
                 async with sess.begin():
@@ -164,17 +186,26 @@ class ModelMixin(Base):
 
     async def update(self, session_provider: SessionProvider, **kwargs) -> None:
         """
-        [Update] 更新对象。自动处理 updated_at 和 updater_id。
+        [Strict Update] 仅用于更新已存在的对象。
         """
-        # 1. 设置传入的属性
+        state = inspect(self)
+
+        # 严格检查：禁止对 Transient (未入库) 对象调用 update
+        if state.transient:
+            raise RuntimeError(
+                f"update() is strictly for UPDATE operations on existing records. "
+                f"Object {self.__class__.__name__} is new (transient). "
+                f"Please use save() or insert_instances() first."
+            )
+
+        # 1. 设置属性
         for column_name, value in kwargs.items():
             if self.has_column(column_name):
                 setattr(self, column_name, value)
 
-        # 2. 补全更新追踪字段 (Time, Updater)
-        self._fill_update_fields()
+        # 2. 补全实例更新字段 (updated_at, updater_id)
+        self._fill_ins_update_fields()
 
-        # 3. 使用 Session.add 触发 ORM Update
         try:
             async with session_provider() as sess:
                 async with sess.begin():
@@ -184,29 +215,30 @@ class ModelMixin(Base):
 
     async def soft_delete(self, session_provider: SessionProvider) -> None:
         if self.has_deleted_at_column():
-            # 复用 update 逻辑，它会自动处理 updated_at
+            # update 方法内部会做状态检查和 updated_at 处理
             await self.update(session_provider, **{self.deleted_at_column_name(): get_utc_without_tzinfo()})
 
     # ==========================================================================
-    # 3. 内部辅助方法 (Logic Optimization)
+    # 4. 字段补全辅助方法 (Renamed & Refactored)
     # ==========================================================================
 
     @staticmethod
     def _get_context_defaults() -> dict[str, Any]:
-        """[内部] 获取当前上下文的通用默认值 (时间, 用户ID, 雪花ID)"""
+        """获取通用的上下文默认值"""
         return {
             "now": get_utc_without_tzinfo(),
-            "user_id": ctx.get_user_id(),
-            "new_id": generate_snowflake_id()
+            "user_id": ctx.get_user_id()
         }
 
-    def _fill_insert_fields(self):
-        """[Instance] 插入前补全实例字段"""
+    def _fill_ins_insert_fields(self):
+        """
+        [Instance Insert] 补全实例插入所需的字段：ID, CreatedAt, Creator
+        """
         defaults = self._get_context_defaults()
 
-        # ID
+        # ID (如果此时没有ID，生成一个)
         if not self.id:
-            self.id = defaults["new_id"]
+            self.id = generate_snowflake_id()
 
         # Time
         if not self.created_at:
@@ -219,11 +251,12 @@ class ModelMixin(Base):
             self.creator_id = defaults["user_id"]
 
         if self.has_updater_id_column() and not self.updater_id:
-            # 新建时 updater 可以为空，或者跟 creator 一致，视业务而定，这里留空
             self.updater_id = None
 
-    def _fill_update_fields(self):
-        """[Instance] 更新前补全实例字段"""
+    def _fill_ins_update_fields(self):
+        """
+        [Instance Update] 补全实例更新所需的字段：UpdatedAt, Updater
+        """
         if self.has_updated_at_column():
             setattr(self, self.updated_at_column_name(), get_utc_without_tzinfo())
 
@@ -231,19 +264,19 @@ class ModelMixin(Base):
             setattr(self, self.updater_id_column_name(), ctx.get_user_id())
 
     @classmethod
-    def _prepare_batch_data(cls, raw_data: dict[str, Any], defaults: dict[str, Any] = None) -> dict[str, Any]:
-        """[Dict] 准备批量插入的数据字典"""
+    def _fill_dict_insert_fields(cls, raw_data: dict[str, Any], defaults: dict[str, Any]) -> dict[str, Any]:
+        """
+        [Dict Insert] 补全字典插入所需的字段。
+        """
         data = raw_data.copy()
-        if defaults is None:
-            defaults = cls._get_context_defaults()
 
         # Time
         data.setdefault("created_at", defaults["now"])
         data.setdefault("updated_at", defaults["now"])
 
-        # ID
+        # ID (批量字典插入时，必须为每条数据单独生成ID)
         if "id" not in data:
-            data["id"] = generate_snowflake_id()  # 批量时每个ID必须不同，不能复用 defaults['new_id']
+            data["id"] = generate_snowflake_id()
 
         # Context
         if cls.has_creator_id_column() and "creator_id" not in data and defaults["user_id"]:
@@ -252,18 +285,16 @@ class ModelMixin(Base):
         if cls.has_updater_id_column() and "updater_id" not in data:
             data["updater_id"] = None
 
-        # Filter Columns
+        # 过滤无效列
         valid_cols = set(cls.get_column_names())
         return {k: v for k, v in data.items() if k in valid_cols}
 
     def _extract_db_values(self) -> dict[str, Any]:
         """[Instance -> Dict] 提取实例数据用于 Core Insert"""
         values = {}
-        mapper = inspect(self.__class__)
         valid_cols = set(self.get_column_names())
 
         for col_name in valid_cols:
-            # 仅提取已加载/已赋值的属性
             if hasattr(self, col_name):
                 val = getattr(self, col_name)
                 values[col_name] = val
@@ -275,7 +306,6 @@ class ModelMixin(Base):
             for col in self.get_column_names()
             if not exclude_column or col not in exclude_column
         }
-
     # ==========================================================================
     # 4. 反射与元数据工具
     # ==========================================================================
