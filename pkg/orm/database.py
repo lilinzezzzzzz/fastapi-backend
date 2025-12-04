@@ -466,10 +466,11 @@ class BaseDao[T: ModelMixin]:
         return UpdateBuilder(model_ins=ins, session_provider=self._session_provider)
 
     # --- Common Methods ---
-    async def query_by_id_or_none(
+    async def query_by_primary_id(
             self,
             primary_id: int,
-            *, creator_id: int = None,
+            *,
+            creator_id: int = None,
             include_deleted: bool = False
     ) -> T | None:
         qb = self.querier_inc_deleted if include_deleted else self.querier
