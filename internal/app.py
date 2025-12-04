@@ -8,6 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from internal.aps_tasks import apscheduler_manager
 from internal.config.setting import setting
 from internal.constants import REDIS_KEY_LOCK_PREFIX
+from internal.infra.database import init_db, close_db
 from internal.infra.default_redis import cache_client
 from pkg import SYS_ENV, SYS_NAMESPACE
 from pkg.logger_tool import logger
@@ -110,6 +111,8 @@ async def lifespan(_app: FastAPI):
 
     cur_pid = os.getpid()
     logger.info(f"Current PID: {cur_pid}")
+    # 启动时初始化 DB
+    init_db()
 
     is_scheduler_master = False
     if SYS_NAMESPACE in ["dev", "test", "canary", "prod"]:
@@ -127,4 +130,5 @@ async def lifespan(_app: FastAPI):
         ...
         # await shutdown_scheduler(cur_pid)
     # 关闭时的清理逻辑
+    await close_db()
     logger.warning("Application is about to close.")
