@@ -82,8 +82,9 @@ class ModelMixin:
     # --- 2. 批量操作方法 ---
 
     @classmethod
-    async def add_all_dict(
+    async def insert_batch(
             cls,
+            *,
             items: list[dict[str, Any]],
             session_provider: SessionProvider
     ) -> None:
@@ -109,7 +110,7 @@ class ModelMixin:
             raise RuntimeError(f"{cls.__name__} add_all_dict (insert) failed: {e}") from e
 
     @classmethod
-    async def add_all_ins(
+    async def add_batch(
             cls,
             ins_list: Sequence["ModelMixin"],
             session_provider: SessionProvider
