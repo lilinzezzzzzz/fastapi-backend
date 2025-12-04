@@ -1,8 +1,7 @@
-from pydantic import Field
 from typing import Annotated
 
-from pkg.orm.model_mixin import ModelMixin
+from pydantic import Field, BaseModel
 
 
-class UserReqSchema(ModelMixin):
+class UserReqSchema(BaseModel):
     name: Annotated[..., Field(min_length=1, max_length=20)]
