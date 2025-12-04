@@ -33,7 +33,7 @@ celery_client = CeleryClient(
 celery_app: Celery = celery_client.app
 
 
-def init_celery():
+def ping_celery():
     """
     这个函数依然保留，但在 Lifespan 中调用。
     它的作用不再是'创建对象'，而是'检查连接'或'打印日志'。

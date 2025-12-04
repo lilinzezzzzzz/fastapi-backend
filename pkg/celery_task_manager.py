@@ -10,7 +10,7 @@ from kombu.utils.uuid import uuid
 
 # 引入之前的数据库/Redis管理函数 (确保路径正确)
 from internal.infra.database import init_db, close_db
-# from internal.infra.default_redis import init_redis, close_redis # 如果需要Redis
+from internal.infra.redis import init_redis, close_redis  # 如果需要Redis
 from pkg.logger_tool import logger
 
 try:
@@ -243,7 +243,7 @@ def setup_worker_process_resources(**kwargs):
     try:
         logger.info(f"Initializing DB for worker process (PID: {import_os().getpid()})...")
         init_db()
-        # init_redis() # 如有需要
+        init_redis()
     except Exception as e:
         logger.critical(f"Worker process initialization failed: {e}")
         raise e
@@ -259,8 +259,10 @@ def teardown_worker_process_resources(**kwargs):
         loop = asyncio.get_event_loop()
         if loop.is_running():
             loop.create_task(close_db())
+            loop.create_task(close_redis())
         else:
             asyncio.run(close_db())
+            asyncio.run(close_redis())
     except Exception as e:
         # 进程即将销毁，记录日志即可
         logger.warning(f"Error closing DB in worker: {e}")
