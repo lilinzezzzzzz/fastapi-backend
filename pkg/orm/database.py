@@ -254,14 +254,15 @@ class ModelMixin(Base):
             self.updater_id = None
 
     def _fill_ins_update_fields(self):
-        """
-        [Instance Update] 补全实例更新所需的字段：UpdatedAt, Updater
-        """
+        """[Instance Update] 补全实例更新所需的字段"""
+        # 优化：统一使用 _get_context_defaults 获取时间与用户
+        defaults = self._get_context_defaults()
+
         if self.has_updated_at_column():
-            setattr(self, self.updated_at_column_name(), get_utc_without_tzinfo())
+            setattr(self, self.updated_at_column_name(), defaults["now"])
 
         if self.has_updater_id_column():
-            setattr(self, self.updater_id_column_name(), ctx.get_user_id())
+            setattr(self, self.updater_id_column_name(), defaults["user_id"])
 
     @classmethod
     def _fill_dict_insert_fields(cls, raw_data: dict[str, Any], defaults: dict[str, Any]) -> dict[str, Any]:
@@ -306,6 +307,7 @@ class ModelMixin(Base):
             for col in self.get_column_names()
             if not exclude_column or col not in exclude_column
         }
+
     # ==========================================================================
     # 4. 反射与元数据工具
     # ==========================================================================
