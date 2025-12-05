@@ -1,14 +1,13 @@
 import sys
 import pytest
 import pytest_asyncio  # <--- 新增导入
-import asyncio
 import os
 import types
 from unittest.mock import MagicMock
 from datetime import datetime
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine
 
 # ==========================================
 # 1. 混合 Mock 策略 (保持不变，这部分是正确的)
@@ -53,7 +52,7 @@ sys.modules["pkg.snowflake_tool"] = mock_snowflake
 # 2. 导入目标代码
 # ==========================================
 try:
-    from pkg.orm.database import ModelMixin, BaseDao, Base, new_async_session_maker
+    from pkg.database import ModelMixin, BaseDao, Base, new_async_session_maker
 except ImportError as e:
     print(f"Import Error: {e}")
     print(f"Looking for pkg at: {pkg_path}")

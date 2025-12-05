@@ -1,8 +1,6 @@
-from typing import ClassVar
-
 from internal.infra.database import get_session
 from internal.models.user import User
-from pkg.orm.database import BaseDao
+from pkg.database import BaseDao
 
 
 class UserDao(BaseDao[User]):
