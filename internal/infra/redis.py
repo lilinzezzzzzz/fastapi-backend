@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from redis.asyncio import ConnectionPool, Redis
 
 from internal.config.setting import setting
-from pkg.cache.client import CacheClient
+from pkg.cache import CacheClient
 from pkg.logger_tool import logger
 
 # 1. 定义全局变量，初始为 None

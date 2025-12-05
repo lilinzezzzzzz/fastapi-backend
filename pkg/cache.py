@@ -1,15 +1,18 @@
 import asyncio
 import time
 import uuid
-from typing import Any
+from contextlib import AbstractAsyncContextManager
+from typing import Any, Callable
 
 from fastapi import status
 from loguru import logger
 from orjson import JSONDecodeError
+from redis.asyncio import Redis
 
 from internal.core.exception import AppException
 from pkg import create_uuid_token, orjson_dumps, orjson_loads, token_cache_key, token_list_cache_key
-from pkg.cache.types import SessionProvider
+
+SessionProvider = Callable[[], AbstractAsyncContextManager[Redis]]
 
 
 class CacheClient:
