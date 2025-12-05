@@ -21,7 +21,6 @@ from anyio.abc import TaskGroup
 from pkg.logger_tool import logger
 
 CPU = max(1, multiprocessing.cpu_count())
-# 稍微调整参数逻辑，确保合理
 GLOBAL_MAX_DEFAULT = min(max(32, 4 * CPU), 256)
 THREAD_MAX_DEFAULT = min(max(16, (2 * GLOBAL_MAX_DEFAULT) // 3), 128)
 PROCESS_MAX_DEFAULT = max(1, min(CPU, 8))
@@ -69,13 +68,14 @@ class AnyioTaskManager:
             active_tasks = list(self.tasks.values())
             for info in active_tasks:
                 try:
+                    # 这会触发 _run_task_inner 中的 CancelledError
                     info.scope.cancel()
                 except Exception as e:
                     logger.warning(f"Error canceling task {info.task_id}: {e}")
 
         if self._tg_started and self._tg is not None:
             try:
-                # 退出 TaskGroup 会等待所有任务取消完成
+                # 退出 TaskGroup 会等待所有任务取消完成（现在 CancelScope 生效了，这里会很快）
                 await self._tg.__aexit__(None, None, None)
             except Exception as e:
                 logger.error(f"Error closing TaskGroup: {e}")
@@ -88,10 +88,8 @@ class AnyioTaskManager:
     @staticmethod
     def get_coro_func_name(func: Callable[..., Any]) -> str:
         if getattr(func, "__name__", None) == "<lambda>":
-            # 如果确实需要支持 lambda，可以返回 "lambda:<id>"，但通常不建议
             return "lambda_func"
 
-        # 递归解包 partial
         while isinstance(func, partial):
             func = func.func
 
@@ -112,39 +110,40 @@ class AnyioTaskManager:
         coro_name = info.name
         task_id = info.task_id
 
-        try:
-            async with self._global_limiter:
-                logger.info(f"Task {coro_name} [{task_id}] started.")
+        # [重要修复] 必须在此处进入 scope 上下文，外部的 cancel() 才能生效
+        with info.scope:
+            try:
+                async with self._global_limiter:
+                    logger.info(f"Task {coro_name} [{task_id}] started.")
 
-                # 统一超时逻辑
-                if timeout and timeout > 0:
-                    with fail_after(timeout):
+                    if timeout and timeout > 0:
+                        with fail_after(timeout):
+                            result = await coro_func(*args_tuple, **kwargs_dict)
+                    else:
                         result = await coro_func(*args_tuple, **kwargs_dict)
-                else:
-                    result = await coro_func(*args_tuple, **kwargs_dict)
 
-                info.status = "completed"
-                info.result = result
-                logger.info(f"Task {coro_name} [{task_id}] completed.")
+                    info.status = "completed"
+                    info.result = result
+                    logger.info(f"Task {coro_name} [{task_id}] completed.")
 
-        except TimeoutError as te:
-            info.status = "timeout"
-            info.exception = te
-            logger.error(f"Task {coro_name} [{task_id}] timed out after {timeout}s.")
-        except get_cancelled_exc_class():
-            info.status = "cancelled"
-            logger.info(f"Task {coro_name} [{task_id}] cancelled.")
-            # 必须重新抛出 CancelledError 以便 anyio 正确处理取消传播，
-            # 但这里我们是在 fire-and-forget 的顶层包装里，可以吞掉它，
-            # 只要确保 info 状态更新即可。
-        except BaseException as e:
-            info.status = "failed"
-            info.exception = e
-            logger.error(f"Task {coro_name} [{task_id}] failed, err={e}", exc_info=True)
-        finally:
-            # 安全移除任务
-            async with self._lock:
-                self.tasks.pop(task_id, None)
+            except TimeoutError as te:
+                info.status = "timeout"
+                info.exception = te
+                logger.error(f"Task {coro_name} [{task_id}] timed out after {timeout}s.")
+            except get_cancelled_exc_class():
+                # 任务被取消 (包括 shutdown 或 cancel_task)
+                info.status = "cancelled"
+                logger.info(f"Task {coro_name} [{task_id}] cancelled.")
+                # 在这里吞掉 CancelledError 是安全的，因为这是最顶层的任务包装器，
+                # 我们不希望它崩掉整个 TaskGroup（虽然 AnyIO TaskGroup 默认容忍，但显式处理更好）
+            except BaseException as e:
+                info.status = "failed"
+                info.exception = e
+                logger.error(f"Task {coro_name} [{task_id}] failed, err={e}", exc_info=True)
+            finally:
+                # 安全移除任务
+                async with self._lock:
+                    self.tasks.pop(task_id, None)
 
     async def _execute_sync(
             self,
@@ -161,21 +160,24 @@ class AnyioTaskManager:
         logger.info(f"Task {func_name} started in {backend}.")
         bound = partial(sync_func, *args, **kwargs)
 
-        # 定义内部执行函数，显式区分后端以满足类型检查
+        # 定义内部执行函数，显式区分后端以解决参数名弃用问题
         async def _run():
             if backend == "thread":
+                # AnyIO 4.1.0+: thread 使用 abandon_on_cancel
                 return await to_thread.run_sync(
-                    bound, cancellable=cancellable, limiter=self._thread_limiter
-                ) # type: ignore
+                    bound, abandon_on_cancel=cancellable, limiter=self._thread_limiter
+                )  # type: ignore
             else:
+                # process 依然使用 cancellable
                 return await to_process.run_sync(
                     bound, cancellable=cancellable, limiter=self._process_limiter
-                ) # type: ignore
+                )  # type: ignore
 
         if timeout and timeout > 0:
             with fail_after(timeout):
                 return await _run()
         return await _run()
+
     # ---------- public APIs ----------
     async def add_task(
             self,
@@ -206,7 +208,7 @@ class AnyioTaskManager:
             info = TaskInfo(task_id=task_id, name=coro_name, scope=scope)
             self.tasks[task_id] = info
 
-            # 使用 start_soon 提交到 TaskGroup
+            # scope 仅在这里传递，但在 _run_task_inner 内部才被激活
             self._tg.start_soon(
                 self._run_task_inner, info, coro_func, args_tuple, kwargs_dict, timeout
             )
@@ -216,6 +218,7 @@ class AnyioTaskManager:
         async with self._lock:
             info = self.tasks.get(task_id)
             if info:
+                # 现在因为 _run_task_inner 处于 with info.scope 中，这行代码将有效
                 info.scope.cancel()
                 logger.info(f"Triggered cancellation for Task {task_id}.")
                 return True
@@ -255,16 +258,14 @@ class AnyioTaskManager:
                     results[index] = None
                 except get_cancelled_exc_class():
                     logger.debug(f"Task-{index} ({coro_name}) cancelled.")
-                    # 批量任务中，由于是 gather，通常不向上抛出取消，除非外部整个取消
-                    # 但如果是 global_timeout 触发的，这里会被取消
+                    # 必须允许取消传播，以便 move_on_after(global_timeout) 能生效
+                    # 或者如果被外部取消，整个 batch 都应该停
                     pass
                 except Exception as inner_exc:
                     logger.error(f"Task-{index} ({coro_name}) failed: {inner_exc}")
                     results[index] = None
 
         try:
-            # move_on_after 用于处理 global_timeout，超时后 scope 会被取消，
-            # 导致 TaskGroup 内的所有 _worker 被取消
             with move_on_after(global_timeout) as scope:
                 async with create_task_group() as tg:
                     for i, args_tuple in enumerate(args_tuple_list):
@@ -276,8 +277,6 @@ class AnyioTaskManager:
             logger.error(f"Batch task ({coro_name}) unexpected error: {e}")
 
         return results
-
-    # ---------- Synchronous Offloading APIs ----------
 
     async def run_in_thread(
             self,
@@ -350,18 +349,19 @@ class AnyioTaskManager:
 
         async def _worker(idx, a, k):
             bound = partial(sync_func, *(a or ()), **(k or {}))
+
             async with self._global_limiter:
                 try:
-                    # 包装执行逻辑，显式分支处理
                     async def _run():
                         if backend == "thread":
+                            # Fix deprecation
                             return await to_thread.run_sync(
-                                bound, cancellable=cancellable, limiter=self._thread_limiter
-                            ) # type: ignore
+                                bound, abandon_on_cancel=cancellable, limiter=self._thread_limiter
+                            )  # type: ignore
                         else:
                             return await to_process.run_sync(
                                 bound, cancellable=cancellable, limiter=self._process_limiter
-                            ) # type: ignore
+                            )  # type: ignore
 
                     if timeout and timeout > 0:
                         with fail_after(timeout):
