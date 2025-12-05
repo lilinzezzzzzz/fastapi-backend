@@ -1,200 +1,159 @@
-# FastAPI 项目数据结构选型指南
 
-本指南旨在规范 FastAPI 项目中各类数据对象的使用，明确分层架构，防止代码耦合。
+### 1\. 核心最佳实践 (Must-Dos)
 
-## 1\. 四大金刚：角色定位总表
+#### ✅ 必须正确处理可变默认值 (Mutable Defaults)
 
-我们在原有基础上增加了 **SQLAlchemy ORM**，形成了完整的后端数据链路。
+这是最常见也是最危险的错误。永远不要直接使用 `list` 或 `dict` 作为默认值。
 
-| 工具 | 核心特性 | 在架构中的角色 | 所属层级 (Layer) |
-| :--- | :--- | :--- | :--- |
-| **Pydantic** | 运行时校验、序列化、文档生成 | **门面 (DTO)** | **接口层 (API/Web)** <br> 负责进出网关的数据清洗 |
-| **SQLAlchemy** | 映射数据库表、关系管理、SQL 生成 | **存储 (Entity)** | **数据层 (Repository/DB)** <br> 负责持久化数据 |
-| **@dataclass** | 轻量、支持业务方法、无校验开销 | **核心 (Domain)** | **服务层 (Service)** <br> 负责纯粹的业务逻辑运算 |
-| **NamedTuple** | 不可变、内存极小 | **工具 (Utils)** | **通用层 (Common)** <br> 负责简单的多值传递 |
-
------
-
-## 2\. 详细选型与最佳实践
-
-### 2.1 数据库层：SQLAlchemy ORM Models
-
-**场景：** 定义数据库表结构、外键关系。
-**核心原则：** **ORM 模型仅用于与数据库交互。严禁直接作为 API 响应返回给前端（必须经过 Pydantic 转换）。**
-
-  * **最佳实践：**
-
-    1.  **使用 SQLAlchemy 2.0 语法：** 使用 `DeclarativeBase` 和 类型注解 (`Mapped[...]`)，这与 Python 的类型系统结合得最好。
-    2.  **区分 Nullable：** 数据库层面的 `nullable=True` 和 Pydantic 的 `Optional` 必须严格对应，否则会出错。
-    3.  **不要包含复杂业务逻辑：** ORM 模型应该很“笨”，只包含数据和关系。复杂的计算（如计算折扣后的价格）应放在 Service 层的 dataclass 或 Service 类中，或者使用 `@property`。
-
-  * **代码范例 (SQLAlchemy 2.0)：**
+  * **错误的做法：** `tags: list = []` (所有实例共享同一个列表)
+  * **正确的做法：** 使用 `field(default_factory=...)`
 
 <!-- end list -->
 
 ```python
-from sqlalchemy import String, ForeignKey
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from dataclasses import dataclass, field
+from typing import List
 
-class Base(DeclarativeBase):
-    pass
+@dataclass
+class User:
+    name: str
+    # ✅ 每个实例都会获得一个新的空列表
+    tags: List[str] = field(default_factory=list) 
+```
 
-# [DB Layer] 对应数据库中的 'users' 表
-class UserORM(Base):
-    __tablename__ = "users"
+#### ✅ 默认开启 `slots=True` (Python 3.10+)
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    username: Mapped[str] = mapped_column(String(50), unique=True)
-    password_hash: Mapped[str] = mapped_column(String) # 敏感数据！
-    
-    # 关系定义
-    items: Mapped[list["ItemORM"]] = relationship(back_populates="owner")
+除非你有非常具体的理由（如需要动态添加属性），否则应尽可能使用 `slots=True`。
+
+  * **好处：** 内存占用更低，访问属性速度更快。
+  * **用法：** `@dataclass(slots=True)`
+
+#### ✅ 优先考虑不可变性 `frozen=True`
+
+如果你的数据对象不需要修改（例如配置项、DTO），将其设为不可变。
+
+  * **好处：** 线程安全，可哈希（可以用作字典的 key），代码意图更清晰。
+  * **用法：** `@dataclass(frozen=True)`
+
+#### ✅ 强制使用关键字参数 `kw_only=True` (Python 3.10+)
+
+当字段较多（超过3个）时，强制调用者使用关键字参数可以极大地提高可读性，并防止重构时的参数顺序错误。
+
+```python
+@dataclass(kw_only=True)
+class Config:
+    host: str
+    port: int
+    debug: bool = False
+
+# ✅ 必须这样调用：Config(host="localhost", port=8080)
+# ❌ Config("localhost", 8080) 会报错
 ```
 
 -----
 
-### 2.2 接口层：Pydantic (`BaseModel`)
+### 2\. `__post_init__` 的正确用法
 
-**场景：** 处理 HTTP 请求体 (Request Body) 和 响应体 (Response Body)。
-**与 ORM 的交互：** 它是 ORM 模型的“安全面具”。
+`__post_init__` 是 `dataclass` 唯一允许你插入逻辑的地方，但要克制使用。
 
-  * **最佳实践：**
-
-    1.  **屏蔽敏感字段：** 定义 `UserResponse` 时，**不要**包含 `password_hash` 字段。这是 Pydantic 存在的最大意义之一。
-    2.  **ORM 模式 (`from_attributes`)：** 这是一个杀手级特性，允许 Pydantic 直接读取 SQLAlchemy 对象并转换为 JSON。
-
-  * **代码范例：**
+  * **适合场景：**
+      * 计算派生字段（例如：根据 `firstName` 和 `lastName` 生成 `fullName`）。
+      * 轻量级验证（例如：检查 `age > 0`）。
+  * **不适合场景：**
+      * 复杂的业务逻辑。
+      * 耗时的操作（数据库查询、API 调用）。
+      * **深度验证**（如果需要复杂验证，请直接使用 Pydantic）。
 
 <!-- end list -->
 
 ```python
-from pydantic import BaseModel, ConfigDict
+@dataclass
+class Rectangle:
+    width: float
+    height: float
+    area: float = field(init=False) # 告诉 dataclass 这个字段不需要在 __init__ 中传参
 
-# [API Layer] 响应模型
-class UserResponse(BaseModel):
+    def __post_init__(self):
+        self.area = self.width * self.height
+```
+
+-----
+
+### 3\. 何时选择 Dataclass vs 其他工具
+
+不要把 `dataclass` 当作万能锤子。根据场景选择正确的工具：
+
+| 场景 | 推荐工具 | 原因 |
+| :--- | :--- | :--- |
+| **内部数据传递** | **Dataclass** | 标准库原生支持，性能好，开销小。 |
+| **外部数据验证 (API/JSON)** | **Pydantic** | Dataclass **不做**运行时类型检查。Pydantic 提供强大的解析和验证功能。 |
+| **简单的字典结构** | **TypedDict** | 如果你只需要给字典加类型提示，并不需要类的方法，用 `TypedDict` 更轻量。 |
+| **只读且极简** | **NamedTuple** | 比 Dataclass 更轻量，但不支持继承，且不支持默认值工厂。 |
+
+-----
+
+### 4\. 常见的“反模式” (Anti-Patterns)
+
+  * ❌ **反模式 1：把它当做普通的 Class**
+    如果你的类包含大量的方法和复杂的 `__init__` 逻辑，普通的 `class` 可能是更好的选择。Dataclass 的初衷是作为"数据的容器"。
+  * ❌ **反模式 2：忽略 `repr=False` 对敏感字段的处理**
+    如果字段包含密码或密钥，记得在 `field()` 中设置 `repr=False`，防止打印日志时泄露。
+    ```python
+    password: str = field(repr=False)
+    ```
+  * ❌ **反模式 3：继承噩梦**
+    Dataclass 的继承机制（尤其是涉及默认值字段的顺序时）非常脆弱。尽量通过 **组合 (Composition)** 而非继承来复用字段。
+
+-----
+
+### 5\. 终极示例代码
+
+这是一个结合了上述最佳实践的完整示例：
+
+```python
+from dataclasses import dataclass, field
+from typing import List, Optional
+from datetime import datetime
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class UserProfile:
+    """
+    一个不可变、高性能、强制关键字参数的用户资料类。
+    """
     id: int
     username: str
-    # 注意：这里没有 password_hash，确保安全
-
-    # 允许 Pydantic 读取 ORM 对象 (user.id) 而不仅仅是 dict (user['id'])
-    model_config = ConfigDict(from_attributes=True)
-```
-
------
-
-### 2.3 服务层：`@dataclass` (可选但推荐)
-
-**场景：** 当业务逻辑非常复杂，不希望依赖 ORM 的 Session 状态，也不希望依赖 Pydantic 的校验性能损耗时。
-
-  * **最佳实践：**
-      * **解耦 DB：** 从数据库查出 `UserORM` 后，可以将其转换为纯净的 `UserDomain` dataclass，然后在内存中进行复杂的费率计算。这样做的好处是，业务逻辑单元测试不需要 mock 数据库连接。
-
------
-
-## 3\. 经典数据流转图 (The Data Flow)
-
-理解这三个东西如何配合，是 FastAPI 项目的核心。
-
-```mermaid
-graph LR
-    Client((客户端))
+    email: str
+    # 敏感信息不包含在 repr 输出中
+    api_key: str = field(repr=False)
     
-    subgraph API Layer [接口层]
-        P_Req[Pydantic Request<br>UserCreate]
-        P_Res[Pydantic Response<br>UserResponse]
-    end
+    # 可变默认值必须使用 default_factory
+    roles: List[str] = field(default_factory=list)
     
-    subgraph Service Layer [业务层]
-        Logic[业务逻辑处理<br>Hash Password / Validation]
-    end
-    
-    subgraph DB Layer [数据层]
-        ORM[SQLAlchemy Model<br>UserORM]
-        DB[(Database)]
-    end
+    # 派生字段，不需要初始化传参
+    created_at: datetime = field(default_factory=datetime.now)
 
-    Client -- JSON Payload --> P_Req
-    P_Req -- Validated Data --> Logic
-    Logic -- Dict/Data --> ORM
-    ORM -- SQL Insert --> DB
-    
-    DB -- SQL Select --> ORM
-    ORM -- ORM Object --> P_Res
-    P_Res -- JSON Filtered --> Client
-```
+    def __post_init__(self):
+        # 轻量级验证
+        if "@" not in self.email:
+            raise ValueError("Invalid email format")
 
-### 核心转换代码演示
-
-这是开发者最容易写乱的地方，请参考标准写法：
-
-```python
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
-# 假设已导入上述定义的 UserORM, UserCreateRequest, UserResponse, get_db
-
-router = APIRouter()
-
-@router.post("/users/", response_model=UserResponse)
-def create_user(
-    user_in: UserCreateRequest, # 1. Pydantic 接收并校验数据
-    db: Session = Depends(get_db)
-):
-    # 2. 业务逻辑：处理数据 (例如 hash 密码)
-    fake_hashed_password = user_in.password + "hashed"
-    
-    # 3. 转换：Pydantic -> SQLAlchemy ORM
-    # 注意：这里我们手动映射，或者使用 user_in.model_dump() 配合解包
-    db_user = UserORM(
-        username=user_in.username,
-        password_hash=fake_hashed_password
+# 使用示例
+try:
+    user = UserProfile(
+        id=1, 
+        username="gemini_user", 
+        email="user@example.com", 
+        api_key="secret_123"
     )
-    
-    # 4. 持久化
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user) # 获取生成的 ID
-    
-    # 5. 返回：SQLAlchemy ORM -> Pydantic
-    # FastAPI 会利用 response_model=UserResponse 自动调用 from_attributes 逻辑
-    # 自动过滤掉 password_hash
-    return db_user 
+    print(user) 
+    # 输出: UserProfile(id=1, username='gemini_user', email='user@example.com', roles=[], created_at=...)
+    # 注意 api_key 未显示
+except ValueError as e:
+    print(f"Error: {e}")
 ```
 
------
+### 总结
 
-## 4\. 决策树 (更新版)
-
-1.  **我要定义数据库表结构？**
-
-      * 👉 **SQLAlchemy Model** (继承 `DeclarativeBase`)
-
-2.  **前端发给我的 JSON 数据格式？**
-
-      * 👉 **Pydantic BaseModel** (Request Schema)
-
-3.  **我要发给前端的 JSON 数据格式？**
-
-      * 👉 **Pydantic BaseModel** (Response Schema，配置 `from_attributes=True`)
-
-4.  **我在写纯业务逻辑，不需要校验也不存库，只在内存里跑？**
-
-      * 👉 **@dataclass**
-
-5.  **我在写一个工具函数，只需要返回两个值？**
-
-      * 👉 **NamedTuple**
-
------
-
-## 5\. 常见坑点 (Pitfalls)
-
-1.  **Lazy Loading 错误：**
-
-      * 当你把 ORM 对象传给 Pydantic 进行序列化时，如果 Pydantic 尝试访问一个未加载的关系字段（Relationship），且此时 DB Session 已经关闭，程序会崩溃。
-      * *解决：* 在查询时使用 `options(joinedload(...))` 预加载数据，或者确保 Pydantic 转换发生在 Session 关闭之前。
-
-2.  **混合使用：**
-
-      * 不要试图让一个类同时继承 `BaseModel` 和 SQLAlchemy 的 `Base`（虽然 SQLModel 做了这件事，但如果你使用原生库，请保持分离）。**“读写分离”在类定义上非常重要。**
-
-这个文档现在涵盖了从数据库到 API 的完整链路，非常适合作为团队的新人培训材料。
+对于大多数现代 Python 项目（3.10+），默认起手式应该是：
+`@dataclass(slots=True, frozen=True, kw_only=True)`
+只有当你确实需要可变性或兼容旧版本时，再移除这些参数。
