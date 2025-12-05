@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 
 from internal.config.setting import setting
-from internal.infra.anyio_task import init_anyio_task_manager
+from internal.infra.anyio_task import init_anyio_task_manager, stop_anyio_task_manager
 from internal.infra.database import init_db, close_db
 from internal.infra.redis import init_redis, close_redis
 from pkg import SYS_ENV
@@ -87,11 +87,11 @@ async def lifespan(_app: FastAPI):
     cur_pid = os.getpid()
     logger.info(f"Current PID: {cur_pid}")
     # 初始化 DB
-    init_db()
+    await init_db()
     # 初始化 Redis
-    init_redis()
+    await init_redis()
     # 初始化 AnyIO Task Manager
-    init_anyio_task_manager()
+    await init_anyio_task_manager()
 
     logger.info("Check completed, Application will start.")
 
@@ -100,4 +100,5 @@ async def lifespan(_app: FastAPI):
     # 关闭时的清理逻辑
     await close_db()
     await close_redis()
+    await stop_anyio_task_manager()
     logger.warning("Application is about to close.")

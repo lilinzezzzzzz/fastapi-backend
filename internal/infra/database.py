@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import (
 from internal.config.setting import setting
 from pkg import orjson_dumps, orjson_loads
 from pkg.logger_tool import logger
-from pkg.orm.base import new_async_engine, new_async_session_maker
+from pkg.database import new_async_engine, new_async_session_maker
 
 # 全局单例变量，初始为 None
 _engine: AsyncEngine | None = None
@@ -21,7 +21,7 @@ _session_maker: async_sessionmaker[AsyncSession] | None = None
 
 # ---------------------- 1. 生命周期管理 ----------------------
 
-def init_db() -> None:
+async def init_db() -> None:
     """
     初始化数据库连接池。
     应在 FastAPI lifespan 或 Celery worker_process_init 中调用。

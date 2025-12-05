@@ -75,7 +75,7 @@ class AnyioTaskManager:
 
         if self._tg_started and self._tg is not None:
             try:
-                # 退出 TaskGroup 会等待所有任务取消完成（现在 CancelScope 生效了，这里会很快）
+                # 退出 TaskGroup 会等待所有任务取消完成
                 await self._tg.__aexit__(None, None, None)
             except Exception as e:
                 logger.error(f"Error closing TaskGroup: {e}")
@@ -110,9 +110,9 @@ class AnyioTaskManager:
         coro_name = info.name
         task_id = info.task_id
 
-        # [重要修复] 必须在此处进入 scope 上下文，外部的 cancel() 才能生效
-        with info.scope:
-            try:
+        try:
+            # [Fix]: Scope 上下文包裹执行逻辑，确保异常抛出后上下文退出，不影响 finally
+            with info.scope:
                 async with self._global_limiter:
                     logger.info(f"Task {coro_name} [{task_id}] started.")
 
@@ -126,22 +126,22 @@ class AnyioTaskManager:
                     info.result = result
                     logger.info(f"Task {coro_name} [{task_id}] completed.")
 
-            except TimeoutError as te:
-                info.status = "timeout"
-                info.exception = te
-                logger.error(f"Task {coro_name} [{task_id}] timed out after {timeout}s.")
-            except get_cancelled_exc_class():
-                # 任务被取消 (包括 shutdown 或 cancel_task)
-                info.status = "cancelled"
-                logger.info(f"Task {coro_name} [{task_id}] cancelled.")
-                # 在这里吞掉 CancelledError 是安全的，因为这是最顶层的任务包装器，
-                # 我们不希望它崩掉整个 TaskGroup（虽然 AnyIO TaskGroup 默认容忍，但显式处理更好）
-            except BaseException as e:
-                info.status = "failed"
-                info.exception = e
-                logger.error(f"Task {coro_name} [{task_id}] failed, err={e}", exc_info=True)
-            finally:
-                # 安全移除任务
+        except get_cancelled_exc_class():
+            # 此时 info.scope 已退出，在这里处理取消逻辑
+            info.status = "cancelled"
+            logger.info(f"Task {coro_name} [{task_id}] cancelled.")
+        except TimeoutError as te:
+            info.status = "timeout"
+            info.exception = te
+            logger.error(f"Task {coro_name} [{task_id}] timed out after {timeout}s.")
+        except BaseException as e:
+            info.status = "failed"
+            info.exception = e
+            logger.error(f"Task {coro_name} [{task_id}] failed, err={e}", exc_info=True)
+        finally:
+            # [Safe Cleanup]: 此时不在 info.scope 中，使用 shield 保护清理过程
+            # 即使父级调用 shutdown 导致所有任务被取消，清理字典的操作也能完成
+            with anyio.CancelScope(shield=True):
                 async with self._lock:
                     self.tasks.pop(task_id, None)
 
@@ -160,7 +160,6 @@ class AnyioTaskManager:
         logger.info(f"Task {func_name} started in {backend}.")
         bound = partial(sync_func, *args, **kwargs)
 
-        # 定义内部执行函数，显式区分后端以解决参数名弃用问题
         async def _run():
             if backend == "thread":
                 # AnyIO 4.1.0+: thread 使用 abandon_on_cancel
@@ -168,7 +167,6 @@ class AnyioTaskManager:
                     bound, abandon_on_cancel=cancellable, limiter=self._thread_limiter
                 )  # type: ignore
             else:
-                # process 依然使用 cancellable
                 return await to_process.run_sync(
                     bound, cancellable=cancellable, limiter=self._process_limiter
                 )  # type: ignore
@@ -208,7 +206,6 @@ class AnyioTaskManager:
             info = TaskInfo(task_id=task_id, name=coro_name, scope=scope)
             self.tasks[task_id] = info
 
-            # scope 仅在这里传递，但在 _run_task_inner 内部才被激活
             self._tg.start_soon(
                 self._run_task_inner, info, coro_func, args_tuple, kwargs_dict, timeout
             )
@@ -218,7 +215,7 @@ class AnyioTaskManager:
         async with self._lock:
             info = self.tasks.get(task_id)
             if info:
-                # 现在因为 _run_task_inner 处于 with info.scope 中，这行代码将有效
+                # 触发任务内部的 CancelledError
                 info.scope.cancel()
                 logger.info(f"Triggered cancellation for Task {task_id}.")
                 return True
@@ -258,8 +255,6 @@ class AnyioTaskManager:
                     results[index] = None
                 except get_cancelled_exc_class():
                     logger.debug(f"Task-{index} ({coro_name}) cancelled.")
-                    # 必须允许取消传播，以便 move_on_after(global_timeout) 能生效
-                    # 或者如果被外部取消，整个 batch 都应该停
                     pass
                 except Exception as inner_exc:
                     logger.error(f"Task-{index} ({coro_name}) failed: {inner_exc}")
@@ -354,7 +349,6 @@ class AnyioTaskManager:
                 try:
                     async def _run():
                         if backend == "thread":
-                            # Fix deprecation
                             return await to_thread.run_sync(
                                 bound, abandon_on_cancel=cancellable, limiter=self._thread_limiter
                             )  # type: ignore
