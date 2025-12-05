@@ -36,17 +36,12 @@ class AnyioTaskManager:
         self._thread_limiter = CapacityLimiter(THREAD_MAX_DEFAULT)
         self._process_limiter = CapacityLimiter(PROCESS_MAX_DEFAULT)
 
-        self._tg = None
-        self._tg_started = False
-        self._lock = anyio.Lock()
-        self.tasks = {}
-        self.max_queue = ANYIO_TM_MAX_QUEUE
-        self.default_timeout = DEFAULT_TIMEOUT
-
         self._tg: TaskGroup | None = None
         self._tg_started = False
         self._lock = anyio.Lock()
         self.tasks: dict[str, TaskInfo] = {}
+        self.max_queue = ANYIO_TM_MAX_QUEUE
+        self.default_timeout = DEFAULT_TIMEOUT
 
     # ---------- lifecycle ----------
     async def start(self):
