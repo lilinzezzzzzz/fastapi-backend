@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from internal.models.user import User
-from internal.schemas.user import UserListResponseSchema, UserDetailSchema
+from internal.schemas.user import UserDetailSchema, UserListResponseSchema
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
