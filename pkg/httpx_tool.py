@@ -12,7 +12,7 @@ from pkg.logger_tool import logger
 
 class HTTPxResult:
     def __init__(
-        self, *, status_code: int, response: httpx.Response | None, error: str | None
+            self, *, status_code: int, response: httpx.Response | None, error: str | None
     ):
         self._status_code: int = status_code
         self._response = response
@@ -55,17 +55,17 @@ class HTTPXClient:
         self.headers = headers or {"Content-Type": "application/json"}
 
     async def _stream(
-        self,
-        method: str,
-        *,
-        url: str,
-        params: dict[str, Any] | None = None,
-        data: dict[str, Any] | None = None,
-        json: dict[str, Any] | None = None,
-        files: dict[str, Any] | None = None,
-        headers: dict[str, str] | None = None,
-        timeout: int | None = None,
-        chunk_size: int = 1024,
+            self,
+            method: str,
+            *,
+            url: str,
+            params: dict[str, Any] | None = None,
+            data: dict[str, Any] | None = None,
+            json: dict[str, Any] | None = None,
+            files: dict[str, Any] | None = None,
+            headers: dict[str, str] | None = None,
+            timeout: int | None = None,
+            chunk_size: int = 1024,
     ) -> AsyncGenerator[bytes, None]:
         url = url.strip()
         logger.info(
@@ -83,13 +83,13 @@ class HTTPXClient:
         try:
             async with httpx.AsyncClient(timeout=timeout or self.timeout) as client:
                 async with client.stream(
-                    method=method.upper(),
-                    url=url,
-                    params=params,
-                    data=None if files else data,
-                    json=None if files else json,
-                    files=files,
-                    headers=combined_headers,
+                        method=method.upper(),
+                        url=url,
+                        params=params,
+                        data=None if files else data,
+                        json=None if files else json,
+                        files=files,
+                        headers=combined_headers,
                 ) as response:
                     response.raise_for_status()
                     logger.info(
@@ -118,17 +118,17 @@ class HTTPXClient:
             raise exc
 
     async def _request(
-        self,
-        method: str,
-        url: str,
-        *,
-        params: dict[str, Any] | None = None,
-        data: dict[str, Any] | str | None = None,
-        json: dict[str, Any] | None = None,
-        files: dict[str, Any] | None = None,
-        headers: dict[str, str] | None = None,
-        timeout: int | None = None,
-        to_return: bool = False,
+            self,
+            method: str,
+            url: str,
+            *,
+            params: dict[str, Any] | None = None,
+            data: dict[str, Any] | str | None = None,
+            json: dict[str, Any] | None = None,
+            files: dict[str, Any] | None = None,
+            headers: dict[str, str] | None = None,
+            timeout: int | None = None,
+            to_return: bool = False,
     ) -> tuple[int | None, httpx.Response | None, str | None]:
         """
         :param method: HTTP 方法
@@ -199,13 +199,13 @@ class HTTPXClient:
             raise exc
 
     async def get(
-        self,
-        url: str,
-        *,
-        params: dict[str, Any] | None = None,
-        headers: dict[str, str] | None = None,
-        timeout: int | None = None,
-        to_return: bool = False,
+            self,
+            url: str,
+            *,
+            params: dict[str, Any] | None = None,
+            headers: dict[str, str] | None = None,
+            timeout: int | None = None,
+            to_return: bool = False,
     ) -> tuple[int | None, dict | None, str | None]:
         status_code, httpx_response, error_message = await self._request(
             "GET",
@@ -225,15 +225,15 @@ class HTTPXClient:
         return status_code, resp, error_message
 
     async def post(
-        self,
-        url: str,
-        *,
-        json: dict[str, Any] | None = None,
-        data: dict[str, Any] | str | None = None,
-        files: dict[str, Any] | None = None,
-        headers: dict[str, str] | None = None,
-        timeout: int | None = None,
-        to_return: bool = False,
+            self,
+            url: str,
+            *,
+            json: dict[str, Any] | None = None,
+            data: dict[str, Any] | str | None = None,
+            files: dict[str, Any] | None = None,
+            headers: dict[str, str] | None = None,
+            timeout: int | None = None,
+            to_return: bool = False,
     ) -> tuple[int | None, dict | None, str | None]:
         status_code, httpx_response, error_message = await self._request(
             "POST",
@@ -255,15 +255,15 @@ class HTTPXClient:
         return status_code, resp, error_message
 
     async def put(
-        self,
-        url: str,
-        *,
-        json: dict[str, Any] | None = None,
-        data: dict[str, Any] | str | None = None,
-        files: dict[str, Any] | None = None,
-        headers: dict[str, str] | None = None,
-        timeout: int | None = None,
-        to_return: bool = False,
+            self,
+            url: str,
+            *,
+            json: dict[str, Any] | None = None,
+            data: dict[str, Any] | str | None = None,
+            files: dict[str, Any] | None = None,
+            headers: dict[str, str] | None = None,
+            timeout: int | None = None,
+            to_return: bool = False,
     ) -> tuple[int | None, dict | None, str | None]:
         status_code, httpx_response, error_message = await self._request(
             "PUT",
@@ -285,13 +285,13 @@ class HTTPXClient:
         return status_code, resp, error_message
 
     async def delete(
-        self,
-        url: str,
-        *,
-        json: dict[str, Any] | None = None,
-        headers: dict[str, str] | None = None,
-        timeout: int | None = None,
-        to_return: bool = False,
+            self,
+            url: str,
+            *,
+            json: dict[str, Any] | None = None,
+            headers: dict[str, str] | None = None,
+            timeout: int | None = None,
+            to_return: bool = False,
     ) -> tuple[int | None, dict | None, str | None]:
         status_code, httpx_response, error_message = await self._request(
             "DELETE",
@@ -311,13 +311,13 @@ class HTTPXClient:
         return status_code, resp, error_message
 
     async def download_bytes(
-        self,
-        url: str,
-        *,
-        params: dict[str, Any] | None = None,
-        headers: dict[str, str] | None = None,
-        timeout: int | None = None,
-        to_return: bool = False,
+            self,
+            url: str,
+            *,
+            params: dict[str, Any] | None = None,
+            headers: dict[str, str] | None = None,
+            timeout: int | None = None,
+            to_return: bool = False,
     ) -> Any:
         download_start = time.perf_counter()
         # 走原来的 _request 拿到完整 response
@@ -348,48 +348,45 @@ class HTTPXClient:
         return file_name, httpx_response.content, content_type
 
     async def stream_get(
-        self,
-        url: str,
-        *,
-        params: dict[str, Any] | None = None,
-        headers: dict[str, str] | None = None,
-        timeout: int | None = None,
-        chunk_size: int = 1024,
+            self,
+            url: str,
+            *,
+            params: dict[str, Any] | None = None,
+            headers: dict[str, str] | None = None,
+            timeout: int | None = None,
+            chunk_size: int = 1024,
     ) -> AsyncGenerator[bytes, None]:
         """
         流式GET请求
         """
         async for chunk in self._stream(
-            "GET",
-            url=url,
-            params=params,
-            headers=headers,
-            timeout=timeout,
-            chunk_size=chunk_size,
+                "GET",
+                url=url,
+                params=params,
+                headers=headers,
+                timeout=timeout,
+                chunk_size=chunk_size,
         ):
             yield chunk
 
     async def stream_post(
-        self,
-        url: str,
-        *,
-        json: dict[str, Any] | None = None,
-        headers: dict[str, str] | None = None,
-        timeout: int | None = None,
-        chunk_size: int = 1024,
+            self,
+            url: str,
+            *,
+            json: dict[str, Any] | None = None,
+            headers: dict[str, str] | None = None,
+            timeout: int | None = None,
+            chunk_size: int = 1024,
     ) -> AsyncGenerator[bytes, None]:
         """
         流式POST请求
         """
         async for chunk in self._stream(
-            "POST",
-            url=url,
-            json=json,
-            headers=headers,
-            timeout=timeout,
-            chunk_size=chunk_size,
+                "POST",
+                url=url,
+                json=json,
+                headers=headers,
+                timeout=timeout,
+                chunk_size=chunk_size,
         ):
             yield chunk
-
-
-httpx_cli = HTTPXClient()

@@ -21,6 +21,11 @@ except ImportError:
 LifecycleHook = Callable[[], Any] | Callable[[], Coroutine[Any, Any, Any]]
 
 
+def import_os():
+    import os
+    return os
+
+
 class CeleryClient:
     """
     Celery 工具类：封装任务提交、编排、状态查询及动态定时任务管理。
@@ -279,8 +284,3 @@ class CeleryClient:
                     logger.info("Worker shutdown hook executed successfully.")
                 except Exception as e:
                     logger.warning(f"Worker shutdown hook error: {e}")
-
-
-def import_os():
-    import os
-    return os

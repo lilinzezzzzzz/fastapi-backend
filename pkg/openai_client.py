@@ -153,13 +153,3 @@ class OpenAIClient:
             delta = chunk.choices[0].delta
             if hasattr(delta, "content") and delta.content:
                 yield delta.content
-
-
-def new_openai_client(
-        *,
-        base_url: str,
-        model: str,
-        timeout: int = 180,
-        api_key: str = "password"
-) -> OpenAIClient:
-    return OpenAIClient(base_url, model, timeout, api_key)
