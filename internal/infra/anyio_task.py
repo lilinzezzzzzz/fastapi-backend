@@ -1,22 +1,22 @@
-from pkg.anyio_task import AnyioTaskManager
+from pkg.anyio_task import AnyioTaskHandler
 from pkg.logger_tool import logger
 
-anyio_task_manager: AnyioTaskManager | None = None
+anyio_task_manager: AnyioTaskHandler | None = None
 
 
-def init_anyio_task_manager():
+async def init_anyio_task_handler():
     global anyio_task_manager
     logger.info("Init anyio task manager...")
     if anyio_task_manager is not None:
         logger.warning("Anyio task manager has been initialized.")
         return
 
-    anyio_task_manager = AnyioTaskManager()
+    anyio_task_manager = AnyioTaskHandler()
     await anyio_task_manager.start()
     logger.info("Init anyio task manager completed.")
 
 
-async def stop_anyio_task_manager():
+async def close_anyio_task_handler():
     global anyio_task_manager
     logger.info("Stop anyio task manager...")
     if anyio_task_manager is None:

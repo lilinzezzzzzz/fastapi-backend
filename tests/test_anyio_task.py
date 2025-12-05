@@ -14,7 +14,7 @@ sys.modules["pkg.logger_tool"] = MagicMock()
 sys.modules["pkg.logger_tool"].logger = mock_logger
 
 # --- 2. 导入待测模块 ---
-from pkg.anyio_task import AnyioTaskManager
+from pkg.anyio_task import AnyioTaskHandler
 
 
 # --- 3. 定义顶层 helper 函数 ---
@@ -55,7 +55,7 @@ def anyio_backend():
 
 @pytest.fixture
 async def manager():
-    mgr = AnyioTaskManager()
+    mgr = AnyioTaskHandler()
     mgr.max_queue = 100
     await mgr.start()
     yield mgr

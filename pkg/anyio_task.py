@@ -39,7 +39,7 @@ class TaskInfo:
     exception: BaseException | None = None
 
 
-class AnyioTaskManager:
+class AnyioTaskHandler:
     def __init__(self):
         self._global_limiter = CapacityLimiter(GLOBAL_MAX_DEFAULT)
         self._thread_limiter = CapacityLimiter(THREAD_MAX_DEFAULT)
