@@ -4,19 +4,16 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import pkg.context.base
-from pkg.context.base import ctx_manager
-
 # --- Mock 依赖 ---
 mock_logger = MagicMock()
 sys.modules["pkg.logger_tool"] = MagicMock()
 sys.modules["pkg.logger_tool"].logger = mock_logger
 
 # --- 导入你的代码 ---
-from pkg.context.ctx import (
+from pkg.ctx import (
     set_user_id,
     get_user_id,
-    get_trace_id,
+    get_trace_id, ctx_manager,
 )
 
 
@@ -65,15 +62,15 @@ def test_get_without_init():
 
 def test_set_without_init_fallback():
     """测试没有 Init 时，Set 的防御性行为"""
-    import pkg.context.ctx
+    import pkg.ctx
     from contextvars import ContextVar
 
     # 1. 保存旧的 ContextVar (避免影响其他测试)
-    old_var = pkg.context.manager._request_ctx_var
+    old_var = pkg.ctx._request_ctx_var
 
     # 2. 【关键步骤】临时替换为一个全新的、未初始化的 ContextVar
     # 这样调用 get() 时一定会抛出 LookupError
-    pkg.context.manager._request_ctx_var = ContextVar("temp_test_ctx")
+    pkg.ctx._request_ctx_var = ContextVar("temp_test_ctx")
 
     try:
         # 3. 执行测试：直接 Set
@@ -88,7 +85,7 @@ def test_set_without_init_fallback():
 
     finally:
         # 5. 【恢复现场】一定要把旧的变量还原回去，否则后续测试会挂
-        pkg.context.manager._request_ctx_var = old_var
+        pkg.ctx._request_ctx_var = old_var
 
 
 @pytest.mark.asyncio

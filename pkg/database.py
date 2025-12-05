@@ -16,8 +16,7 @@ from sqlalchemy.orm import (
 )
 from sqlalchemy.sql.elements import ClauseElement, ColumnElement
 
-from pkg import orjson_dumps, orjson_loads_types, orjson_loads, get_utc_without_tzinfo, unique_list
-from pkg.context import ctx
+from pkg import orjson_dumps, orjson_loads_types, orjson_loads, get_utc_without_tzinfo, unique_list, ctx
 from pkg.logger_tool import logger
 from pkg.snowflake_tool import generate_snowflake_id
 
