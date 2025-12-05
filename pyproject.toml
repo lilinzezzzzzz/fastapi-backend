@@ -57,6 +57,7 @@ dependencies = [
     "httptools",
     "async-lru>=2.0.5",
     "celery-redbeat>=2.3.3",
+    "trio>=0.32.0",
 ]
 
 # 分组依赖 —— 开发环境才需要
