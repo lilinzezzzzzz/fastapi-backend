@@ -1,18 +1,16 @@
 import os
 from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import Any, Literal, overload
+from typing import Literal, overload, cast
 
 import anyio
-import pandas as pd
-from anyio import to_thread
 
 
 class AnyioFile:
     __slots__ = ("file_path", "anyio_path")  # 优化内存，防止随意添加属性
 
     def __init__(self, file_path: str | Path):
-        # 统一转换为字符串路径，方便 pandas 等库使用
+        # 统一转换为字符串路径
         self.file_path: str = str(file_path)
         self.anyio_path: anyio.Path = anyio.Path(self.file_path)
 
@@ -43,12 +41,9 @@ class AnyioFile:
 
     # 使用 overload 提供更准确的类型推断提示
     @overload
-    async def read(self, mode: Literal["r"] = "r", encoding: str | None = "utf-8") -> str:
-        ...
-
+    async def read(self, mode: Literal["r"] = "r", encoding: str | None = "utf-8") -> str: ...
     @overload
-    async def read(self, mode: Literal["rb", "br"], encoding: None = None) -> bytes:
-        ...
+    async def read(self, mode: Literal["rb", "br"], encoding: None = None) -> bytes: ...
 
     async def read(self, mode: str = "r", encoding: str | None = "utf-8") -> str | bytes:
         """
@@ -107,28 +102,6 @@ class AnyioFile:
                     yield line.rstrip("\n")
                 else:
                     yield line
-
-    async def read_excel_with_pandas(
-            self,
-            *,
-            sheet_name: str | int | list[str | int] | None = 0,
-            dtype: Any = None,
-            engine: Literal["openpyxl", "xlrd", "odf"] | None = None,
-    ) -> pd.DataFrame | dict[str | int, pd.DataFrame]:
-        """
-        在线程池中异步读取 Excel 文件。
-        """
-
-        def _read_excel():
-            # pandas 的 I/O 是同步且阻塞的，必须在线程中运行
-            return pd.read_excel(
-                self.file_path,
-                sheet_name=sheet_name,
-                dtype=dtype,
-                engine=engine
-            )
-
-        return await to_thread.run_sync(_read_excel)
 
     async def write(
             self,
