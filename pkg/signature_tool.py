@@ -99,6 +99,3 @@ class SignatureAuthHelper:
             return False
 
         return True
-
-
-signature_auth_helper = SignatureAuthHelper(secret_key="hqsk-ai-platform-xafcv01")
