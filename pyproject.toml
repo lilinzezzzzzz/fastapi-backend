@@ -109,4 +109,4 @@ exclude = ["venv", ".venv", "build", "dist"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B"]       # 基础错误 + isort + bugbear 等
-ignore = ["E203", "W503"]           # 常见的和 Black/格式化冲突的规则
+ignore = ["E203"]           # 常见的和 Black/格式化冲突的规则
