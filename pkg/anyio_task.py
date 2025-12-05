@@ -157,21 +157,25 @@ class AnyioTaskManager:
     ) -> Any:
         """内部通用方法：执行单个同步任务"""
         func_name = self.get_coro_func_name(sync_func)
-        runner = to_thread.run_sync if backend == "thread" else to_process.run_sync
-        limiter = self._thread_limiter if backend == "thread" else self._process_limiter
 
         logger.info(f"Task {func_name} started in {backend}.")
         bound = partial(sync_func, *args, **kwargs)
 
-        # 包装 runner 调用以便应用 fail_after
+        # 定义内部执行函数，显式区分后端以满足类型检查
         async def _run():
-            return await runner(bound, cancellable=cancellable, limiter=limiter)
+            if backend == "thread":
+                return await to_thread.run_sync(
+                    bound, cancellable=cancellable, limiter=self._thread_limiter
+                )
+            else:
+                return await to_process.run_sync(
+                    bound, cancellable=cancellable, limiter=self._process_limiter
+                )
 
         if timeout and timeout > 0:
             with fail_after(timeout):
                 return await _run()
         return await _run()
-
     # ---------- public APIs ----------
     async def add_task(
             self,
@@ -343,16 +347,21 @@ class AnyioTaskManager:
 
         results: list[Any] = [None] * len(args_list)
         func_name = self.get_coro_func_name(sync_func)
-        runner = to_thread.run_sync if backend == "thread" else to_process.run_sync
-        limiter = self._thread_limiter if backend == "thread" else self._process_limiter
 
         async def _worker(idx, a, k):
             bound = partial(sync_func, *(a or ()), **(k or {}))
             async with self._global_limiter:
                 try:
-                    # 包装执行逻辑以便应用超时
+                    # 包装执行逻辑，显式分支处理
                     async def _run():
-                        return await runner(bound, cancellable=cancellable, limiter=limiter)
+                        if backend == "thread":
+                            return await to_thread.run_sync(
+                                bound, cancellable=cancellable, limiter=self._thread_limiter
+                            )
+                        else:
+                            return await to_process.run_sync(
+                                bound, cancellable=cancellable, limiter=self._process_limiter
+                            )
 
                     if timeout and timeout > 0:
                         with fail_after(timeout):
@@ -369,7 +378,6 @@ class AnyioTaskManager:
                     logger.error(f"{backend}-{idx} ({func_name}) failed: {e}")
 
         async with create_task_group() as tg:
-            # zip(..., strict=False) 是 Python 3.10+，为了兼容性这里不用 strict
             for i, (args, kwargs) in enumerate(zip(args_list, kwargs_list)):
                 tg.start_soon(_worker, i, args, kwargs)
 
