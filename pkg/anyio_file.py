@@ -1,80 +1,59 @@
 import os
+from collections.abc import AsyncGenerator
 from pathlib import Path
+from typing import Any, Literal, overload
 
 import anyio
 import pandas as pd
-from async_lru import alru_cache
+from anyio import to_thread
 
 
 class AnyioFile:
+    __slots__ = ("file_path", "anyio_path")  # 优化内存，防止随意添加属性
 
     def __init__(self, file_path: str | Path):
-        if isinstance(file_path, Path):
-            file_path = file_path.as_posix()
+        # 统一转换为字符串路径，方便 pandas 等库使用
+        self.file_path: str = str(file_path)
+        self.anyio_path: anyio.Path = anyio.Path(self.file_path)
 
-        self.file_path: str = file_path
-        self.anyio_path: anyio.Path = anyio.Path(file_path)
-
-    async def unlink(self):
+    async def unlink(self, missing_ok: bool = True) -> None:
         """
         删除文件。
 
-        参数:
-            file_path (str): 要删除的文件路径。
-
-        异常:
-            FileNotFoundError: 如果文件不存在。
+        Args:
+            missing_ok: 如果为 True (默认)，文件不存在时不报错；否则抛出 FileNotFoundError。
         """
-
-        if not await self.anyio_path.exists():
-            return
-
-        await self.anyio_path.unlink()
+        try:
+            await self.anyio_path.unlink()
+        except FileNotFoundError:
+            if not missing_ok:
+                raise
 
     async def exists(self) -> bool:
-        """
-        检查文件是否存在。
-
-        参数:
-            file_path (str): 要检查的文件路径。
-
-        返回:
-            bool: 文件是否存在。
-        """
-
+        """检查文件是否存在。"""
         return await self.anyio_path.exists()
 
     async def stat(self) -> os.stat_result:
-        """
-        获取文件信息。
+        """获取文件信息。"""
+        return await self.anyio_path.stat()
 
-        参数:
-            file_path (str): 要获取文件信息的文件路径。
-
-        返回:
-            anyio.StatInfo: 文件信息。
-        """
-        stat_result = await self.anyio_path.stat()
-        return stat_result
-
-    async def mkdir(self, parents: bool = False, exist_ok: bool = False):
-        """
-        创建目录。
-
-        参数:
-            file_path (str): 要创建的目录路径。
-
-        异常:
-            FileExistsError: 如果目录已经存在。
-        """
-
+    async def mkdir(self, parents: bool = False, exist_ok: bool = False) -> None:
+        """创建目录。"""
         await self.anyio_path.mkdir(parents=parents, exist_ok=exist_ok)
+
+    # 使用 overload 提供更准确的类型推断提示
+    @overload
+    async def read(self, mode: Literal["r"] = "r", encoding: str | None = "utf-8") -> str:
+        ...
+
+    @overload
+    async def read(self, mode: Literal["rb", "br"], encoding: None = None) -> bytes:
+        ...
 
     async def read(self, mode: str = "r", encoding: str | None = "utf-8") -> str | bytes:
         """
-        读取完整文件内容并返回。
-        - 文本模式（默认 "r"）：返回 str（需 encoding）
-        - 二进制模式（包含 'b'）：返回 bytes（忽略 encoding）
+        读取完整文件内容。
+        注意：这会将整个文件加载到内存，大文件请慎用。
         """
         if "b" in mode:
             async with await self.anyio_path.open(mode=mode) as f:
@@ -83,18 +62,73 @@ class AnyioFile:
             async with await self.anyio_path.open(mode=mode, encoding=encoding) as f:
                 return await f.read()
 
+    async def read_chunks(
+            self,
+            chunk_size: int = 1024 * 64,  # 默认 64KB
+            mode: str = "rb",
+            encoding: str | None = "utf-8"
+    ) -> AsyncGenerator[bytes | str, None]:
+        """
+        [新增] 分块读取大文件（生成器）。
+        适用于无法一次性加载到内存的大文件。
+
+        Args:
+            chunk_size: 每次读取的块大小（字节数或字符数）
+            mode: 读取模式 ("rb" 返回 bytes, "r" 返回 str)
+            encoding: 文本模式下的编码
+        """
+        kwargs = {"mode": mode}
+        if "b" not in mode:
+            kwargs["encoding"] = encoding
+
+        async with await self.anyio_path.open(**kwargs) as f:
+            while True:
+                chunk = await f.read(chunk_size)
+                if not chunk:
+                    break
+                yield chunk
+
+    async def read_lines(
+            self,
+            encoding: str | None = "utf-8",
+            strip_newline: bool = False
+    ) -> AsyncGenerator[str, None]:
+        """
+        [新增] 逐行读取大文本文件（生成器）。
+        适用于处理大日志文件或 CSV。
+
+        Args:
+            encoding: 文件编码
+            strip_newline: 是否去除行尾换行符
+        """
+        async with await self.anyio_path.open(mode="r", encoding=encoding) as f:
+            async for line in f:
+                if strip_newline:
+                    yield line.rstrip("\n")
+                else:
+                    yield line
+
     async def read_excel_with_pandas(
             self,
             *,
-            sheet_name: int | str | None = 0,  # 0 / 名称 / 列表 / None
-            dtype=None,
-            engine=None,  # None=自动，或 "openpyxl"、"xlrd"（.xls）等
-    ) -> pd.DataFrame:
-        # 整个解析过程是同步的；放线程池里跑，避免阻塞事件循环
-        def _read_excel():
-            return pd.read_excel(self.file_path, sheet_name=sheet_name, dtype=dtype, engine=engine)
+            sheet_name: str | int | list[str | int] | None = 0,
+            dtype: Any = None,
+            engine: Literal["openpyxl", "xlrd", "odf"] | None = None,
+    ) -> pd.DataFrame | dict[str | int, pd.DataFrame]:
+        """
+        在线程池中异步读取 Excel 文件。
+        """
 
-        return await anyio.to_thread.run_sync(_read_excel)
+        def _read_excel():
+            # pandas 的 I/O 是同步且阻塞的，必须在线程中运行
+            return pd.read_excel(
+                self.file_path,
+                sheet_name=sheet_name,
+                dtype=dtype,
+                engine=engine
+            )
+
+        return await to_thread.run_sync(_read_excel)
 
     async def write(
             self,
@@ -105,42 +139,36 @@ class AnyioFile:
             flush: bool = False,
     ) -> int:
         """
-        写入数据（返回写入的字节数/字符数，取决于底层实现）。
-        - 二进制模式（含 'b'）传 bytes；文本模式传 str
-        - ensure_parent=True：自动创建父目录
-        - flush=True：写完后显式 flush（一般不必）
+        写入文件。
+        Args:
+            data: 内容 (str 或 bytes)
+            mode: 模式 ('w', 'wb', 'a', 'ab' 等)
+            encoding: 文本模式下的编码
+            ensure_parent: 是否自动创建父目录
+            flush: 是否强制刷新缓冲区
+        Returns:
+            写入的字符数或字节数
         """
         if ensure_parent:
+            # 使用 exist_ok=True 避免并发创建时的报错
             await self.anyio_path.parent.mkdir(parents=True, exist_ok=True)
 
-        if "b" in mode:
-            if not isinstance(data, (bytes, bytearray, memoryview)):
-                raise TypeError("binary mode requires bytes-like 'data'")
-            async with await self.anyio_path.open(mode=mode) as f:
-                n = await f.write(data)
-                if flush:
-                    await f.flush()
-                return n
-        else:
-            if not isinstance(data, str):
-                raise TypeError("text mode requires 'str' data")
-            async with await self.anyio_path.open(mode=mode, encoding=encoding) as f:
-                n = await f.write(data)
-                if flush:
-                    await f.flush()
-                return n
+        is_binary = "b" in mode
 
+        # 参数校验：提前报错比进入 IO 后报错更好
+        if is_binary and not isinstance(data, (bytes, bytearray, memoryview)):
+            raise TypeError(f"Binary mode '{mode}' requires bytes-like data, got {type(data)}")
+        if not is_binary and not isinstance(data, str):
+            raise TypeError(f"Text mode '{mode}' requires str data, got {type(data)}")
 
-@alru_cache(maxsize=128, ttl=60)
-async def new_anyio_file(file_path: str | Path) -> AnyioFile:
-    """
-    创建一个新的 AnyioFile 对象。
+        # 打开文件并写入
+        # 注意：anyio.Path.open() 返回的是一个 coroutine，必须 await 拿到 context manager
+        kwargs = {"mode": mode}
+        if not is_binary:
+            kwargs["encoding"] = encoding
 
-    参数:
-        file_path (str): 文件路径。
-
-    返回:
-        AnyioFile: 新的 AnyioFile 对象。
-    """
-
-    return AnyioFile(file_path)
+        async with await self.anyio_path.open(**kwargs) as f:
+            n = await f.write(data)
+            if flush:
+                await f.flush()
+            return n
