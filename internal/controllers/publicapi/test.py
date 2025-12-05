@@ -15,7 +15,7 @@ from internal.models.user import User
 from internal.core.exception import AppException
 from pkg.logger_tool import logger
 from pkg.resp_tool import response_factory
-from pkg.stream_tool import stream_with_chunk_control
+from pkg.stream_control import stream_with_chunk_control
 
 router = APIRouter(prefix="/test", tags=["public v1 test"])
 
