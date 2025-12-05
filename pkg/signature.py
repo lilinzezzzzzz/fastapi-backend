@@ -6,7 +6,7 @@ from typing import Any
 from pkg.logger_tool import logger
 
 
-class SignatureAuthHelper:
+class SignatureAuthHandler:
     SUPPORTED_HASH_ALGOS = {'sha256', 'sha1', 'md5'}  # 可扩展
 
     def __init__(

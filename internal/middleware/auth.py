@@ -2,7 +2,7 @@ from starlette.types import ASGIApp, Scope, Receive, Send
 from starlette.datastructures import MutableHeaders
 
 from internal.core.auth_token import verify_token
-from pkg.signature import signature_auth_helper
+from internal.core.signature import signature_auth_handler
 from pkg.ctx import set_user_id
 from pkg.logger_tool import logger
 from pkg.resp_tool import response_factory
@@ -46,7 +46,7 @@ class ASGIAuthMiddleware:
             x_timestamp = headers.get("X-Timestamp")
             x_nonce = headers.get("X-Nonce")
 
-            if not await signature_auth_helper.verify(signature=x_signature, timestamp=x_timestamp, nonce=x_nonce):
+            if not signature_auth_handler.verify(x_signature=x_signature, x_timestamp=x_timestamp, x_nonce=x_nonce):
                 resp = response_factory.resp_401(
                     msg=f"signature_auth failed, x_signature={x_signature}, x_timestamp={x_timestamp}, x_nonce={x_nonce}"
                 )

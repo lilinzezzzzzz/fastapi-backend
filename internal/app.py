@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 
 from internal.config.setting import setting
+from internal.core.signature import init_signature_auth_handler
 from internal.infra.anyio_task import init_anyio_task_manager, stop_anyio_task_manager
 from internal.infra.database import init_db, close_db
 from internal.infra.redis import init_redis, close_redis
@@ -92,6 +93,8 @@ async def lifespan(_app: FastAPI):
     await init_redis()
     # 初始化 AnyIO Task Manager
     await init_anyio_task_manager()
+    # 初始化签名认证
+    await init_signature_auth_handler()
 
     logger.info("Check completed, Application will start.")
 
