@@ -71,10 +71,12 @@ async def get_session(autoflush: bool = True) -> AsyncGenerator[AsyncSession, An
     """
     通用的 Session 获取上下文管理器，FastAPI 和 Celery 均可用。
     """
-    if _session_maker is None:
+    session_maker = _session_maker
+
+    if session_maker is None:
         raise RuntimeError("Database is not initialized. Call init_db() first.")
 
-    async with _session_maker() as session:
+    async with session_maker() as session:
         if autoflush:
             try:
                 yield session
