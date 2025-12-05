@@ -166,11 +166,11 @@ class AnyioTaskManager:
             if backend == "thread":
                 return await to_thread.run_sync(
                     bound, cancellable=cancellable, limiter=self._thread_limiter
-                )
+                ) # type: ignore
             else:
                 return await to_process.run_sync(
                     bound, cancellable=cancellable, limiter=self._process_limiter
-                )
+                ) # type: ignore
 
         if timeout and timeout > 0:
             with fail_after(timeout):
@@ -357,11 +357,11 @@ class AnyioTaskManager:
                         if backend == "thread":
                             return await to_thread.run_sync(
                                 bound, cancellable=cancellable, limiter=self._thread_limiter
-                            )
+                            ) # type: ignore
                         else:
                             return await to_process.run_sync(
                                 bound, cancellable=cancellable, limiter=self._process_limiter
-                            )
+                            ) # type: ignore
 
                     if timeout and timeout > 0:
                         with fail_after(timeout):
