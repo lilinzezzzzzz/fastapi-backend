@@ -21,7 +21,7 @@ _session_maker: async_sessionmaker[AsyncSession] | None = None
 
 # ---------------------- 1. 生命周期管理 ----------------------
 
-async def init_db() -> None:
+def init_db() -> None:
     """
     初始化数据库连接池。
     应在 FastAPI lifespan 或 Celery worker_process_init 中调用。

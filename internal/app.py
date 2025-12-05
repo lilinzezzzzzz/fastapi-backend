@@ -7,6 +7,7 @@ from fastapi.exceptions import RequestValidationError
 
 from internal.config.setting import setting
 from internal.core.signature import init_signature_auth_handler
+from internal.core.snowflake import init_snowflake_id_generator
 from internal.infra.anyio_task import init_anyio_task_manager, stop_anyio_task_manager
 from internal.infra.database import init_db, close_db
 from internal.infra.redis import init_redis, close_redis
@@ -88,13 +89,15 @@ async def lifespan(_app: FastAPI):
     cur_pid = os.getpid()
     logger.info(f"Current PID: {cur_pid}")
     # 初始化 DB
-    await init_db()
+    init_db()
     # 初始化 Redis
-    await init_redis()
+    init_redis()
     # 初始化 AnyIO Task Manager
-    await init_anyio_task_manager()
+    init_anyio_task_manager()
     # 初始化签名认证
-    await init_signature_auth_handler()
+    init_signature_auth_handler()
+    # 初始化 Snowflake ID Generator
+    init_snowflake_id_generator()
 
     logger.info("Check completed, Application will start.")
 

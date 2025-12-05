@@ -4,7 +4,7 @@ from pkg.logger_tool import logger
 anyio_task_manager: AnyioTaskManager | None = None
 
 
-async def init_anyio_task_manager():
+def init_anyio_task_manager():
     global anyio_task_manager
     logger.info("Init anyio task manager...")
     if anyio_task_manager is not None:
