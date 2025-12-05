@@ -422,12 +422,7 @@ class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
     def select_stmt(self) -> Select:
         return self._stmt
 
-    def limit(self, limit: int) -> Self:
-        self._stmt = self._stmt.limit(limit)
-        return self
-
     def paginate(self, *, page: int, limit: int) -> Self:
-
         if not isinstance(page, int) or page < 1:
             raise ValueError("page must be greater than or equal to 1")
 
