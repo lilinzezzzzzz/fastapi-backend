@@ -4,7 +4,7 @@ from internal.models.user import User
 from internal.schemas.user import UserListResponseSchema, UserDetailSchema
 
 
-@dataclass
+@dataclass(frozen=True, slots=True, kw_only=True)
 class UserListDto:
     total: int
     items: list[User]
@@ -12,7 +12,7 @@ class UserListDto:
     def to_response_schema(self):
         return UserListResponseSchema(
             total=self.total,
-            items=[UserDetailSchema(id=item.id, name=item.username, phone=item.phone) for item in self.items]
+            items=[UserDetailSchema(id=item.id, name=str(item.username), phone=str(item.phone)) for item in self.items]
         )
 
     def to_dict(self):
