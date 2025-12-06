@@ -1,7 +1,7 @@
 from starlette.types import ASGIApp, Scope, Receive, Send
 from starlette.datastructures import MutableHeaders
 
-from internal.core.auth_token import verify_token
+from internal.core.auth import verify_token
 from internal.core.signature import signature_auth_handler
 from pkg.ctx import set_user_id
 from pkg.logger_tool import logger
