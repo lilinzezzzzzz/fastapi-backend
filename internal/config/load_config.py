@@ -17,30 +17,30 @@ class BaseConfig(BaseSettings):
     )
 
     # 基础配置
-    DEBUG: bool = True
-    SECRET_KEY: SecretStr = SecretStr("CHANGE_ME")
+    DEBUG: bool
+    SECRET_KEY: SecretStr
 
     # JWT 配置
-    JWT_ALGORITHM: str = "HS256"
+    JWT_ALGORITHM: str
 
     # CORS 配置
     BACKEND_CORS_ORIGINS: list[str] = ["*"]
 
     # MySQL 配置
-    MYSQL_USERNAME: str = "root"
-    MYSQL_PASSWORD: SecretStr = SecretStr("root")
-    MYSQL_HOST: str = "127.0.0.1"
-    MYSQL_PORT: int = 3306
-    MYSQL_DATABASE: str = "app_db"
+    MYSQL_USERNAME: str
+    MYSQL_PASSWORD: SecretStr
+    MYSQL_HOST: str
+    MYSQL_PORT: int
+    MYSQL_DATABASE: str
 
     # Redis 配置
-    REDIS_HOST: str = "127.0.0.1"
-    REDIS_PASSWORD: SecretStr = SecretStr("")
-    REDIS_DB: int = 0
-    REDIS_PORT: int = 6379
+    REDIS_HOST: str
+    REDIS_PASSWORD: SecretStr
+    REDIS_DB: int
+    REDIS_PORT: int
 
     # Token 过期时间（分钟）
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int
 
     @computed_field  # type: ignore[prop-decorator]
     @property
