@@ -1,4 +1,3 @@
-from typing import List, Union
 from urllib.parse import quote_plus
 
 from pydantic import IPvAnyAddress
@@ -16,12 +15,12 @@ class BaseConfig(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
 
     # CORS 配置
-    BACKEND_CORS_ORIGINS: List[str] = ["*"]
+    BACKEND_CORS_ORIGINS: list[str] = ["*"]
 
     # MySQL 配置
     MYSQL_USERNAME: str = "root"
     MYSQL_PASSWORD: str = "root"
-    MYSQL_HOST: Union[IPvAnyAddress, str] = "127.0.0.1"
+    MYSQL_HOST: IPvAnyAddress | str = "127.0.0.1"
     MYSQL_PORT: str = "3306"
     MYSQL_DATABASE: str = "app_db"
 

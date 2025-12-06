@@ -92,12 +92,12 @@ async def lifespan(_app: FastAPI):
     init_db()
     # 初始化 Redis
     init_redis()
-    # 初始化 AnyIO Task Manager
-    await init_anyio_task_handler()
     # 初始化签名认证
     init_signature_auth_handler()
     # 初始化 Snowflake ID Generator
     init_snowflake_id_generator()
+    # 初始化 AnyIO Task Manager
+    await init_anyio_task_handler()
 
     logger.info("Check completed, Application will start.")
 
