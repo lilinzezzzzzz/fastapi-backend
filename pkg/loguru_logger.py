@@ -271,5 +271,4 @@ class LoggerManager:
             pass
 
 
-logger_manager = LoggerManager(use_utc=True)
-logger = logger_manager.setup()
+logger = LoggerManager().setup()
