@@ -3,13 +3,12 @@ from pathlib import Path
 from urllib.parse import quote_plus
 
 from dotenv import dotenv_values, load_dotenv
-from pydantic import SecretStr, computed_field, field_validator
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from internal import BASE_DIR
 from pkg.crypto import aes_decrypt
 from pkg.loguru_logger import logger
-
 
 # 密钥文件路径（不纳入版本控制，只存放解密密钥等敏感信息）
 SECRETS_FILE_PATH: Path = BASE_DIR / "configs" / ".secrets"
@@ -113,14 +112,14 @@ class BaseConfig(BaseSettings):
 
     # MySQL 配置
     MYSQL_USERNAME: str
-    MYSQL_PASSWORD: SecretStr  # 支持加密格式: ENC(xxx)
+    MYSQL_PASSWORD: str  # 支持加密格式: ENC(xxx)
     MYSQL_HOST: str
     MYSQL_PORT: int
     MYSQL_DATABASE: str
 
     # Redis 配置
     REDIS_HOST: str
-    REDIS_PASSWORD: SecretStr  # 支持加密格式: ENC(xxx)
+    REDIS_PASSWORD: str  # 支持加密格式: ENC(xxx)
     REDIS_DB: int
     REDIS_PORT: int
 
@@ -162,21 +161,18 @@ class BaseConfig(BaseSettings):
 
         return v  # 非加密格式直接返回
 
-    @computed_field  # type: ignore[prop-decorator]
     @property
     def sqlalchemy_database_uri(self) -> str:
-        password = self.MYSQL_PASSWORD.get_secret_value()
+        password = self.MYSQL_PASSWORD
         return f"mysql+aiomysql://{quote_plus(self.MYSQL_USERNAME)}:{quote_plus(password)}@{self.MYSQL_HOST}:{self.MYSQL_PORT}/{self.MYSQL_DATABASE}?charset=utf8mb4"
 
-    @computed_field  # type: ignore[prop-decorator]
     @property
     def sqlalchemy_echo(self) -> bool:
         return self.DEBUG  # 开发环境启用 SQLAlchemy 日志
 
-    @computed_field  # type: ignore[prop-decorator]
     @property
     def redis_url(self) -> str:
-        password = self.REDIS_PASSWORD.get_secret_value()
+        password = self.REDIS_PASSWORD
         if password == "":
             return f"redis://{quote_plus(self.REDIS_HOST)}:{self.REDIS_PORT}/{self.REDIS_DB}"
         else:
