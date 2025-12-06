@@ -1,43 +1,19 @@
 import datetime
 import hashlib
-import os
 import random
 import re
 import string
 import time
 import uuid
 from collections.abc import Callable
-from pathlib import Path
+from string import Template
 from typing import Any
 from urllib.parse import urlencode, urlunparse
-from string import Template
+
 import orjson
 import pytz
 import shortuuid
 import xxhash
-
-
-def get_base_dir() -> Path:
-    """
-    获取项目根目录的路径。
-
-    :return: 项目根目录的路径
-    """
-    return Path(__file__).parent.parent.absolute()
-
-
-def get_sys_env() -> str:
-    return str.lower(os.getenv("APP_ENV", "unknown"))
-
-
-def get_sys_namespace() -> str:
-    if SYS_ENV == "local":
-        namespace = "dev"
-    elif SYS_ENV == "local_test":
-        namespace = "test"
-    else:
-        namespace = SYS_ENV
-    return namespace
 
 
 def orjson_dumps(
@@ -354,8 +330,3 @@ def template_substitute(template: Template | str, safe: bool = False, **kwargs) 
         return template.safe_substitute(**kwargs)
 
     return template.substitute(**kwargs)
-
-
-BASE_DIR: Path = get_base_dir()
-SYS_ENV: str = get_sys_env()
-SYS_NAMESPACE: str = get_sys_namespace()

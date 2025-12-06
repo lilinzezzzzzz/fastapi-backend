@@ -6,7 +6,7 @@ from dotenv import dotenv_values, load_dotenv
 from pydantic import SecretStr, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from pkg import SYS_ENV, BASE_DIR
+from internal.app import BASE_DIR, APP_ENV
 from pkg.crypto import aes_decrypt
 from pkg.logger_tool import logger
 
@@ -163,7 +163,7 @@ def init_setting() -> Settings:
     此函数只在模块首次被导入时执行一次。
     """
     logger.info("Init setting...")
-    logger.info(f"Current environment: {SYS_ENV}.")
+    logger.info(f"Current environment: {APP_ENV}.")
 
     # 先加载密钥文件（用于解密配置）
     _load_secrets()
