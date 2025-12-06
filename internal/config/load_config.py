@@ -51,16 +51,28 @@ def _get_app_env() -> str:
     return app_env.lower()
 
 
-# =========================================================
-# 模块加载时按顺序执行：
-# 1. 先加载 .secrets 文件（获取 APP_ENV 和其他密钥）
-# 2. 然后根据 APP_ENV 确定配置文件路径
-# =========================================================
-_load_secrets()
-APP_ENV: str = _get_app_env()
-ENV_FILE_PATH: Path = BASE_DIR / "configs" / f".env.{APP_ENV}"
-logger.info(f"APP_ENV: {APP_ENV}")
-logger.info(f"Config file path: {ENV_FILE_PATH}")
+def _init_env() -> tuple[str, Path]:
+    """
+    初始化环境配置。
+
+    执行顺序：
+        1. 加载 .secrets 文件（获取 APP_ENV 和其他密钥）
+        2. 根据 APP_ENV 确定配置文件路径
+        3. 记录日志
+
+    Returns:
+        tuple[str, Path]: (APP_ENV, ENV_FILE_PATH)
+    """
+    _load_secrets()
+    app_env = _get_app_env()
+    env_file_path = BASE_DIR / "configs" / f".env.{app_env}"
+    logger.info(f"APP_ENV: {app_env}")
+    logger.info(f"Config file path: {env_file_path}")
+    return app_env, env_file_path
+
+
+# 模块加载时初始化环境配置
+APP_ENV, ENV_FILE_PATH = _init_env()
 
 
 class BaseConfig(BaseSettings):
