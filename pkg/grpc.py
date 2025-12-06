@@ -35,34 +35,3 @@ class GrpcChannel:
             print(f"🛑 [gRPC] Closing connection to {target}...")
             await self._channel.close()
             self._channel = None
-
-
-"""
-class UserGrpcClient:
-    def __init__(self):
-        # 获取单例 Channel
-        self.channel = GrpcChannelManager.get_channel()
-        # 创建 Stub
-        self.stub = user_pb2_grpc.UserServiceStub(self.channel)
-
-    async def get_user_info(self, user_id: int):
-        # 调用远程 GetUser 方法
-        request = user_pb2.GetUserRequest(id=user_id)
-        
-        # 可以在这里注入通用的 Metadata，比如 trace_id 或 token
-        metadata = (("x-client-id", "fastapi-app"),)
-        
-        response = await self.stub.GetUser(
-            request, 
-            timeout=settings.GRPC_TIMEOUT,
-            metadata=metadata
-        )
-        
-        # 将 Proto Message 转换为 Python Dict 或 Pydantic Model 返回，解耦 Proto
-        return {
-            "id": response.id,
-            "username": response.username,
-            "email": response.email
-        }
-
-"""
