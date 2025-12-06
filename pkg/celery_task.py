@@ -5,25 +5,11 @@ from typing import Any
 
 from celery import Celery, chain, chord, group, signals
 from celery.result import AsyncResult, GroupResult
-from celery.schedules import crontab, schedule
 from kombu.utils.uuid import uuid
 
 from pkg.logger_tool import logger
 
-try:
-    # 尝试导入 RedBeat 的调度条目类，用于动态任务管理
-    from redbeat import RedBeatSchedulerEntry
-
-    HAS_REDBEAT = True
-except ImportError:
-    HAS_REDBEAT = False
-
 LifecycleHook = Callable[[], Any] | Callable[[], Coroutine[Any, Any, Any]]
-
-
-def import_os():
-    import os
-    return os
 
 
 class CeleryClient:
@@ -42,7 +28,6 @@ class CeleryClient:
             timezone: str = "UTC",
             enable_utc: bool = True,
             beat_schedule: dict[str, Any] | None = None,
-            redbeat_redis_url: str | None = None,  # 新增：用于动态定时任务
             **extra_conf: Any,
     ) -> None:
         self.queue = task_default_queue
@@ -62,14 +47,6 @@ class CeleryClient:
             "broker_connection_retry_on_startup": True,
             "result_extended": True
         }
-
-        # --- 动态定时任务配置 (RedBeat) ---
-        if redbeat_redis_url:
-            if not HAS_REDBEAT:
-                logger.warning("RedBeat URL provided but 'celery-redbeat' not installed. Dynamic scheduling disabled.")
-            else:
-                conf["redbeat_redis_url"] = redbeat_redis_url
-                conf["redbeat_key_prefix"] = f"{app_name}:redbeat"
 
         conf.update(extra_conf or {})
         self.app.conf.update(conf)
@@ -132,99 +109,7 @@ class CeleryClient:
         return chord(header)(body).apply_async()
 
     # ------------------------------
-    # 2. 动态定时任务 (替代 APScheduler)
-    # ------------------------------
-    def add_periodic_task(
-            self,
-            task_name: str,
-            schedule_type: str,  # 'cron' or 'interval'
-            schedule_value: dict | int,
-            args_tuple: tuple = (),
-            kwargs_dict: dict = None,
-            name: str = None
-    ):
-        """
-        动态添加定时任务 (建议配合 celery-redbeat 使用)
-        :param args_tuple
-        :param kwargs_dict
-        :param task_name: 具体的任务函数名 'tasks.add'
-        :param schedule_type: 'cron' 或 'interval'
-        :param schedule_value:
-               - 如果 type='interval', 传秒数 (int)
-               - 如果 type='cron', 传 dict: {'minute': '*/5', 'hour': '*'}
-        :param name: 任务唯一标识 (ID)，用于后续删除或修改
-        """
-        if not name:
-            name = f"{task_name}:{uuid()}"
-
-        # 1. 构建 Schedule 对象
-        if schedule_type == 'cron':
-            # 默认值为 *
-            cron_conf = {
-                'minute': '*', 'hour': '*', 'day_of_week': '*',
-                'day_of_month': '*', 'month_of_year': '*'
-            }
-            if isinstance(schedule_value, dict):
-                cron_conf.update(schedule_value)
-
-            check_schedule = crontab(**cron_conf)
-        elif schedule_type == 'interval':
-            check_schedule = schedule(run_every=float(schedule_value))
-        else:
-            raise ValueError("schedule_type must be 'cron' or 'interval'")
-
-        # 2. 如果安装了 RedBeat，直接写入 Redis 实现动态生效
-        if HAS_REDBEAT and self.app.conf.get("redbeat_redis_url"):
-            try:
-                entry = RedBeatSchedulerEntry(
-                    name=name,
-                    task=task_name,
-                    schedule=check_schedule,
-                    args=args_tuple,
-                    kwargs=kwargs_dict,
-                    app=self.app
-                )
-                entry.save()
-                logger.info(f"Dynamic periodic task '{name}' added via RedBeat.")
-                return name
-            except Exception as e:
-                logger.error(f"Failed to add RedBeat task: {e}")
-                raise e
-
-        # 3. 如果没有 RedBeat，修改内存配置 (仅当前进程生效，生产环境 Beat 进程通常独立，无法感知)
-        else:
-            logger.warning(
-                "Adding task to in-memory schedule. If Celery Beat is in a separate process, this WILL NOT work.")
-            self.app.conf.beat_schedule[name] = {
-                "task": task_name,
-                "schedule": check_schedule,
-                "args": args_tuple,
-                "kwargs": kwargs_dict
-            }
-            return name
-
-    def remove_periodic_task(self, name: str):
-        """移除动态定时任务"""
-        if HAS_REDBEAT and self.app.conf.get("redbeat_redis_url"):
-            try:
-                # 尝试加载并删除
-                try:
-                    entry = RedBeatSchedulerEntry.from_key(f"{self.app.conf.redbeat_key_prefix}:{name}", app=self.app)
-                    entry.delete()
-                    logger.info(f"Dynamic periodic task '{name}' removed via RedBeat.")
-                except KeyError:
-                    logger.warning(f"Task {name} not found in RedBeat.")
-            except Exception as e:
-                logger.error(f"Failed to remove RedBeat task: {e}")
-        else:
-            if name in self.app.conf.beat_schedule:
-                del self.app.conf.beat_schedule[name]
-                logger.info(f"In-memory task '{name}' removed.")
-            else:
-                logger.warning(f"Task '{name}' not found in memory schedule.")
-
-    # ------------------------------
-    # 3. 查询与检查
+    # 2. 查询与检查
     # ------------------------------
     def get_result(self, task_id: str) -> Any:
         return AsyncResult(task_id, app=self.app).result
