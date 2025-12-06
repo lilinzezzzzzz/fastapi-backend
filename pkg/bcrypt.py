@@ -19,21 +19,30 @@ class AESCipher:
     支持使用任意长度的密钥（通过 PBKDF2 派生）。
     """
 
-    # 固定 salt，简化使用（生产环境可考虑每个加密值使用不同 salt）
-    _SALT = b"fastapi_aes_salt"
+    # 默认 salt
+    _DEFAULT_SALT = b"fastapi_aes_salt"
 
-    def __init__(self, secret_key: str):
+    def __init__(self, secret_key: str, salt: bytes | str | None = None):
         """
         初始化 AES 加密器。
 
         Args:
             secret_key: 加密密钥，可以是任意长度的字符串
+            salt: 盐值，用于密钥派生。支持 bytes 或 str，不传则使用默认值
         """
+        # 处理 salt 参数
+        if salt is None:
+            salt_bytes = self._DEFAULT_SALT
+        elif isinstance(salt, str):
+            salt_bytes = salt.encode("utf-8")
+        else:
+            salt_bytes = salt
+
         # 使用 PBKDF2 从密钥派生出 Fernet 所需的 32 字节密钥
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
-            salt=self._SALT,
+            salt=salt_bytes,
             iterations=100_000,
         )
         key = base64.urlsafe_b64encode(kdf.derive(secret_key.encode("utf-8")))
@@ -69,14 +78,34 @@ class AESCipher:
         return decrypted.decode("utf-8")
 
 
-def aes_encrypt(plaintext: str, secret_key: str) -> str:
-    """便捷函数：AES 加密"""
-    return AESCipher(secret_key).encrypt(plaintext)
+def aes_encrypt(plaintext: str, secret_key: str, salt: bytes | str | None = None) -> str:
+    """
+    便捷函数：AES 加密。
+
+    Args:
+        plaintext: 要加密的明文字符串
+        secret_key: 加密密钥
+        salt: 盐值，不传则使用默认值
+
+    Returns:
+        加密后的 Base64 编码字符串
+    """
+    return AESCipher(secret_key, salt).encrypt(plaintext)
 
 
-def aes_decrypt(ciphertext: str, secret_key: str) -> str:
-    """便捷函数：AES 解密"""
-    return AESCipher(secret_key).decrypt(ciphertext)
+def aes_decrypt(ciphertext: str, secret_key: str, salt: bytes | str | None = None) -> str:
+    """
+    便捷函数：AES 解密。
+
+    Args:
+        ciphertext: 加密后的 Base64 编码字符串
+        secret_key: 解密密钥
+        salt: 盐值，必须与加密时使用的盐值一致
+
+    Returns:
+        解密后的明文字符串
+    """
+    return AESCipher(secret_key, salt).decrypt(ciphertext)
 
 
 # =========================================================
