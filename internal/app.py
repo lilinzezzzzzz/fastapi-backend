@@ -101,7 +101,7 @@ async def lifespan(_app: FastAPI):
     # 初始化 AnyIO Task Manager
     await init_anyio_task_handler()
 
-    logger.info("Check completed, Application will start.")
+    logger.info("Application will start.")
 
     yield
 
