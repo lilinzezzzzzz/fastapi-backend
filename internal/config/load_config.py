@@ -32,8 +32,7 @@ def _load_secrets() -> None:
         secrets = dotenv_values(SECRETS_FILE_PATH)
         for key, value in secrets.items():
             # 记录 key 和 value 是否存在（不记录实际值）
-            has_value = "set" if value else "empty"
-            logger.info(f"  - {key}: [{has_value}]")
+            logger.info(f"{key}: [{value if value else "empty"}]")
     else:
         raise FileNotFoundError(f"Secrets file not found: {SECRETS_FILE_PATH}")
 
