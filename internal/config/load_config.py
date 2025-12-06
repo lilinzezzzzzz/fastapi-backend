@@ -7,7 +7,7 @@ from pydantic import SecretStr, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from pkg import SYS_ENV, BASE_DIR
-from pkg.bcrypt import aes_decrypt
+from pkg.crypto import aes_decrypt
 from pkg.logger_tool import logger
 
 

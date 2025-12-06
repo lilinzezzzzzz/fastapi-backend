@@ -1,6 +1,6 @@
 import pytest
 
-from pkg.bcrypt import PasswordHasher
+from pkg.crypto import PasswordHasher
 
 
 @pytest.fixture
