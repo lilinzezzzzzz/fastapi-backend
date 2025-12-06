@@ -1,5 +1,6 @@
 from datetime import timezone, time, timedelta
 from pathlib import Path
+from typing import Callable
 
 import loguru
 
@@ -7,13 +8,13 @@ from pkg.logger_tool import LoggerManager, RotationType, RetentionType
 
 logger_manager: LoggerManager | None = None
 logger: loguru.Logger | None = None
-get_dynamic_logger = None
+get_dynamic_logger: Callable[..., loguru.Logger] | None = None
 
 
 def init_logger(
         *,
         level: str = "INFO",
-        base_log_dir: Path | None = None,
+        base_log_dir: Path,
         rotation: RotationType = time(0, 0, 0, tzinfo=timezone.utc),
         retention: RetentionType = timedelta(days=30),
         compression: str | None = None,
@@ -26,7 +27,6 @@ def init_logger(
         base_log_dir=base_log_dir,
         rotation=rotation,
         retention=retention,
-        compression=compression,
         use_utc=use_utc,
         enqueue=enqueue,
     )

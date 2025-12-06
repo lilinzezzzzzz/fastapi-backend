@@ -8,7 +8,7 @@ import loguru
 from pkg import orjson_dumps
 
 # 当前文件的父级路径
-_CURRENT_DIR = Path(__file__).parent
+_DEFAULT_BASE_LOG_DIR = Path(__file__).parent.parent / "logs"
 
 # 类型别名
 RotationType = str | int | time | timedelta
@@ -51,7 +51,7 @@ class LoggerManager:
 
         # --- 配置属性 ---
         self.level = level
-        self.base_log_dir = base_log_dir if base_log_dir is not None else _CURRENT_DIR / "logs"
+        self.base_log_dir = base_log_dir or _DEFAULT_BASE_LOG_DIR
         self.system_log_dir = self.base_log_dir / self.SYSTEM_LOG_TYPE
         self.retention = retention
         self.compression = compression
@@ -271,7 +271,5 @@ class LoggerManager:
             pass
 
 
-# 默认实例化（如果项目中有其他地方直接引用这个实例）
 logger_manager = LoggerManager(use_utc=True)
 logger = logger_manager.setup()
-get_dynamic_logger = logger_manager.get_dynamic_logger
