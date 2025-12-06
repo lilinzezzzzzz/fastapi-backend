@@ -6,7 +6,9 @@ from typing import Any
 import loguru
 
 from pkg import orjson_dumps
-from internal import BASE_DIR
+
+# 当前文件的父级路径
+_CURRENT_DIR = Path(__file__).parent
 
 # 类型别名
 RotationType = str | int | time | timedelta
@@ -25,7 +27,7 @@ class LoggerManager:
             self,
             *,
             level: str = "INFO",
-            base_log_dir: Path,
+            base_log_dir: Path | None = None,
             rotation: RotationType = time(0, 0, 0, tzinfo=timezone.utc),
             retention: RetentionType = timedelta(days=30),
             compression: str | None = None,
@@ -36,7 +38,7 @@ class LoggerManager:
         构造函数：接收所有配置参数并存储为实例属性。
 
         :param level: 日志等级 (e.g., "INFO", "DEBUG")
-        :param base_log_dir: 日志存放的根目录
+        :param base_log_dir: 日志存放的根目录，默认为当前文件父级路径下的 logs 目录
         :param rotation: 轮转策略 (默认: 每天 00:00, UTC时间)
         :param retention: 保留策略 (默认: 30天)
         :param compression: 压缩格式 (e.g., "zip")
@@ -49,8 +51,8 @@ class LoggerManager:
 
         # --- 配置属性 ---
         self.level = level
-        self.base_log_dir = base_log_dir
-        self.system_log_dir = base_log_dir / self.SYSTEM_LOG_TYPE
+        self.base_log_dir = base_log_dir if base_log_dir is not None else _CURRENT_DIR / "logs"
+        self.system_log_dir = self.base_log_dir / self.SYSTEM_LOG_TYPE
         self.retention = retention
         self.compression = compression
         self.use_utc = use_utc
@@ -270,6 +272,6 @@ class LoggerManager:
 
 
 # 默认实例化（如果项目中有其他地方直接引用这个实例）
-logger_manager = LoggerManager(base_log_dir=BASE_DIR / "logs", use_utc=True)
+logger_manager = LoggerManager(use_utc=True)
 logger = logger_manager.setup()
 get_dynamic_logger = logger_manager.get_dynamic_logger
