@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from urllib.parse import quote_plus
 
+from dotenv import load_dotenv
 from pydantic import SecretStr, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -115,6 +116,8 @@ class BaseConfig(BaseSettings):
 
 # 配置文件路径
 ENV_FILE_PATH: Path = BASE_DIR / "configs" / f".env.{os.getenv('APP_ENV', 'local')}"
+# 密钥文件路径（不纳入版本控制，只存放解密密钥等敏感信息）
+SECRETS_FILE_PATH: Path = BASE_DIR / "configs" / ".secrets"
 
 
 class Settings(BaseConfig):
@@ -127,6 +130,21 @@ class Settings(BaseConfig):
     )
 
 
+def _load_secrets() -> None:
+    """
+    加载密钥文件到环境变量。
+
+    密钥文件 (.secrets) 不纳入版本控制，只存放解密密钥等敏感信息。
+    文件格式示例:
+        AES_SECRET=your_aes_secret_key
+    """
+    if SECRETS_FILE_PATH.exists():
+        load_dotenv(SECRETS_FILE_PATH, override=False)  # 不覆盖已存在的环境变量
+        logger.info(f"Secrets file loaded: {SECRETS_FILE_PATH}")
+    else:
+        logger.warning(f"Secrets file not found: {SECRETS_FILE_PATH}, skip loading.")
+
+
 def init_setting() -> Settings:
     """
     加载配置。
@@ -134,6 +152,9 @@ def init_setting() -> Settings:
     """
     logger.info("Init setting...")
     logger.info(f"Current environment: {SYS_ENV}.")
+
+    # 先加载密钥文件（用于解密配置）
+    _load_secrets()
 
     # 检查配置文件是否存在
     if not ENV_FILE_PATH.exists():
