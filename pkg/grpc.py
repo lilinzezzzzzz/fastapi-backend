@@ -1,11 +1,10 @@
 import asyncio
-import logging
 import json
 from abc import ABC, abstractmethod
-from typing import Dict, Tuple, Optional, Any, List
+from typing import Dict, Any
 
 import grpc
-from grpc.aio import ClientCallDetails, Metadata
+from grpc.aio import ClientCallDetails
 
 # 假设的配置和日志工具
 from pkg.logger_tool import logger
@@ -28,8 +27,8 @@ class AuthInterceptor(grpc.aio.UnaryUnaryClientInterceptor):
         # 获取最新的 Token (支持动态获取)
         token = self.token_func() if callable(self.token_func) else self.token_func
 
-        metadata.append(('authorization', f"Bearer {token}"))
-        metadata.append(('app_id', str(self.app_id)))
+        metadata.append(("authorization", f"Bearer {token}"))
+        metadata.append(("app_id", str(self.app_id)))
 
         new_details = ClientCallDetails(
             method=client_call_details.method,
@@ -247,6 +246,4 @@ async def main():
 
 
 if __name__ == '__main__':
-    # 配置基本的 logging
-    logging.basicConfig(level=logging.INFO)
     asyncio.run(main())
