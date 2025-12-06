@@ -1,10 +1,10 @@
-from sqlalchemy import Column, String
+from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from pkg.database import Base, ModelMixin
+from pkg.database import ModelMixin
 
 
-class User(Base, ModelMixin):
+class User(ModelMixin):
     __tablename__ = "user"
 
     username: Mapped[str] = mapped_column(String(64))
