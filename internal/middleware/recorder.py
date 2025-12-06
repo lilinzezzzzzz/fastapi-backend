@@ -5,7 +5,7 @@ from starlette.datastructures import MutableHeaders
 
 from internal.core.exception import get_last_exec_tb
 from pkg import ctx
-from pkg.logger_tool import logger
+from pkg.loguru_logger import logger
 from pkg.resp_tool import error_code, response_factory
 
 

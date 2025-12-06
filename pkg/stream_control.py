@@ -5,7 +5,7 @@ from typing import TypeVar
 import anyio
 from fastapi import Request
 
-from pkg.logger_tool import logger
+from pkg.loguru_logger import logger
 
 T = TypeVar("T")
 

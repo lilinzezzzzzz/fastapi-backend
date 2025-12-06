@@ -1,5 +1,5 @@
 from pkg.anyio_task import AnyioTaskHandler
-from pkg.logger_tool import logger
+from pkg.loguru_logger import logger
 
 anyio_task_manager: AnyioTaskHandler | None = None
 

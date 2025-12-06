@@ -18,7 +18,7 @@ from sqlalchemy.sql.elements import ClauseElement, ColumnElement
 
 from internal.core.snowflake import generate_snowflake_id
 from pkg import orjson_dumps, orjson_loads_types, orjson_loads, get_utc_without_tzinfo, unique_list, ctx
-from pkg.logger_tool import logger
+from pkg.loguru_logger import logger
 
 # ==============================================================================
 # 1. 基础配置 (Base Configuration)

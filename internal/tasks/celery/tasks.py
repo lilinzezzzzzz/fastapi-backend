@@ -1,5 +1,5 @@
 from internal.infra.celery import celery_client
-from pkg.logger_tool import logger
+from pkg.loguru_logger import logger
 
 
 # 使用我们封装的 client.app 获取原生 app 装饰器

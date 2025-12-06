@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from internal import BASE_DIR
 from pkg.crypto import aes_decrypt
-from pkg.logger_tool import logger
+from pkg.loguru_logger import logger
 
 
 # 密钥文件路径（不纳入版本控制，只存放解密密钥等敏感信息）

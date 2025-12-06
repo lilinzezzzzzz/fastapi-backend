@@ -7,7 +7,7 @@ from celery import Celery, chain, chord, group, signals
 from celery.result import AsyncResult, GroupResult
 from kombu.utils.uuid import uuid
 
-from pkg.logger_tool import logger
+from pkg.loguru_logger import logger
 
 LifecycleHook = Callable[[], Any] | Callable[[], Coroutine[Any, Any, Any]]
 

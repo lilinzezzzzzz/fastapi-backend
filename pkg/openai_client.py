@@ -10,7 +10,7 @@ from openai.types.chat import (
     ChatCompletionToolMessageParam, ChatCompletionUserMessageParam
 )
 
-from pkg.logger_tool import logger
+from pkg.loguru_logger import logger
 
 
 class ChatCompletionRes(NamedTuple):

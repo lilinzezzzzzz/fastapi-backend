@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from pkg.logger_tool import LoggerManager
+from pkg.loguru_logger import LoggerManager
 
 
 # ----------------------------------------------------------------------

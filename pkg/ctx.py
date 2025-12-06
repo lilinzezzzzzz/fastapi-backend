@@ -1,7 +1,7 @@
 from contextvars import ContextVar
 from typing import Any
 
-from pkg.logger_tool import logger
+from pkg.loguru_logger import logger
 
 _request_ctx_var: ContextVar[dict[str, Any]] = ContextVar("request_ctx")
 

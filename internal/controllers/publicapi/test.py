@@ -13,7 +13,7 @@ from internal.infra.anyio_task import anyio_task_manager
 from internal.infra.database import get_session
 from internal.models.user import User
 from internal.core.exception import AppException
-from pkg.logger_tool import logger
+from pkg.loguru_logger import logger
 from pkg.resp_tool import response_factory
 from pkg.stream_control import stream_with_chunk_control
 

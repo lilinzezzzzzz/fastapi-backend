@@ -4,7 +4,7 @@ from starlette.datastructures import MutableHeaders
 from internal.core.auth import verify_token
 from internal.core.signature import signature_auth_handler
 from pkg.ctx import set_user_id
-from pkg.logger_tool import logger
+from pkg.loguru_logger import logger
 from pkg.resp_tool import response_factory
 
 # 转换成 set 查询更快
