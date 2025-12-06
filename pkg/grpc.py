@@ -1,32 +1,28 @@
-import grpc
 from typing import Optional, List
+
+import grpc
 
 
 class GrpcChannelManager:
     """
-    gRPC 通道管理器（实例版）
-    每个实例对应一个具体的下游服务地址。
+    gRPC 通道管理器
+    职责：仅负责维护 Host:Port 的物理连接生命周期。
     """
-    # 全局注册表：用于记录所有创建的 Manager 实例，方便统一关闭
     _instances: List["GrpcChannelManager"] = []
 
-    def __init__(self, host: str, port: int, service_name: str = "Unknown"):
+    def __init__(self, host: str, port: int):
         self.host = host
         self.port = port
-        self.service_name = service_name
-        self._channel: grpc.aio.Channel | None= None
+        self._channel: Optional[grpc.aio.Channel] = None
 
-        # ✅ 初始化时自动注册到全局列表
-        GrpcChannelManager._instances.append(self)
+        # 注册实例用于统一关闭
+        self._instances.append(self)
 
     def get_channel(self) -> grpc.aio.Channel:
-        """
-        获取 Channel。
-        ✅ 无需再传参数，直接使用实例内部的配置。
-        """
         if self._channel is None:
             target = f"{self.host}:{self.port}"
-            print(f"🔌 [gRPC] Connecting to {self.service_name} at {target}...")
+            # 日志现在更客观，只描述连接动作
+            print(f"🔌 [gRPC] Connecting to {target}...")
 
             self._channel = grpc.aio.insecure_channel(
                 target,
@@ -40,21 +36,19 @@ class GrpcChannelManager:
         return self._channel
 
     async def close(self):
-        """关闭当前实例的连接"""
         if self._channel:
-            print(f"🛑 [gRPC] Closing connection to {self.service_name}...")
+            target = f"{self.host}:{self.port}"
+            print(f"🛑 [gRPC] Closing connection to {target}...")
             await self._channel.close()
             self._channel = None
 
     @classmethod
     async def close_all(cls):
-        """
-        ♻️ 静态方法：遍历所有注册的实例并关闭
-        供 FastAPI 生命周期使用
-        """
-        print(f"🧹 Closing all {len(cls._instances)} gRPC managers...")
-        for manager in cls._instances:
-            await manager.close()
+        """关闭所有注册的连接"""
+        if cls._instances:
+            print(f"🧹 Closing {len(cls._instances)} gRPC channel managers...")
+            for manager in cls._instances:
+                await manager.close()
 
 
 """
