@@ -1,13 +1,17 @@
+from __future__ import annotations
+
 from datetime import timezone, time, timedelta
 from pathlib import Path
-
-import loguru
+from typing import TYPE_CHECKING
 
 from internal import BASE_DIR
 from pkg.loguru_logger import LoggerManager, RotationType, RetentionType, logger as default_logger
 
+if TYPE_CHECKING:
+    from loguru import Logger
+
 logger_manager: LoggerManager | None = None
-logger: loguru.Logger | None = None
+logger: Logger | None = None
 
 
 def init_logger(
