@@ -1,22 +1,16 @@
-from typing import Optional, List
-
 import grpc
 
 
-class GrpcChannelManager:
+class GrpcChannel:
     """
     gRPC 通道管理器
     职责：仅负责维护 Host:Port 的物理连接生命周期。
     """
-    _instances: List["GrpcChannelManager"] = []
 
     def __init__(self, host: str, port: int):
         self.host = host
         self.port = port
-        self._channel: Optional[grpc.aio.Channel] = None
-
-        # 注册实例用于统一关闭
-        self._instances.append(self)
+        self._channel: grpc.aio.Channel | None = None
 
     def get_channel(self) -> grpc.aio.Channel:
         if self._channel is None:
@@ -41,14 +35,6 @@ class GrpcChannelManager:
             print(f"🛑 [gRPC] Closing connection to {target}...")
             await self._channel.close()
             self._channel = None
-
-    @classmethod
-    async def close_all(cls):
-        """关闭所有注册的连接"""
-        if cls._instances:
-            print(f"🧹 Closing {len(cls._instances)} gRPC channel managers...")
-            for manager in cls._instances:
-                await manager.close()
 
 
 """
