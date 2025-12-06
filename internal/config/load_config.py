@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from urllib.parse import quote_plus
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 from pydantic import SecretStr, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -76,6 +76,8 @@ class BaseConfig(BaseSettings):
             return v
 
         if v.startswith("ENC(") and v.endswith(")"):
+            # 记录原始加密字符串（方便排查问题）
+            logger.info(f"Decrypting field '{info.field_name}': {v}")
             # 提取加密内容
             encrypted = v[4:-1]
             # 从环境变量获取解密密钥
@@ -85,8 +87,11 @@ class BaseConfig(BaseSettings):
                     f"Field '{info.field_name}' is encrypted but AES_SECRET is not set"
                 )
             try:
-                return aes_decrypt(encrypted, aes_secret)
+                decrypted = aes_decrypt(encrypted, aes_secret)
+                logger.info(f"Field '{info.field_name}' decrypted successfully.")
+                return decrypted
             except Exception as e:
+                logger.error(f"Failed to decrypt field '{info.field_name}': {e}")
                 raise ValueError(
                     f"Failed to decrypt field '{info.field_name}': {e}"
                 ) from e
@@ -141,6 +146,13 @@ def _load_secrets() -> None:
     if SECRETS_FILE_PATH.exists():
         load_dotenv(SECRETS_FILE_PATH, override=False)  # 不覆盖已存在的环境变量
         logger.info(f"Secrets file loaded: {SECRETS_FILE_PATH}")
+
+        # 记录加载的配置项（只记录 key，不记录 value 以避免泄露密钥）
+        secrets = dotenv_values(SECRETS_FILE_PATH)
+        for key, value in secrets.items():
+            # 记录 key 和 value 是否存在（不记录实际值）
+            has_value = "set" if value else "empty"
+            logger.info(f"{key}: [{has_value}]")
     else:
         logger.warning(f"Secrets file not found: {SECRETS_FILE_PATH}, skip loading.")
 
