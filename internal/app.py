@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 
-from internal.config.setting import setting
+from internal.config.load_config import setting
 from internal.core.signature import init_signature_auth_handler
 from internal.core.snowflake import init_snowflake_id_generator
 from internal.infra.anyio_task import init_anyio_task_handler, close_anyio_task_handler

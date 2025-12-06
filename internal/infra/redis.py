@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from redis.asyncio import ConnectionPool, Redis
 
-from internal.config.setting import setting
+from internal.config.load_config import setting
 from pkg.cache import CacheClient
 from pkg.logger_tool import logger
 

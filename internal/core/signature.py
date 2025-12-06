@@ -1,4 +1,4 @@
-from internal.config.setting import setting
+from internal.config.load_config import setting
 from pkg.signature import SignatureAuthHandler
 
 signature_auth_handler: SignatureAuthHandler | None = None

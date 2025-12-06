@@ -3,7 +3,7 @@ import asyncio
 from celery import Celery
 from celery.schedules import crontab
 
-from internal.config.setting import setting
+from internal.config.load_config import setting
 from internal.infra.database import init_db, close_db
 from internal.infra.redis import init_redis, close_redis
 from pkg.celery_task import CeleryClient
