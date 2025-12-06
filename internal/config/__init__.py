@@ -1,7 +1,7 @@
 from urllib.parse import quote_plus
 
 from pydantic import IPvAnyAddress
-from pydantic.v1 import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from pkg import BASE_DIR
 
@@ -52,34 +52,38 @@ class BaseConfig(BaseSettings):
 class LocalConfig(BaseConfig):
     DEBUG: bool = True
 
-    class Config:
-        case_sensitive = True
-        env_file_encoding = "utf-8"
-        env_file = (BASE_DIR / "configs" / ".env.local").as_posix()
+    model_config = SettingsConfigDict(
+        case_sensitive=True,
+        env_file_encoding="utf-8",
+        env_file=(BASE_DIR / "configs" / ".env.local").as_posix(),
+    )
 
 
 class DevelopmentConfig(BaseConfig):
     DEBUG: bool = True
 
-    class Config:
-        case_sensitive = True
-        env_file = (BASE_DIR / "configs" / ".env.dev").as_posix()
-        env_file_encoding = "utf-8"
+    model_config = SettingsConfigDict(
+        case_sensitive=True,
+        env_file=(BASE_DIR / "configs" / ".env.dev").as_posix(),
+        env_file_encoding="utf-8",
+    )
 
 
 class TestingConfig(BaseConfig):
-    DEBUG = False
+    DEBUG: bool = False
 
-    class Config:
-        case_sensitive = True
-        env_file = (BASE_DIR / "configs" / ".env.test").as_posix()
-        env_file_encoding = "utf-8"
+    model_config = SettingsConfigDict(
+        case_sensitive=True,
+        env_file=(BASE_DIR / "configs" / ".env.test").as_posix(),
+        env_file_encoding="utf-8",
+    )
 
 
 class ProductionConfig(BaseConfig):
-    DEBUG = False
+    DEBUG: bool = False
 
-    class Config:
-        case_sensitive = True
-        env_file = (BASE_DIR / "configs" / ".env.prod").as_posix()
-        env_file_encoding = "utf-8"
+    model_config = SettingsConfigDict(
+        case_sensitive=True,
+        env_file=(BASE_DIR / "configs" / ".env.prod").as_posix(),
+        env_file_encoding="utf-8",
+    )
