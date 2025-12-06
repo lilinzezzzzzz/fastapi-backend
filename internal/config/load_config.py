@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from urllib.parse import quote_plus
 
 from pydantic import SecretStr, computed_field
@@ -63,17 +64,21 @@ class BaseConfig(BaseSettings):
             return f"redis://:{quote_plus(password)}@{quote_plus(self.REDIS_HOST)}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
 
+# 配置文件路径
+ENV_FILE_PATH: Path = BASE_DIR / "configs" / f".env.{os.getenv('APP_ENV', 'local')}"
+
+
 class Settings(BaseConfig):
     # 自动根据环境变量 APP_ENV 加载对应的 .env 文件
     model_config = SettingsConfigDict(
         case_sensitive=True,
-        env_file=(BASE_DIR / "configs" / f".env.{os.getenv('APP_ENV', 'local')}").as_posix(),
+        env_file=ENV_FILE_PATH.as_posix(),
         env_file_encoding="utf-8",
         extra="ignore"
     )
 
 
-def init_setting() -> BaseConfig:
+def init_setting() -> Settings:
     """
     加载配置。
     此函数只在模块首次被导入时执行一次。
@@ -81,7 +86,11 @@ def init_setting() -> BaseConfig:
     logger.info("Init setting...")
     logger.info(f"Current environment: {SYS_ENV}.")
 
-    # 4. 实例化配置
+    # 检查配置文件是否存在
+    if not ENV_FILE_PATH.exists():
+        raise FileNotFoundError(f"Config file not found: {ENV_FILE_PATH}")
+
+    # 实例化配置
     s = Settings()
     # 5. 打印关键信息 (注意脱敏)
     logger.info("Init setting successfully.")
