@@ -9,7 +9,20 @@ from pkg.logger_tool import logger
 
 
 class BaseConfig(BaseSettings):
-    """基础配置类，定义所有环境共享的配置项"""
+    """
+    基础配置类，定义所有环境共享的配置项。
+
+    配置加载优先级（从高到低）：
+        1. 系统环境变量
+        2. .env 文件
+        3. 代码中定义的默认值
+
+    加载逻辑：
+        - 优先读取系统环境变量
+        - 如果环境变量不存在，则从 .env 文件读取
+        - 如果 .env 文件也没有，则使用默认值
+        - 如果以上都没有且字段无默认值，抛出 ValidationError
+    """
 
     model_config = SettingsConfigDict(
         case_sensitive=True,
