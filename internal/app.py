@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 
 from internal.config.load_config import setting, APP_ENV
+from internal.core.logger import init_logger
 from internal.core.signature import init_signature_auth_handler
 from internal.core.snowflake import init_snowflake_id_generator
 from internal.infra.anyio_task import init_anyio_task_handler, close_anyio_task_handler
@@ -95,6 +96,8 @@ async def lifespan(_app: FastAPI):
     init_signature_auth_handler()
     # 初始化 Snowflake ID Generator
     init_snowflake_id_generator()
+    # 初始化日志
+    init_logger()
     # 初始化 AnyIO Task Manager
     await init_anyio_task_handler()
 
