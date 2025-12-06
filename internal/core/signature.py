@@ -11,5 +11,5 @@ def init_signature_auth_handler():
         return
 
     signature_auth_handler = SignatureAuthHandler(
-        secret_key=setting.SECRET_KEY
+        secret_key=setting.SECRET_KEY.get_secret_value()
     )
