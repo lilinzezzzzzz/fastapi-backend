@@ -87,7 +87,7 @@ class BaseConfig(BaseSettings):
 
     # 基础配置
     DEBUG: bool
-    JWT_SECRET: SecretStr
+    JWT_SECRET: SecretStr  # JWT 签名密钥
 
     # AES 解密密钥（用于解密配置文件中的加密字段，通过环境变量注入）
     # 如果不使用加密配置，可设置为空字符串
