@@ -2,9 +2,11 @@ import os
 from pathlib import Path
 from urllib.parse import quote_plus
 
-from pydantic import SecretStr, computed_field
+from pydantic import SecretStr, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
 from pkg import SYS_ENV, BASE_DIR
+from pkg.bcrypt import aes_decrypt
 from pkg.logger_tool import logger
 
 
@@ -34,6 +36,10 @@ class BaseConfig(BaseSettings):
     DEBUG: bool
     SECRET_KEY: SecretStr
 
+    # AES 解密密钥（用于解密配置文件中的加密字段，通过环境变量注入）
+    # 如果不使用加密配置，可设置为空字符串
+    AES_SECRET: SecretStr = SecretStr("")
+
     # JWT 配置
     JWT_ALGORITHM: str
 
@@ -42,19 +48,49 @@ class BaseConfig(BaseSettings):
 
     # MySQL 配置
     MYSQL_USERNAME: str
-    MYSQL_PASSWORD: SecretStr
+    MYSQL_PASSWORD: SecretStr  # 支持加密格式: ENC(xxx)
     MYSQL_HOST: str
     MYSQL_PORT: int
     MYSQL_DATABASE: str
 
     # Redis 配置
     REDIS_HOST: str
-    REDIS_PASSWORD: SecretStr
+    REDIS_PASSWORD: SecretStr  # 支持加密格式: ENC(xxx)
     REDIS_DB: int
     REDIS_PORT: int
 
     # Token 过期时间（分钟）
     ACCESS_TOKEN_EXPIRE_MINUTES: int
+
+    @field_validator("MYSQL_PASSWORD", "REDIS_PASSWORD", mode="before")
+    @classmethod
+    def decrypt_password(cls, v: str, info) -> str:
+        """
+        自动解密以 ENC(...) 格式存储的密码。
+
+        配置文件中的加密格式: ENC(base64_encrypted_string)
+        解密密钥通过环境变量 AES_SECRET 注入。
+        """
+        if not isinstance(v, str):
+            return v
+
+        if v.startswith("ENC(") and v.endswith(")"):
+            # 提取加密内容
+            encrypted = v[4:-1]
+            # 从环境变量获取解密密钥
+            aes_secret = os.getenv("AES_SECRET", "")
+            if not aes_secret:
+                raise ValueError(
+                    f"Field '{info.field_name}' is encrypted but AES_SECRET is not set"
+                )
+            try:
+                return aes_decrypt(encrypted, aes_secret)
+            except Exception as e:
+                raise ValueError(
+                    f"Failed to decrypt field '{info.field_name}': {e}"
+                ) from e
+
+        return v  # 非加密格式直接返回
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -119,4 +155,4 @@ def init_setting() -> Settings:
 # =========================================================
 # 单例模式：模块加载时立即执行，生成全局唯一的配置对象
 # =========================================================
-setting: BaseConfig = init_setting()
+setting: Settings = init_setting()
