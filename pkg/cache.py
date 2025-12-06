@@ -3,15 +3,17 @@ import functools
 import time
 import uuid
 from contextlib import AbstractAsyncContextManager
-from typing import Any, Callable, Optional, List
+from typing import Any, Callable, Optional, List, Union
 
 from loguru import logger
-from orjson import JSONDecodeError
 from redis.asyncio import Redis
 
-from pkg import create_uuid_token, orjson_dumps, orjson_loads, token_cache_key, token_list_cache_key
-
 SessionProvider = Callable[[], AbstractAsyncContextManager[Redis]]
+
+
+class RedisOperationError(Exception):
+    """Redis 操作异常"""
+    pass
 
 
 def handle_redis_exception(func):
@@ -23,113 +25,91 @@ def handle_redis_exception(func):
     async def wrapper(self, *args, **kwargs):
         try:
             return await func(self, *args, **kwargs)
+        except RedisOperationError:
+            # 已经是 RedisOperationError，直接抛出避免重复包装
+            raise
         except Exception as e:
-            # 获取函数名用于日志
             func_name = func.__name__
-            raise Exception(f"Redis error in '{func_name}': {repr(e)} | args: {args}")
+            logger.error(f"Redis error in '{func_name}': {repr(e)} | args: {args}")
+            raise RedisOperationError(
+                f"Redis error in '{func_name}': {repr(e)} | args: {args}"
+            ) from e
 
     return wrapper
 
 
 class CacheClient:
+    """Redis 缓存客户端工具类"""
+
     def __init__(self, session_provider: SessionProvider):
         self.session_provider = session_provider
 
-    async def _get_conn(self):
-        """辅助方法：获取连接上下文"""
-        return self.session_provider()
-
     @handle_redis_exception
-    async def set_token(self, token: str, user_data: dict, ex: int = 10800):
-        key = token_cache_key(token)
-        value = orjson_dumps(user_data)
-        await self.set_value(key, value, ex)
-
-    @handle_redis_exception
-    async def get_token_value(self, token: str) -> dict:
-        return await self.get_value(token_cache_key(token))
-
-    @handle_redis_exception
-    async def set_token_list(self, user_id: int, token: str):
-        """
-        原子性地将 Token 加入列表，并保持列表长度不超过 3。
-        如果溢出，弹出最早的 Token。
-        """
-        cache_key = token_list_cache_key(user_id)
-        # Lua 脚本逻辑：RPUSH 新值 -> 检查 LLEN -> 如果 > 3 则 LPOP
-        # 这保证了操作的原子性，避免并发导致的列表膨胀
-        script = """
-        redis.call('RPUSH', KEYS[1], ARGV[1])
-        if redis.call('LLEN', KEYS[1]) > 3 then
-            return redis.call('LPOP', KEYS[1])
-        end
-        return nil
-        """
-
+    async def set_value(self, key: str, value: Any, ex: Optional[int] = None) -> bool:
+        """设置键值对，可选过期时间（秒）"""
         async with self.session_provider() as redis:
-            popped_value = await redis.eval(script, 1, cache_key, token)
-
-            if popped_value:
-                # 统一转为 string 记录日志
-                old_token = popped_value.decode() if isinstance(popped_value, bytes) else popped_value
-                logger.warning(
-                    f"Token list for user {user_id} is full. Popped old token: {old_token}"
-                )
+            result = await redis.set(key, value, ex=ex)
+            return result is True or result == "OK"
 
     @handle_redis_exception
-    async def set_value(self, key: str, value: Any, ex: int | None = None) -> bool:
-        async with self.session_provider() as redis:
-            return await redis.set(key, value, ex=ex)
-
-    @handle_redis_exception
-    async def get_value(self, key: str) -> Any:
+    async def get_value(self, key: str) -> str | None:
+        """获取键对应的值"""
         async with self.session_provider() as redis:
             value = await redis.get(key)
             if value is None:
                 return None
-
             if isinstance(value, bytes):
-                value = value.decode("utf-8")
+                return value.decode("utf-8")
 
-            try:
-                return orjson_loads(value)
-            except JSONDecodeError:
-                # 如果不是 JSON，直接返回字符串
-                return value
+            return value
 
     @handle_redis_exception
     async def delete_key(self, key: str) -> int:
+        """删除键，返回删除的键数量"""
         async with self.session_provider() as redis:
             return await redis.delete(key)
 
     @handle_redis_exception
     async def set_expiry(self, key: str, ex: int) -> bool:
+        """设置键的过期时间（秒）"""
         async with self.session_provider() as redis:
             return await redis.expire(key, ex)
 
     @handle_redis_exception
     async def key_exists(self, key: str) -> bool:
+        """检查键是否存在"""
         async with self.session_provider() as redis:
             return await redis.exists(key) > 0
 
     @handle_redis_exception
     async def get_ttl(self, key: str) -> int:
+        """获取键的剩余过期时间（秒），-1 表示永不过期，-2 表示不存在"""
         async with self.session_provider() as redis:
             return await redis.ttl(key)
 
     @handle_redis_exception
-    async def set_hash(self, name: str, key: str, value: Any) -> bool:
+    async def set_hash(self, name: str, key: str, value: Any) -> int:
+        """
+        设置哈希表字段的值。
+        返回值：1 表示新增字段，0 表示更新已存在字段（操作均成功）
+        """
         async with self.session_provider() as redis:
-            return await redis.hset(name, key, value) > 0
+            return await redis.hset(name, key, value)
 
     @handle_redis_exception
     async def get_hash(self, name: str, key: str) -> Optional[str]:
+        """获取哈希表中指定字段的值"""
         async with self.session_provider() as redis:
             value = await redis.hget(name, key)
-            return value.decode() if value else None
+            return value.decode() if isinstance(value, bytes) else value
 
     @handle_redis_exception
     async def push_to_list(self, name: str, value: Any, direction: str = "right") -> int:
+        """
+        向列表添加元素。
+        direction: 'left' 从左侧插入，'right' 从右侧插入（默认）
+        返回列表当前长度
+        """
         async with self.session_provider() as redis:
             if direction == "left":
                 return await redis.lpush(name, value)
@@ -149,31 +129,29 @@ class CacheClient:
 
     @handle_redis_exception
     async def left_pop_list(self, name: str) -> Optional[str]:
+        """从列表左侧弹出元素"""
         async with self.session_provider() as redis:
             value = await redis.lpop(name)
-            return value.decode() if value else None
-
-    async def login_and_set_token(self, user_data: dict) -> str:
-        # 该方法是业务组合逻辑，本身不需要加 Redis 装饰器，因为它调用的内部方法已经处理了异常
-        # 但为了捕获内部逻辑错误，也可以加上 try-except，或者依赖上层调用处理
-        token = create_uuid_token()
-        user_id = user_data["id"]
-
-        # 并行执行写入 Token 和更新列表，减少等待时间（可选优化，视业务严格程度而定）
-        # 这里使用 gather 并发执行，因为两者互不强依赖（除了用户ID）
-        await asyncio.gather(
-            self.set_token(token, user_data),
-            self.set_token_list(user_id, token)
-        )
-        return token
+            return value.decode() if isinstance(value, bytes) else value
 
     async def release_lock(self, lock_key: str, identifier: str) -> bool:
+        """
+        释放分布式锁。
+        只有持有正确 identifier 的调用者才能释放锁。
+        
+        Args:
+            lock_key: 锁的键名
+            identifier: 获取锁时返回的唯一标识符
+        
+        Returns:
+            True 表示成功释放，False 表示释放失败（锁不存在或不属于该 identifier）
+        """
+        # 修复 Lua 脚本语法：else 和 return 需要在正确的格式
         unlock_script = """
         if redis.call('GET', KEYS[1]) == ARGV[1] then
             return redis.call('DEL', KEYS[1])
-        else
-            return 0
         end
+        return 0
         """
         try:
             async with self.session_provider() as redis:
@@ -188,35 +166,47 @@ class CacheClient:
             lock_key: str,
             expire_ms: int = 10000,
             timeout_ms: int = 5000,
-            retry_interval_ms: int = 100
+            retry_interval_ms: int = 100,
     ) -> Optional[str]:
+        """
+        获取分布式锁。
 
-        lock_script = """
-        if redis.call('SET', KEYS[1], ARGV[1], 'NX', 'PX', ARGV[2]) then
-            return 1
-        else
-            return 0
-        end
+        Args:
+            lock_key: 锁的键名
+            expire_ms: 锁的过期时间（毫秒），默认 10 秒
+            timeout_ms: 获取锁的超时时间（毫秒），默认 5 秒
+            retry_interval_ms: 重试间隔（毫秒），默认 100ms
+
+        Returns:
+            成功返回锁的唯一标识符（用于释放锁），失败返回 None
         """
         identifier = uuid.uuid4().hex
         start_time = time.perf_counter()
+        timeout_seconds = timeout_ms / 1000
+        retry_interval_seconds = retry_interval_ms / 1000
 
-        # 优化：在循环外处理异常捕获，避免过于复杂的 try-catch 嵌套
         try:
-            while (time.perf_counter() - start_time) * 1000 < timeout_ms:
+            while (time.perf_counter() - start_time) < timeout_seconds:
                 async with self.session_provider() as redis:
-                    acquired = await redis.eval(
-                        lock_script, 1, lock_key, identifier, str(expire_ms)
+                    # 使用 Redis 原生 SET NX PX 命令，比 Lua 脚本更简洁高效
+                    acquired = await redis.set(
+                        lock_key, identifier, nx=True, px=expire_ms
                     )
 
                 if acquired:
                     return identifier
 
-                # 使用 await asyncio.sleep 非阻塞等待
-                await asyncio.sleep(retry_interval_ms / 1000)
+                await asyncio.sleep(retry_interval_seconds)
         except Exception as e:
             logger.error(f"Error acquiring lock {lock_key}: {repr(e)}")
-            # 获取锁失败（报错）时返回 None
             return None
 
         return None
+
+    @handle_redis_exception
+    async def batch_delete_keys(self, keys: List[str]) -> int:
+        """批量删除键，返回成功删除的键数量"""
+        if not keys:
+            return 0
+        async with self.session_provider() as redis:
+            return await redis.delete(*keys)

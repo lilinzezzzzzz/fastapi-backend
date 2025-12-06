@@ -1,10 +1,19 @@
 from internal.infra.redis import cache_client
-from pkg import token_list_cache_key
+from pkg import token_list_cache_key, token_cache_key, orjson_dumps, orjson_loads
 from pkg.logger_tool import logger
 
 
+async def get_cache_user_info(token: str) -> dict | None:
+    token_value = await cache_client.get_value(token_cache_key(token))
+    if token_value is None:
+        logger.warning("Token verification failed: token not found")
+        return None
+
+    return orjson_loads(token_value)
+
+
 async def verify_token(token: str) -> tuple[dict | None, bool]:
-    user_data: dict = await cache_client.get_token_value(token)
+    user_data: dict = await get_cache_user_info(token)
     if user_data is None:
         logger.warning("Token verification failed: token not found")
         return None, False
