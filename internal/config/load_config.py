@@ -6,7 +6,7 @@ from dotenv import dotenv_values, load_dotenv
 from pydantic import SecretStr, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from internal.app import BASE_DIR, APP_ENV
+from internal import BASE_DIR, APP_ENV
 from pkg.crypto import aes_decrypt
 from pkg.logger_tool import logger
 
@@ -35,7 +35,7 @@ class BaseConfig(BaseSettings):
 
     # 基础配置
     DEBUG: bool
-    SECRET_KEY: SecretStr
+    JWT_SECRET: SecretStr
 
     # AES 解密密钥（用于解密配置文件中的加密字段，通过环境变量注入）
     # 如果不使用加密配置，可设置为空字符串
@@ -151,8 +151,7 @@ def _load_secrets() -> None:
         secrets = dotenv_values(SECRETS_FILE_PATH)
         for key, value in secrets.items():
             # 记录 key 和 value 是否存在（不记录实际值）
-            has_value = "set" if value else "empty"
-            logger.info(f"{key}: [{has_value}]")
+            logger.info(f"{key}: [{value if value else "empty"}]")
     else:
         logger.warning(f"Secrets file not found: {SECRETS_FILE_PATH}, skip loading.")
 

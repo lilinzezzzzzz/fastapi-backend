@@ -6,7 +6,7 @@ from typing import Any
 import loguru
 
 from pkg import orjson_dumps
-from internal.app import BASE_DIR
+from internal import BASE_DIR
 
 # 类型别名
 RotationType = str | int | time | timedelta

@@ -1,11 +1,11 @@
 import logging
 import os
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 
+from internal import APP_ENV
 from internal.config.load_config import setting
 from internal.core.signature import init_signature_auth_handler
 from internal.core.snowflake import init_snowflake_id_generator
@@ -14,9 +14,6 @@ from internal.infra.database import init_db, close_db
 from internal.infra.redis import init_redis, close_redis
 from pkg.logger_tool import logger
 from pkg.resp_tool import response_factory
-
-BASE_DIR: Path = Path(__file__).parent.parent.absolute()
-APP_ENV: str = str.lower(os.getenv("APP_ENV", "unknown"))
 
 
 def create_app() -> FastAPI:
