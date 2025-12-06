@@ -1,3 +1,4 @@
+import os
 from urllib.parse import quote_plus
 
 from pydantic import SecretStr, computed_field
@@ -62,41 +63,14 @@ class BaseConfig(BaseSettings):
             return f"redis://:{quote_plus(password)}@{quote_plus(self.REDIS_HOST)}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
 
-class LocalConfig(BaseConfig):
+class Settings(BaseConfig):
+    # 自动根据环境变量 APP_ENV 加载对应的 .env 文件
     model_config = SettingsConfigDict(
         case_sensitive=True,
+        env_file=(BASE_DIR / "configs" / f".env.{os.getenv('APP_ENV', 'local')}").as_posix(),
         env_file_encoding="utf-8",
-        extra="ignore",
-        env_file=(BASE_DIR / "configs" / ".env.local").as_posix(),
+        extra="ignore"
     )
 
-
-class DevelopmentConfig(BaseConfig):
-    model_config = SettingsConfigDict(
-        case_sensitive=True,
-        env_file_encoding="utf-8",
-        extra="ignore",
-        env_file=(BASE_DIR / "configs" / ".env.dev").as_posix(),
-    )
-
-
-class TestingConfig(BaseConfig):
-    DEBUG: bool = False
-
-    model_config = SettingsConfigDict(
-        case_sensitive=True,
-        env_file_encoding="utf-8",
-        extra="ignore",
-        env_file=(BASE_DIR / "configs" / ".env.test").as_posix(),
-    )
-
-
-class ProductionConfig(BaseConfig):
-    DEBUG: bool = False
-
-    model_config = SettingsConfigDict(
-        case_sensitive=True,
-        env_file_encoding="utf-8",
-        extra="ignore",
-        env_file=(BASE_DIR / "configs" / ".env.prod").as_posix(),
-    )
+# 使用时直接实例化
+settings = Settings()
