@@ -6,9 +6,62 @@ from dotenv import dotenv_values, load_dotenv
 from pydantic import SecretStr, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from internal import BASE_DIR, APP_ENV
+from internal import BASE_DIR
 from pkg.crypto import aes_decrypt
 from pkg.logger_tool import logger
+
+
+# 密钥文件路径（不纳入版本控制，只存放解密密钥等敏感信息）
+SECRETS_FILE_PATH: Path = BASE_DIR / "configs" / ".secrets"
+
+
+def _load_secrets() -> None:
+    """
+    加载密钥文件到环境变量。
+
+    密钥文件 (.secrets) 不纳入版本控制，只存放解密密钥等敏感信息。
+    文件格式示例:
+        AES_SECRET=your_aes_secret_key
+        APP_ENV=local
+    """
+    if SECRETS_FILE_PATH.exists():
+        load_dotenv(SECRETS_FILE_PATH, override=False)  # 不覆盖已存在的环境变量
+        logger.info(f"Secrets file loaded: {SECRETS_FILE_PATH}")
+
+        # 记录加载的配置项（只记录 key，不记录 value 以避免泄露密钥）
+        secrets = dotenv_values(SECRETS_FILE_PATH)
+        for key, value in secrets.items():
+            # 记录 key 和 value 是否存在（不记录实际值）
+            has_value = "set" if value else "empty"
+            logger.info(f"  - {key}: [{has_value}]")
+    else:
+        raise FileNotFoundError(f"Secrets file not found: {SECRETS_FILE_PATH}")
+
+
+def _get_app_env() -> str:
+    """
+    从环境变量获取 APP_ENV。
+
+    APP_ENV 必须在 .secrets 文件或系统环境变量中设置，不允许默认值。
+    """
+    app_env = os.getenv("APP_ENV")
+    if not app_env:
+        raise ValueError(
+            "APP_ENV is not set. Please set it in .secrets file or environment variable."
+        )
+    return app_env.lower()
+
+
+# =========================================================
+# 模块加载时按顺序执行：
+# 1. 先加载 .secrets 文件（获取 APP_ENV 和其他密钥）
+# 2. 然后根据 APP_ENV 确定配置文件路径
+# =========================================================
+_load_secrets()
+APP_ENV: str = _get_app_env()
+ENV_FILE_PATH: Path = BASE_DIR / "configs" / f".env.{APP_ENV}"
+logger.info(f"APP_ENV: {APP_ENV}")
+logger.info(f"Config file path: {ENV_FILE_PATH}")
 
 
 class BaseConfig(BaseSettings):
@@ -119,10 +172,8 @@ class BaseConfig(BaseSettings):
             return f"redis://:{quote_plus(password)}@{quote_plus(self.REDIS_HOST)}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
 
-# 配置文件路径
-ENV_FILE_PATH: Path = BASE_DIR / "configs" / f".env.{os.getenv('APP_ENV', 'local')}"
-# 密钥文件路径（不纳入版本控制，只存放解密密钥等敏感信息）
-SECRETS_FILE_PATH: Path = BASE_DIR / "configs" / ".secrets"
+# 配置文件路径（根据 APP_ENV 动态确定）
+# ENV_FILE_PATH 已在模块顶部加载 .secrets 后确定
 
 
 class Settings(BaseConfig):
@@ -135,37 +186,12 @@ class Settings(BaseConfig):
     )
 
 
-def _load_secrets() -> None:
-    """
-    加载密钥文件到环境变量。
-
-    密钥文件 (.secrets) 不纳入版本控制，只存放解密密钥等敏感信息。
-    文件格式示例:
-        AES_SECRET=your_aes_secret_key
-    """
-    if SECRETS_FILE_PATH.exists():
-        load_dotenv(SECRETS_FILE_PATH, override=False)  # 不覆盖已存在的环境变量
-        logger.info(f"Secrets file loaded: {SECRETS_FILE_PATH}")
-
-        # 记录加载的配置项（只记录 key，不记录 value 以避免泄露密钥）
-        secrets = dotenv_values(SECRETS_FILE_PATH)
-        for key, value in secrets.items():
-            # 记录 key 和 value 是否存在（不记录实际值）
-            logger.info(f"{key}: [{value if value else "empty"}]")
-    else:
-        logger.warning(f"Secrets file not found: {SECRETS_FILE_PATH}, skip loading.")
-
-
 def init_setting() -> Settings:
     """
     加载配置。
     此函数只在模块首次被导入时执行一次。
     """
     logger.info("Init setting...")
-    logger.info(f"Current environment: {APP_ENV}.")
-
-    # 先加载密钥文件（用于解密配置）
-    _load_secrets()
 
     # 检查配置文件是否存在
     if not ENV_FILE_PATH.exists():
@@ -173,7 +199,7 @@ def init_setting() -> Settings:
 
     # 实例化配置
     s = Settings()
-    # 5. 打印关键信息 (注意脱敏)
+    # 打印关键信息 (注意脱敏)
     logger.info("Init setting successfully.")
     logger.info("==========================")
     for k, v in s.model_dump().items():
