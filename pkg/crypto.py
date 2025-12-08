@@ -1,12 +1,9 @@
-import base64
 from abc import ABC, abstractmethod
 from enum import Enum, unique
 
 import anyio
 import bcrypt
 from cryptography.fernet import Fernet, InvalidToken
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 # =========================================================
 # Encryption Algorithms Enum
@@ -46,38 +43,6 @@ class BaseCryptoUtil(ABC):
     @abstractmethod
     def decrypt(self, cipher_text: str) -> str:
         pass
-
-
-# =========================================================
-# Helper: Key Derivation (PBKDF2)
-# =========================================================
-
-
-def derive_key_from_password(password: str, salt: bytes | str | None = None) -> bytes:
-    """
-    从密码派生密钥 (PBKDF2HMAC)。
-    这是一个耗时操作，建议缓存结果或在应用启动时执行一次。
-
-    Returns:
-        Fernet URL-safe Base64 encoded key
-    """
-    _DEFAULT_SALT = b"fastapi_aes_salt_default"
-
-    if salt is None:
-        salt_bytes = _DEFAULT_SALT
-    elif isinstance(salt, str):
-        salt_bytes = salt.encode("utf-8")
-    else:
-        salt_bytes = salt
-
-    kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=salt_bytes,
-        iterations=100_000,
-    )
-    # Fernet 需要 URLSafe Base64 编码的 32 字节密钥
-    return base64.urlsafe_b64encode(kdf.derive(password.encode("utf-8")))
 
 
 # =========================================================
@@ -169,15 +134,13 @@ def aes_encrypt(
     **注意**：此函数每次调用都会进行 PBKDF2 运算（慢）。
     生产环境建议在外部生成好 key，直接调用 AESCipher(key).encrypt()。
     """
-    real_key = derive_key_from_password(secret_key, salt)
-    return AESCipher(real_key).encrypt(plaintext)
+    return AESCipher(secret_key).encrypt(plaintext)
 
 
 def aes_decrypt(
     ciphertext: str, secret_key: str, salt: bytes | str | None = None
 ) -> str:
-    real_key = derive_key_from_password(secret_key, salt)
-    return AESCipher(real_key).decrypt(ciphertext)
+    return AESCipher(secret_key).decrypt(ciphertext)
 
 
 # =========================================================
