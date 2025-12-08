@@ -12,8 +12,6 @@ from cryptography.fernet import Fernet, InvalidToken
 
 @unique
 class EncryptionAlgorithm(str, Enum):
-    SM4_ECB = "sm4_ecb_no_iv"
-    SM4_CBC = "sm4_cbc_with_iv"
     AES = "aes"  # 使用 Fernet (AES-128-CBC + HMAC)
 
 
