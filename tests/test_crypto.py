@@ -191,13 +191,13 @@ class TestAESCipher:
 class TestCryptoFactory:
     def test_get_aes_util(self):
         key = AESCipher.generate_key()
-        util = crypto_factory(algo=EncryptionAlgorithm.AES, key=key)
+        util = crypto_factory(algo=EncryptionAlgorithm.AES)(key=key)
         assert isinstance(util, AESCipher)
 
     def test_factory_invalid_algo(self):
         # 这里的 ignore 是为了欺骗类型检查器去测试运行时错误
         with pytest.raises(NotImplementedError):
-            crypto_factory(algo="unknown_algo", key="k")  # type: ignore
+            crypto_factory(algo="unknown_algo")  # type: ignore
 
 
 def test_helper_functions_round_trip():

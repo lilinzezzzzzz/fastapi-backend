@@ -106,7 +106,7 @@ class AESCipher(BaseCryptoUtil):
 # =========================================================
 
 
-def crypto_factory(algo: EncryptionAlgorithm, key: str | bytes) -> BaseCryptoUtil:
+def crypto_factory(algo: EncryptionAlgorithm) -> type[BaseCryptoUtil]:
     """
     根据算法枚举获取加密工具实例。
     业务层只需要调用这个函数。
@@ -117,7 +117,7 @@ def crypto_factory(algo: EncryptionAlgorithm, key: str | bytes) -> BaseCryptoUti
             f"Algorithm '{algo}' is not registered or implemented."
         )
 
-    return crypto_class(key)
+    return crypto_class
 
 
 # =========================================================
@@ -127,12 +127,20 @@ def crypto_factory(algo: EncryptionAlgorithm, key: str | bytes) -> BaseCryptoUti
 
 def aes_encrypt(plaintext: str, secret_key: str | bytes) -> str:
     """便捷函数：AES 加密"""
-    return crypto_factory(EncryptionAlgorithm.AES, secret_key).encrypt(plaintext)
+    crypto_class: AESCipher = crypto_factory(EncryptionAlgorithm.AES)
+    return crypto_class(secret_key).encrypt(plaintext)
 
 
 def aes_decrypt(ciphertext: str, secret_key: str | bytes) -> str:
     """便捷函数：AES 解密"""
-    return crypto_factory(EncryptionAlgorithm.AES, secret_key).decrypt(ciphertext)
+    crypto_class: AESCipher = crypto_factory(EncryptionAlgorithm.AES)
+    return crypto_class(secret_key).decrypt(ciphertext)
+
+
+def aes_generate_key() -> str:
+    """便捷函数：AES 生成密钥"""
+    crypto_class: AESCipher = crypto_factory(EncryptionAlgorithm.AES)
+    return crypto_class.generate_key()
 
 
 # =========================================================
