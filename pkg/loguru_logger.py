@@ -1,5 +1,5 @@
 import sys
-from datetime import timezone, time, timedelta
+from datetime import time, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -66,12 +66,7 @@ class LoggerManager:
         else:
             self.rotation = rotation
 
-    def setup(
-            self,
-            *,
-            write_to_file: bool = True,
-            write_to_console: bool = True
-    ) -> "loguru.Logger":
+    def setup(self, *, write_to_file: bool = True, write_to_console: bool = True) -> "loguru.Logger":
         """
         应用配置并初始化系统日志。
         注意：setup 不再接收配置参数，而是使用 __init__ 中保存的属性。
@@ -123,18 +118,16 @@ class LoggerManager:
             self._registered_types[self.SYSTEM_LOG_TYPE] = {"save_json": False}
 
         mode_str = "UTC" if self.use_utc else "Local Time"
-        self._logger.info(
-            f"Logger initialized. Mode: {mode_str} | Rotation: {self.rotation} | Level: {self.level}"
-        )
+        self._logger.info(f"Logger initialized. Mode: {mode_str} | Rotation: {self.rotation} | Level: {self.level}")
         self._is_initialized = True
         return self._logger
 
     def get_dynamic_logger(
-            self,
-            log_type: str,
-            *,
-            write_to_file: bool = True,
-            save_json: bool = True,
+        self,
+        log_type: str,
+        *,
+        write_to_file: bool = True,
+        save_json: bool = True,
     ) -> "loguru.Logger":
         """
         获取动态类型的 Logger。
