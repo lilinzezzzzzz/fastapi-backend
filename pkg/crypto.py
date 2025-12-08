@@ -12,7 +12,7 @@ from cryptography.fernet import Fernet, InvalidToken
 
 @unique
 class EncryptionAlgorithm(str, Enum):
-    AES = "aes"  # 使用 Fernet (AES-128-CBC + HMAC)
+    AES = "aes"
 
 
 # =========================================================
@@ -21,15 +21,7 @@ class EncryptionAlgorithm(str, Enum):
 
 
 class BaseCryptoUtil(ABC):
-    """
-    加密工具抽象基类 (Strategy Interface)。
-    """
-
     def __init__(self, key: str | bytes):
-        """
-        初始化加密器。
-        :param key: 算法所需的密钥（格式由具体子类决定，如 Hex 或 Base64）
-        """
         if not key:
             raise ValueError("Key cannot be empty")
         self.key = key
@@ -51,33 +43,40 @@ class BaseCryptoUtil(ABC):
 class AESCipher(BaseCryptoUtil):
     """
     基于 Fernet 的 AES 加密实现。
-
-    注意：此类现在只负责加密/解密，不再负责从密码派生密钥。
-    这大大提高了多次调用时的性能。
     """
 
     def __init__(self, key: str | bytes):
         super().__init__(key)
         try:
-            # 确保 key 是 bytes 格式
+            # 兼容 str (YAML/JSON 配置) 和 bytes
             ensure_bytes_key = key if isinstance(key, bytes) else key.encode("utf-8")
             self._fernet = Fernet(ensure_bytes_key)
         except Exception as e:
-            raise ValueError(f"Invalid AES/Fernet key provided: {e}")
+            raise ValueError(
+                f"Invalid AES key. Key must be 32 url-safe base64-encoded bytes.\n"
+                f"Original error: {e}\n"
+                f"Tip: You can use AESCipher.generate_key() to get a valid key."
+            )
+
+    @staticmethod
+    def generate_key() -> str:
+        """
+        生成一个随机的、符合 Fernet 标准的密钥。
+        通常用于项目初始化或生成配置文件。
+
+        Returns:
+            str: URL-safe Base64 编码的密钥字符串 (可以直接写入 YAML/Env)
+        """
+        # Fernet.generate_key() 返回 bytes，我们需要 decode 成 str 以便存入配置文件
+        return Fernet.generate_key().decode("utf-8")
 
     def encrypt(self, plain_text: str) -> str:
-        """
-        加密字符串。
-        """
         if not plain_text:
             return ""
         encrypted_bytes = self._fernet.encrypt(plain_text.encode("utf-8"))
         return encrypted_bytes.decode("utf-8")
 
     def decrypt(self, cipher_text: str) -> str:
-        """
-        解密字符串。
-        """
         if not cipher_text:
             return ""
         try:
@@ -93,64 +92,39 @@ class AESCipher(BaseCryptoUtil):
 
 
 class CryptoFactory:
-    """
-    加密工厂类。
-    """
-
     _MAPPING: dict[EncryptionAlgorithm, type[BaseCryptoUtil]] = {
         EncryptionAlgorithm.AES: AESCipher,
     }
 
     @staticmethod
     def get_crypto_util(algo: EncryptionAlgorithm, key: str | bytes) -> BaseCryptoUtil:
-        """
-        获取加密工具实例。
-
-        :param algo: 算法枚举
-        :param key: 适用于该算法的密钥
-        """
         crypto_class = CryptoFactory._MAPPING.get(algo)
         if not crypto_class:
             raise NotImplementedError(f"Algorithm {algo} is not implemented yet.")
-
         return crypto_class(key)
 
 
-# 全局单例工厂（如果不需要状态，其实直接用静态方法即可）
 crypto_factory = CryptoFactory()
 
-
 # =========================================================
-# 便捷函数 (为了兼容旧代码调用方式，但增加了优化)
+# Helpers
 # =========================================================
 
 
-def aes_encrypt(
-    plaintext: str, secret_key: str, salt: bytes | str | None = None
-) -> str:
-    """
-    **注意**：此函数每次调用都会进行 PBKDF2 运算（慢）。
-    生产环境建议在外部生成好 key，直接调用 AESCipher(key).encrypt()。
-    """
+def aes_encrypt(plaintext: str, secret_key: str | bytes) -> str:
     return AESCipher(secret_key).encrypt(plaintext)
 
 
-def aes_decrypt(
-    ciphertext: str, secret_key: str, salt: bytes | str | None = None
-) -> str:
+def aes_decrypt(ciphertext: str, secret_key: str | bytes) -> str:
     return AESCipher(secret_key).decrypt(ciphertext)
 
 
 # =========================================================
-# Password Hasher (Bcrypt)
+# Password Hasher
 # =========================================================
 
 
 class PasswordHasher:
-    """
-    密码哈希工具 (Bcrypt)。
-    """
-
     def __init__(self, rounds: int = 12):
         self.rounds = rounds
 
@@ -181,3 +155,13 @@ class PasswordHasher:
 
 
 password_hasher = PasswordHasher()
+
+# =========================================================
+# CLI Utility (方便你在命令行直接生成 Key)
+# =========================================================
+
+if __name__ == "__main__":
+    print("--- AES Key Generator ---")
+    new_key = AESCipher.generate_key()
+    print(f"Generated Key: {new_key}")
+    print("Copy the above key into your config.yaml or .env file.")
