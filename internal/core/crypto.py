@@ -1,17 +1,3 @@
-from pkg.crypto import AESCipher, BaseCryptoUtil, EncryptionAlgorithm
+from pkg.crypto import crypto_factory
 
-
-class CryptoFactory:
-    _MAPPING: dict[EncryptionAlgorithm, type[BaseCryptoUtil]] = {
-        EncryptionAlgorithm.AES: AESCipher,
-    }
-
-    @staticmethod
-    def get_crypto_util(algo: EncryptionAlgorithm, key: str | bytes) -> BaseCryptoUtil:
-        crypto_class = CryptoFactory._MAPPING.get(algo)
-        if not crypto_class:
-            raise NotImplementedError(f"Algorithm {algo} is not implemented yet.")
-        return crypto_class(key)
-
-
-crypto_factory = CryptoFactory()
+crypto_factory = crypto_factory
