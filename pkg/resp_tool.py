@@ -125,7 +125,7 @@ class ResponseFactory:
             },
         )
 
-    def resp_200(
+    def success(
         self, *, data: Any = None, message: str = "", lang: str = "zh"
     ) -> CustomORJSONResponse:
         """
@@ -137,17 +137,17 @@ class ResponseFactory:
             code=GlobalCodes.Success.code, data=data, message=message
         )
 
-    def resp_list(
+    def list(
         self, *, data: list, page: int, limit: int, total: int
     ) -> CustomORJSONResponse:
         """
         分页列表响应
         """
-        return self.resp_200(
+        return self.success(
             data={"items": data, "meta": {"page": page, "limit": limit, "total": total}}
         )
 
-    def resp_error(
+    def error(
         self, error: AppError, message: str = "", data: Any = None, lang: str = "zh"
     ) -> CustomORJSONResponse:
         """
@@ -167,7 +167,7 @@ class ResponseFactory:
 
 
 # 全局单例
-response_tool = ResponseFactory()
+response_factory = ResponseFactory()
 
 
 # =========================================================

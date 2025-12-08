@@ -9,4 +9,4 @@ router = APIRouter(prefix="/test", tags=["web v1 user"])
 @router.get("/hello_world")
 async def hello_world(request: Request):
     await user_svc.hello(request)
-    return response_factory.resp_200()
+    return response_factory.success()
