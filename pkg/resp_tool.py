@@ -39,15 +39,11 @@ class GlobalCodes:
     Unauthorized = AppError(40001, {"zh": "未授权，请登录", "en": "Unauthorized"})
     Forbidden = AppError(40003, {"zh": "权限不足，禁止访问", "en": "Forbidden"})
     NotFound = AppError(40004, {"zh": "资源不存在", "en": "Not Found"})
-    PayloadTooLarge = AppError(40013, {"zh": "请求载荷过大", "en": "Payload Too Large"})
-    UnprocessableEntity = AppError(
-        40022, {"zh": "无法处理的实体", "en": "Unprocessable Entity"}
-    )
+    PayloadTooLarge = AppError(40005, {"zh": "请求载荷过大", "en": "Payload Too Large"})
+    UnprocessableEntity = AppError(40006, {"zh": "无法处理的实体", "en": "Unprocessable Entity"})
 
     # 服务端错误 (50000 - 59999)
-    InternalServerError = AppError(
-        50000, {"zh": "服务器内部错误", "en": "Internal Server Error"}
-    )
+    InternalServerError = AppError(50000, {"zh": "服务器内部错误", "en": "Internal Server Error"})
 
 
 # =========================================================
@@ -77,11 +73,7 @@ class CustomORJSONResponse(ORJSONResponse):
             """
             if isinstance(obj, Decimal):
                 # 如果是小数且在浮点数安全范围内(-1e15 ~ 1e15)，转 float；否则转 str 避免精度丢失
-                return (
-                    float(obj)
-                    if -1e15 < obj < 1e15 and obj.as_tuple().exponent >= -6
-                    else str(obj)
-                )
+                return float(obj) if -1e15 < obj < 1e15 and obj.as_tuple().exponent >= -6 else str(obj)
 
             if isinstance(obj, bytes):
                 return obj.decode("utf-8", "ignore")
@@ -125,31 +117,21 @@ class ResponseFactory:
             },
         )
 
-    def success(
-        self, *, data: Any = None, message: str = "", lang: str = "zh"
-    ) -> CustomORJSONResponse:
+    def success(self, *, data: Any = None, message: str = "", lang: str = "zh") -> CustomORJSONResponse:
         """
         成功响应
         """
         if not message:
             message = GlobalCodes.Success.get_msg(lang)
-        return self._make_response(
-            code=GlobalCodes.Success.code, data=data, message=message
-        )
+        return self._make_response(code=GlobalCodes.Success.code, data=data, message=message)
 
-    def list(
-        self, *, data: list, page: int, limit: int, total: int
-    ) -> CustomORJSONResponse:
+    def list(self, *, data: list, page: int, limit: int, total: int) -> CustomORJSONResponse:
         """
         分页列表响应
         """
-        return self.success(
-            data={"items": data, "meta": {"page": page, "limit": limit, "total": total}}
-        )
+        return self.success(data={"items": data, "meta": {"page": page, "limit": limit, "total": total}})
 
-    def error(
-        self, error: AppError, message: str = "", data: Any = None, lang: str = "zh"
-    ) -> CustomORJSONResponse:
+    def error(self, error: AppError, message: str = "", data: Any = None, lang: str = "zh") -> CustomORJSONResponse:
         """
         通用错误响应。
 

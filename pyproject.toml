@@ -106,7 +106,7 @@ python-downloads = false
 
 [tool.ruff]
 # 核心规则
-line-length = 88
+line-length = 120
 target-version = "py310" # 假设你用 Python 3.10+
 
 [tool.ruff.lint]
