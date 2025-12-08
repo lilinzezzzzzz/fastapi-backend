@@ -130,7 +130,7 @@ def crypto_factory(algo: EncryptionAlgorithm) -> type[BaseCryptoUtil]:
 
 
 # =========================================================
-# Helpers (可选保留，本质上是对 get_crypto_util 的封装)
+# Helpers
 # =========================================================
 
 
