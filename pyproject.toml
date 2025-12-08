@@ -144,7 +144,7 @@ quote-style = "double"
 # 使用空格缩进
 indent-style = "space"
 # 魔法尾随逗号 (让多行列表更整洁)
-skip-magic-trailing-comma = true
+skip-magic-trailing-comma = false
 # 行尾符
 line-ending = "auto"
 
