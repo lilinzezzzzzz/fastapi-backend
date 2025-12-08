@@ -12,7 +12,7 @@ from pkg.loguru_logger import logger
 
 
 @dataclass
-class HTTPxResult:
+class RequestResult:
     status_code: int = 0
     response: httpx.Response | None = None
     error: str | None = None
@@ -92,7 +92,7 @@ class HTTPXClient:
         files: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
         timeout: int | None = None,
-    ) -> HTTPxResult:
+    ) -> RequestResult:
         """
         核心请求方法，统一异常捕获
         """
@@ -127,7 +127,7 @@ class HTTPXClient:
                 except Exception as e:
                     err_msg = f"HTTP {response.status_code}, error: {e}"
 
-            return HTTPxResult(
+            return RequestResult(
                 status_code=response.status_code, response=response, error=err_msg
             )
 
@@ -135,7 +135,7 @@ class HTTPXClient:
             # 这种情况通常由 response.raise_for_status() 触发，
             # 但上面的逻辑没有调用它，所以主要捕获 connect error 等
             logger.error(f"HTTPStatusError: {exc}")
-            return HTTPxResult(
+            return RequestResult(
                 status_code=exc.response.status_code,
                 response=exc.response,
                 error=str(exc),
@@ -143,22 +143,22 @@ class HTTPXClient:
 
         except httpx.RequestError as exc:
             logger.error(f"RequestError to {url}: {exc}")
-            return HTTPxResult(status_code=0, error=f"Network Error: {exc}")
+            return RequestResult(status_code=0, error=f"Network Error: {exc}")
 
         except Exception as exc:
             logger.exception(f"Unexpected Error in _request: {exc}")
-            return HTTPxResult(status_code=500, error=f"Internal Error: {exc}")
+            return RequestResult(status_code=500, error=f"Internal Error: {exc}")
 
-    async def get(self, url: str, **kwargs) -> HTTPxResult:
+    async def get(self, url: str, **kwargs) -> RequestResult:
         return await self._request("GET", url, **kwargs)
 
-    async def post(self, url: str, **kwargs) -> HTTPxResult:
+    async def post(self, url: str, **kwargs) -> RequestResult:
         return await self._request("POST", url, **kwargs)
 
-    async def put(self, url: str, **kwargs) -> HTTPxResult:
+    async def put(self, url: str, **kwargs) -> RequestResult:
         return await self._request("PUT", url, **kwargs)
 
-    async def delete(self, url: str, **kwargs) -> HTTPxResult:
+    async def delete(self, url: str, **kwargs) -> RequestResult:
         return await self._request("DELETE", url, **kwargs)
 
     async def download_bytes(
