@@ -105,10 +105,50 @@ default = true
 python-downloads = false
 
 [tool.ruff]
-target-version = "py312"            # 根据你的 Python 版本改
+# 1. 核心设置
+# 设置最大行长（Black 默认 88，也有人喜欢 100 或 120）
 line-length = 120
-exclude = ["venv", ".venv", "build", "dist"]
+# 目标 Python 版本（根据你的项目调整，如 py39, py310, py311）
+target-version = "py312"
+
+# 排除不需要检查的目录
+exclude = [
+    ".git",
+    ".venv",
+    "build",
+    "dist",
+]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B"]       # 基础错误 + isort + bugbear 等
-ignore = ["E203"]           # 常见的和 Black/格式化冲突的规则
+# 2. 启用哪些规则？(这是 Ruff 的灵魂)
+# E: pycodestyle (错误)
+# W: pycodestyle (警告)
+# F: Pyflakes (核心逻辑错误)
+# I: isort (导入排序)
+# B: flake8-bugbear (发现潜在 Bug)
+# UP: pyupgrade (自动将旧语法升级为新语法，如 optional 类型)
+# N: pep8-naming (变量命名规范)
+select = ["E", "W", "F", "I", "B", "UP", "N"]
+
+# 忽略某些过于严格的规则
+# E501: 行太长（通常由 formatter 处理，linter 不需要报错）
+ignore = ["E501"]
+
+# 允许自动修复的规则（默认是所有，但你可以限制）
+fixable = ["ALL"]
+
+[tool.ruff.format]
+# 3. 格式化风格 (替代 Black)
+# 使用双引号 (Black 默认风格)
+quote-style = "double"
+# 使用空格缩进
+indent-style = "space"
+# 魔法尾随逗号 (让多行列表更整洁)
+skip-magic-trailing-comma = false
+# 行尾符
+line-ending = "auto"
+
+[tool.ruff.lint.isort]
+# 4. 导入排序设置
+# 强制将 import 分组（比如标准库、第三方库、本地库分开）
+combine-as-imports = true

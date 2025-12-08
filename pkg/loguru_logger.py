@@ -1,5 +1,5 @@
 import sys
-from datetime import time, timedelta, timezone
+from datetime import UTC, time, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -24,15 +24,15 @@ class LoggerManager:
     SYSTEM_LOG_TYPE: str = "system"
 
     def __init__(
-            self,
-            *,
-            level: str = "INFO",
-            base_log_dir: Path | None = None,
-            rotation: RotationType = time(0, 0, 0, tzinfo=timezone.utc),
-            retention: RetentionType = timedelta(days=30),
-            compression: str | None = None,
-            use_utc: bool = True,
-            enqueue: bool = True,
+        self,
+        *,
+        level: str = "INFO",
+        base_log_dir: Path | None = None,
+        rotation: RotationType = time(0, 0, 0, tzinfo=UTC),
+        retention: RetentionType = timedelta(days=30),
+        compression: str | None = None,
+        use_utc: bool = True,
+        enqueue: bool = True,
     ):
         """
         构造函数：接收所有配置参数并存储为实例属性。
@@ -62,7 +62,7 @@ class LoggerManager:
         # 如果强制使用 UTC，且传入的 rotation 是默认的无时区 time 对象，
         # 则自动为其添加 UTC 时区，确保轮转时刻与日志时间一致。
         if self.use_utc and isinstance(rotation, time) and rotation.tzinfo is None:
-            self.rotation = rotation.replace(tzinfo=timezone.utc)
+            self.rotation = rotation.replace(tzinfo=UTC)
         else:
             self.rotation = rotation
 
@@ -237,7 +237,7 @@ class LoggerManager:
             "line": record["line"],
             "text": "",
             "message": record["message"],
-            **extra_data
+            **extra_data,
         }
 
         if json_content is not None:
@@ -250,7 +250,7 @@ class LoggerManager:
     # --- 辅助方法 ---
     @staticmethod
     def _utc_time_patcher(record: Any):
-        record["time"] = record["time"].astimezone(timezone.utc)
+        record["time"] = record["time"].astimezone(UTC)
 
     @staticmethod
     def _filter_system(record: Any) -> bool:

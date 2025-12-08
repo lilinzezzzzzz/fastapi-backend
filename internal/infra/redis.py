@@ -29,7 +29,7 @@ def init_redis() -> None:
             setting.redis_url,
             encoding="utf-8",
             decode_responses=True,
-            max_connections=getattr(setting, "REDIS_MAX_CONNECTIONS", 20)
+            max_connections=getattr(setting, "REDIS_MAX_CONNECTIONS", 20),
         )
 
     if cache_client is None:
@@ -41,7 +41,9 @@ def init_redis() -> None:
     if cache_client is None:
         cache_client = CacheClient(session_provider=get_redis)
 
-    logger.info("Redis initialized successfully.")
+    logger.info(
+        "Redis initialized successfully.                                                                                    "
+    )
 
 
 async def close_redis() -> None:
