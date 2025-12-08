@@ -1,131 +1,208 @@
 import base64
+from abc import ABC, abstractmethod
+from enum import Enum, unique
 
 import anyio
 import bcrypt
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
+# =========================================================
+# Encryption Algorithms Enum
+# =========================================================
+
+
+@unique
+class EncryptionAlgorithm(str, Enum):
+    SM4_ECB = "sm4_ecb_no_iv"
+    SM4_CBC = "sm4_cbc_with_iv"
+    AES = "aes"  # 使用 Fernet (AES-128-CBC + HMAC)
+
 
 # =========================================================
-# AES 加密/解密（基于 Fernet，底层使用 AES-128-CBC）
+# Strategy Interface
 # =========================================================
 
-class AESCipher:
-    """
-    AES 加密/解密工具类。
 
-    使用 Fernet 实现，底层基于 AES-128-CBC + HMAC 认证。
-    支持使用任意长度的密钥（通过 PBKDF2 派生）。
+class BaseCryptoUtil(ABC):
+    """
+    加密工具抽象基类 (Strategy Interface)。
     """
 
-    # 默认 salt
-    _DEFAULT_SALT = b"fastapi_aes_salt"
-
-    def __init__(self, secret_key: str, salt: bytes | str | None = None):
+    def __init__(self, key: str | bytes):
         """
-        初始化 AES 加密器。
-
-        Args:
-            secret_key: 加密密钥，可以是任意长度的字符串
-            salt: 盐值，用于密钥派生。支持 bytes 或 str，不传则使用默认值
+        初始化加密器。
+        :param key: 算法所需的密钥（格式由具体子类决定，如 Hex 或 Base64）
         """
-        # 处理 salt 参数
-        if salt is None:
-            salt_bytes = self._DEFAULT_SALT
-        elif isinstance(salt, str):
-            salt_bytes = salt.encode("utf-8")
-        else:
-            salt_bytes = salt
+        if not key:
+            raise ValueError("Key cannot be empty")
+        self.key = key
 
-        # 使用 PBKDF2 从密钥派生出 Fernet 所需的 32 字节密钥
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=salt_bytes,
-            iterations=100_000,
-        )
-        key = base64.urlsafe_b64encode(kdf.derive(secret_key.encode("utf-8")))
-        self._fernet = Fernet(key)
+    @abstractmethod
+    def encrypt(self, plain_text: str) -> str:
+        pass
 
-    def encrypt(self, plaintext: str) -> str:
-        """
-        加密明文。
-
-        Args:
-            plaintext: 要加密的明文字符串
-
-        Returns:
-            加密后的 Base64 编码字符串
-        """
-        encrypted = self._fernet.encrypt(plaintext.encode("utf-8"))
-        return encrypted.decode("utf-8")
-
-    def decrypt(self, ciphertext: str) -> str:
-        """
-        解密密文。
-
-        Args:
-            ciphertext: 加密后的 Base64 编码字符串
-
-        Returns:
-            解密后的明文字符串
-
-        Raises:
-            InvalidToken: 解密失败（密钥错误或数据被篡改）
-        """
-        decrypted = self._fernet.decrypt(ciphertext.encode("utf-8"))
-        return decrypted.decode("utf-8")
+    @abstractmethod
+    def decrypt(self, cipher_text: str) -> str:
+        pass
 
 
-def aes_encrypt(plaintext: str, secret_key: str, salt: bytes | str | None = None) -> str:
+# =========================================================
+# Helper: Key Derivation (PBKDF2)
+# =========================================================
+
+
+def derive_key_from_password(password: str, salt: bytes | str | None = None) -> bytes:
     """
-    便捷函数：AES 加密。
-
-    Args:
-        plaintext: 要加密的明文字符串
-        secret_key: 加密密钥
-        salt: 盐值，不传则使用默认值
+    从密码派生密钥 (PBKDF2HMAC)。
+    这是一个耗时操作，建议缓存结果或在应用启动时执行一次。
 
     Returns:
-        加密后的 Base64 编码字符串
+        Fernet URL-safe Base64 encoded key
     """
-    return AESCipher(secret_key, salt).encrypt(plaintext)
+    _DEFAULT_SALT = b"fastapi_aes_salt_default"
 
+    if salt is None:
+        salt_bytes = _DEFAULT_SALT
+    elif isinstance(salt, str):
+        salt_bytes = salt.encode("utf-8")
+    else:
+        salt_bytes = salt
 
-def aes_decrypt(ciphertext: str, secret_key: str, salt: bytes | str | None = None) -> str:
-    """
-    便捷函数：AES 解密。
-
-    Args:
-        ciphertext: 加密后的 Base64 编码字符串
-        secret_key: 解密密钥
-        salt: 盐值，必须与加密时使用的盐值一致
-
-    Returns:
-        解密后的明文字符串
-    """
-    return AESCipher(secret_key, salt).decrypt(ciphertext)
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt_bytes,
+        iterations=100_000,
+    )
+    # Fernet 需要 URLSafe Base64 编码的 32 字节密钥
+    return base64.urlsafe_b64encode(kdf.derive(password.encode("utf-8")))
 
 
 # =========================================================
-# 密码哈希（bcrypt）
+# AES Implementation (Fernet)
+# =========================================================
+
+
+class AESCipher(BaseCryptoUtil):
+    """
+    基于 Fernet 的 AES 加密实现。
+
+    注意：此类现在只负责加密/解密，不再负责从密码派生密钥。
+    这大大提高了多次调用时的性能。
+    """
+
+    def __init__(self, key: str | bytes):
+        super().__init__(key)
+        try:
+            # 确保 key 是 bytes 格式
+            ensure_bytes_key = key if isinstance(key, bytes) else key.encode("utf-8")
+            self._fernet = Fernet(ensure_bytes_key)
+        except Exception as e:
+            raise ValueError(f"Invalid AES/Fernet key provided: {e}")
+
+    def encrypt(self, plain_text: str) -> str:
+        """
+        加密字符串。
+        """
+        if not plain_text:
+            return ""
+        encrypted_bytes = self._fernet.encrypt(plain_text.encode("utf-8"))
+        return encrypted_bytes.decode("utf-8")
+
+    def decrypt(self, cipher_text: str) -> str:
+        """
+        解密字符串。
+        """
+        if not cipher_text:
+            return ""
+        try:
+            decrypted_bytes = self._fernet.decrypt(cipher_text.encode("utf-8"))
+            return decrypted_bytes.decode("utf-8")
+        except InvalidToken:
+            raise ValueError("Decryption failed: Invalid token or wrong key")
+
+
+# =========================================================
+# Factory
+# =========================================================
+
+
+class CryptoFactory:
+    """
+    加密工厂类。
+    """
+
+    _MAPPING: dict[EncryptionAlgorithm, type[BaseCryptoUtil]] = {
+        EncryptionAlgorithm.AES: AESCipher,
+    }
+
+    @staticmethod
+    def get_crypto_util(algo: EncryptionAlgorithm, key: str | bytes) -> BaseCryptoUtil:
+        """
+        获取加密工具实例。
+
+        :param algo: 算法枚举
+        :param key: 适用于该算法的密钥
+        """
+        crypto_class = CryptoFactory._MAPPING.get(algo)
+        if not crypto_class:
+            raise NotImplementedError(f"Algorithm {algo} is not implemented yet.")
+
+        return crypto_class(key)
+
+
+# 全局单例工厂（如果不需要状态，其实直接用静态方法即可）
+crypto_factory = CryptoFactory()
+
+
+# =========================================================
+# 便捷函数 (为了兼容旧代码调用方式，但增加了优化)
+# =========================================================
+
+
+def aes_encrypt(
+    plaintext: str, secret_key: str, salt: bytes | str | None = None
+) -> str:
+    """
+    **注意**：此函数每次调用都会进行 PBKDF2 运算（慢）。
+    生产环境建议在外部生成好 key，直接调用 AESCipher(key).encrypt()。
+    """
+    real_key = derive_key_from_password(secret_key, salt)
+    return AESCipher(real_key).encrypt(plaintext)
+
+
+def aes_decrypt(
+    ciphertext: str, secret_key: str, salt: bytes | str | None = None
+) -> str:
+    real_key = derive_key_from_password(secret_key, salt)
+    return AESCipher(real_key).decrypt(ciphertext)
+
+
+# =========================================================
+# Password Hasher (Bcrypt)
 # =========================================================
 
 
 class PasswordHasher:
+    """
+    密码哈希工具 (Bcrypt)。
+    """
+
     def __init__(self, rounds: int = 12):
         self.rounds = rounds
 
     def _hash_sync(self, password: str) -> str:
         salt = bcrypt.gensalt(rounds=self.rounds)
-        hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
-        return hashed.decode("utf-8")
+        return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
 
     @staticmethod
     def _verify_sync(plain_password: str, hashed_password: str) -> bool:
         try:
-            return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
+            return bcrypt.checkpw(
+                plain_password.encode("utf-8"), hashed_password.encode("utf-8")
+            )
         except (ValueError, TypeError):
             return False
 
@@ -137,18 +214,9 @@ class PasswordHasher:
     async def verify(self, plain_password: str, hashed_password: str) -> bool:
         if not plain_password or not hashed_password:
             return False
-        return await anyio.to_thread.run_sync(self._verify_sync, plain_password, hashed_password)
+        return await anyio.to_thread.run_sync(
+            self._verify_sync, plain_password, hashed_password
+        )
 
 
-"""
-from pkg.bcrypt import password_hasher
-
-# 哈希密码
-hashed = await password_hasher.hash("my_password")
-
-# 验证密码
-is_valid = await password_hasher.verify("my_password", hashed)
-
-# 自定义 rounds
-custom_hasher = PasswordHasher(rounds=14)
-"""
+password_hasher = PasswordHasher()
