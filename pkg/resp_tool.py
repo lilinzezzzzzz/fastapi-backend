@@ -142,7 +142,7 @@ class ResponseFactory:
             lang: 语言代码 ('zh', 'en')，默认为 'zh'
 
         Examples:
-            >>> error(GlobalCodes.BadRequest, message="ID不能为空")
+            >>> response_factory.error(GlobalCodes.BadRequest, message="ID不能为空")
             >>> # Result: message="请求参数错误: ID不能为空"
         """
         # 1. 获取预定义的错误信息 (例如 "请求参数错误")
