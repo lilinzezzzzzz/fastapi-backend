@@ -1,6 +1,12 @@
-from typing import Annotated, Union, Any
 from datetime import datetime
-from pydantic import BeforeValidator, WithJsonSchema, BaseModel
+from decimal import Decimal, InvalidOperation
+from typing import Annotated, Any
+
+from pydantic import BaseModel, BeforeValidator, WithJsonSchema
+
+# JavaScript 最大安全整数 (2^53 - 1)
+# 超过这个范围的整数在 JS 中会丢失精度，必须转为字符串
+JS_MAX_SAFE_INTEGER = 9007199254740991
 
 
 class BaseResponse(BaseModel):
@@ -19,40 +25,67 @@ class BaseListResponse(BaseModel):
 
 
 # ==========================================
-# 1. FlexibleInt
+# 1. SmartInt (智能整数 - 推荐默认使用)
 # ==========================================
-def _validate_flexible_int(v: Any) -> int:
-    if isinstance(v, str) and v.isdigit():
-        return int(v)
-    return v
+def _validate_smart_int(v: Any) -> int | str:
+    """
+    智能整数转换逻辑：
+    1. 尝试转为 int (支持字符串输入 "123")
+    2. 如果数值绝对值 > JS安全整数范围，强制转为 str (保护雪花ID精度)
+    3. 否则保留为 int
+    """
+    try:
+        # 统一转 int，处理 float 或 str 输入
+        if isinstance(v, float):
+            val = int(v)
+        else:
+            val = int(str(v))
+    except (ValueError, TypeError):
+        # 如果无法转数字，抛出 Pydantic 验证错误
+        raise ValueError(f"Invalid integer value: {v}")
+
+    # 核心保护逻辑：检测雪花算法 ID
+    if abs(val) > JS_MAX_SAFE_INTEGER:
+        return str(val)
+
+    return val
 
 
-# 定义：最终类型是 int，但在验证前执行转换，且 JSON Schema 显示为 integer
-FlexibleInt = Annotated[
-    int,
-    BeforeValidator(_validate_flexible_int),
-    WithJsonSchema({"type": "integer", "title": "FlexibleInt", "description": "Accepts int or digit string"})
+# 定义：最终类型可能是 int 或 str
+SmartInt = Annotated[
+    int | str,
+    BeforeValidator(_validate_smart_int),
+    WithJsonSchema(
+        {
+            "anyOf": [{"type": "integer"}, {"type": "string"}],
+            "title": "SmartInt",
+            "description": "Auto-convert to string if integer exceeds JS safe range (2^53-1)",
+            "example": 12345,
+        }
+    ),
 ]
 
 
 # ==========================================
-# 2. BigIntStr (原 StringId)
+# 2. IntStr (强制字符串 ID - 依然保留)
 # ==========================================
 def _validate_bigint_str(v: Any) -> str:
-    # 核心逻辑：无论输入什么，强制转为字符串
+    """无论输入什么，强制转为字符串"""
     return str(v)
 
 
-# 定义：最终类型是 str，但在验证前执行转换，且允许输入 Union[str, int]
-BigIntStr = Annotated[
-    Union[str, int],  # 关键点：这里告诉 IDE，输入 int 也是合法的！
+# 专门用于那些“必须是字符串”的字段，比如由其他系统生成的 String ID
+IntStr = Annotated[
+    str | int,
     BeforeValidator(_validate_bigint_str),
-    WithJsonSchema({
-        "type": "string",
-        "title": "BigIntStr",
-        "description": "Large integer serialized as string",
-        "example": "115603251198457884"
-    })
+    WithJsonSchema(
+        {
+            "type": "string",
+            "title": "IntStr",
+            "description": "Force serialization to string",
+            "example": "115603251198457884",
+        }
+    ),
 ]
 
 
@@ -73,7 +106,45 @@ def _validate_flexible_datetime(v: Any) -> datetime:
 
 
 FlexibleDatetime = Annotated[
-    Union[datetime, str],
+    datetime | str,
     BeforeValidator(_validate_flexible_datetime),
-    WithJsonSchema({"type": "string", "format": "date-time", "example": "2025-05-07T14:30:00Z"})
+    WithJsonSchema({"type": "string", "format": "date-time", "example": "2025-05-07T14:30:00Z"}),
+]
+
+
+# ==========================================
+# 4. SmartDecimal (智能浮点数)
+# ==========================================
+def _validate_smart_decimal(v: Any) -> float | str:
+    """
+    智能转换逻辑：
+    1. 范围在 -1e15 到 1e15 之间，且小数位精度 >= -6 (最多6位) -> 转 float
+    2. 否则 (数值过大 或 精度过高) -> 转 str
+    """
+    try:
+        if isinstance(v, float):
+            obj = Decimal(str(v))
+        else:
+            obj = Decimal(v)
+    except (InvalidOperation, TypeError, ValueError):
+        raise ValueError(f"Invalid decimal value: {v}")
+
+    # 判断范围和精度
+    if -1e15 < obj < 1e15 and obj.as_tuple().exponent >= -6:
+        return float(obj)
+
+    return str(obj)
+
+
+SmartDecimal = Annotated[
+    float | str,
+    BeforeValidator(_validate_smart_decimal),
+    WithJsonSchema(
+        {
+            "anyOf": [{"type": "number"}, {"type": "string"}],
+            "title": "SmartDecimal",
+            "description": "Float for standard precision, String for high precision/large numbers",
+            "example": 12.3456,
+        }
+    ),
 ]
