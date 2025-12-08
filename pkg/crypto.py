@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from enum import Enum, unique
+from typing import Literal, overload
 
 import anyio
 import bcrypt
@@ -106,6 +107,14 @@ class AESCipher(BaseCryptoUtil):
 # =========================================================
 
 
+@overload
+def crypto_factory(algo: Literal[EncryptionAlgorithm.AES]) -> type[AESCipher]: ...
+
+
+@overload
+def crypto_factory(algo: EncryptionAlgorithm) -> type[BaseCryptoUtil]: ...
+
+
 def crypto_factory(algo: EncryptionAlgorithm) -> type[BaseCryptoUtil]:
     """
     根据算法枚举获取加密工具实例。
@@ -126,20 +135,20 @@ def crypto_factory(algo: EncryptionAlgorithm) -> type[BaseCryptoUtil]:
 
 
 def aes_encrypt(plaintext: str, secret_key: str | bytes) -> str:
-    """便捷函数：AES 加密"""
-    crypto_class: AESCipher = crypto_factory(EncryptionAlgorithm.AES)
+    """Convenience function: AES encrypt."""
+    crypto_class: type[AESCipher] = crypto_factory(EncryptionAlgorithm.AES)
     return crypto_class(secret_key).encrypt(plaintext)
 
 
 def aes_decrypt(ciphertext: str, secret_key: str | bytes) -> str:
-    """便捷函数：AES 解密"""
-    crypto_class: AESCipher = crypto_factory(EncryptionAlgorithm.AES)
+    """Convenience function: AES decrypt."""
+    crypto_class: type[AESCipher] = crypto_factory(EncryptionAlgorithm.AES)
     return crypto_class(secret_key).decrypt(ciphertext)
 
 
 def aes_generate_key() -> str:
-    """便捷函数：AES 生成密钥"""
-    crypto_class: AESCipher = crypto_factory(EncryptionAlgorithm.AES)
+    """Convenience function: Generate AES key."""
+    crypto_class: type[AESCipher] = crypto_factory(EncryptionAlgorithm.AES)
     return crypto_class.generate_key()
 
 
