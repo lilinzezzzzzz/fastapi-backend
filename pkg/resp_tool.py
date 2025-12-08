@@ -137,14 +137,23 @@ class ResponseFactory:
 
         Args:
             error: GlobalCodes 中定义的错误对象
-            message: 自定义错误信息。如果传入，将覆盖 error 默认的文案。
+            message: 自定义详细信息。如果传入，将拼接到默认文案后面。
             data: 附加数据
             lang: 语言代码 ('zh', 'en')，默认为 'zh'
-        """
-        final_message = message if message else error.get_msg(lang)
 
-        # 即使是业务错误，通常 HTTP 状态码也返回 200，由前端根据 code 判断
-        # 如果需要修改 HTTP 状态码，可以在这里根据 error.code 做映射
+        Examples:
+            >>> error(GlobalCodes.BadRequest, message="ID不能为空")
+            >>> # Result: message="请求参数错误: ID不能为空"
+        """
+        # 1. 获取预定义的错误信息 (例如 "请求参数错误")
+        base_msg = error.get_msg(lang)
+
+        # 2. 拼接逻辑
+        if message:
+            final_message = f"{base_msg}: {message}"
+        else:
+            final_message = base_msg
+
         return self._make_response(code=error.code, message=final_message, data=data)
 
 
