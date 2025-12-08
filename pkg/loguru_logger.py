@@ -80,7 +80,7 @@ class LoggerManager:
                 "trace_id": "-",
                 "type": self.SYSTEM_LOG_TYPE,
                 "json_content": None,
-            }
+            },
         }
 
         # 2. 根据实例属性决定是否挂载 UTC 补丁
