@@ -148,12 +148,12 @@ class ResponseFactory:
             f"but received type: {type(data)}"
         )
 
-    def success(self, *, data: dict | BaseModel, message: str = "") -> CustomORJSONResponse:
+    def success(self, *, data: dict | BaseModel) -> CustomORJSONResponse:
         """
         成功响应
         """
         data = self._process_success_data(data)
-        return self._make_response(code=BaseCodes.success.code, data=data, message=message)
+        return self._make_response(code=BaseCodes.success.code, data=data)
 
     def list(self, *, items: list, page: int, limit: int, total: int) -> CustomORJSONResponse:
         """
@@ -191,11 +191,11 @@ response_factory = ResponseFactory()
 # 4. 工具函数
 # =========================================================
 
-def success_response(data: dict | BaseModel, message: str = "") -> CustomORJSONResponse:
+def success_response(data: dict | BaseModel) -> CustomORJSONResponse:
     """
     成功响应
     """
-    return response_factory.success(data=data, message=message)
+    return response_factory.success(data=data)
 
 
 def success_list_response(
