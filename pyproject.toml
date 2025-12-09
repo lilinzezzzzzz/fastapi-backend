@@ -60,6 +60,7 @@ dependencies = [
     "trio>=0.32.0",
     "pydantic-settings>=2.12.0",
     "cryptography>=46.0.3",
+    "ruff>=0.14.6",
 ]
 
 # 分组依赖 —— 开发环境才需要
