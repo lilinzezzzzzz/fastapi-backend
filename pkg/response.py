@@ -26,7 +26,7 @@ class AppStatus:
 
     def get_msg(self, lang: str = "zh") -> str:
         """根据语言获取文案，默认回退到中文"""
-        return self.message.get(lang, self.message.get("zh", "Unknown Status"))
+        return self.message.get(lang, None)
 
 
 @dataclass(frozen=True)
@@ -207,8 +207,8 @@ def success_list_response(
     return response_factory.list(items=data, page=page, limit=limit, total=total)
 
 
-def error_response(    error: AppError, *, message: str = "", data: Any = None, lang: str = "zh"
-) -> CustomORJSONResponse:
+def error_response(error: AppError, *, message: str = "", data: Any = None, lang: str = "zh"
+                   ) -> CustomORJSONResponse:
     """
     通用错误响应
     """
