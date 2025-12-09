@@ -5,13 +5,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 
-from internal.config.load_config import setting, APP_ENV
+from internal.config.load_config import APP_ENV, setting
 from internal.core.logger import init_logger
 from internal.core.signature import init_signature_auth_handler
 from internal.core.snowflake import init_snowflake_id_generator
-from internal.infra.anyio_task import init_anyio_task_handler, close_anyio_task_handler
-from internal.infra.database import init_db, close_db
-from internal.infra.redis import init_redis, close_redis
+from internal.infra.anyio_task import close_anyio_task_handler, init_anyio_task_handler
+from internal.infra.database import close_db, init_db
+from internal.infra.redis import close_redis, init_redis
 from pkg.loguru_logger import logger
 from pkg.resp_tool import response_factory
 
@@ -22,7 +22,7 @@ def create_app() -> FastAPI:
         debug=debug,
         docs_url="/docs" if debug else None,
         redoc_url="/redoc" if debug else None,
-        lifespan=lifespan
+        lifespan=lifespan,
     )
 
     register_router(app)
@@ -34,12 +34,16 @@ def create_app() -> FastAPI:
 
 def register_router(app: FastAPI):
     from internal.controllers import web
+
     app.include_router(web.router)
     from internal.controllers import internalapi
+
     app.include_router(internalapi.router)
     from internal.controllers import publicapi
+
     app.include_router(publicapi.router)
     from internal.controllers import serviceapi
+
     app.include_router(serviceapi.router)
 
 
@@ -56,15 +60,18 @@ def register_exception(app: FastAPI):
 def register_middleware(app: FastAPI):
     # 6. GZip 中间件：压缩响应，提高传输效率
     from starlette.middleware.gzip import GZipMiddleware
+
     app.add_middleware(GZipMiddleware)
 
     # 4. 认证中间件：校验 Token，确保只有合法用户访问 API
     from internal.middleware.auth import ASGIAuthMiddleware
+
     app.add_middleware(ASGIAuthMiddleware)
 
     # 2. CORS 中间件：处理跨域请求
     if setting.BACKEND_CORS_ORIGINS:
         from starlette.middleware.cors import CORSMiddleware
+
         app.add_middleware(
             CORSMiddleware,
             allow_credentials=True,
@@ -75,6 +82,7 @@ def register_middleware(app: FastAPI):
 
     # 1. 日志中间件：记录请求和响应的日志，监控 API 性能和请求流
     from internal.middleware.recorder import ASGIRecordMiddleware
+
     app.add_middleware(ASGIRecordMiddleware)
 
 
