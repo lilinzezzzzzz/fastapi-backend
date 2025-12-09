@@ -37,27 +37,13 @@ class AppError(AppStatus):
     pass  # AppError 继承了 AppStatus 的所有属性和方法
 
 
-class GlobalCodes:
+class BaseCodes:
     """
     全局状态码定义
     不使用 Enum，直接使用类属性，方便代码跳转和类型提示
     """
 
-    Success = AppStatus(20000, {"zh": "操作成功", "en": "Success"})
-
-    # 客户端错误 (40000 - 49999)
-    BadRequest = AppError(40000, {"zh": "请求参数错误", "en": "Bad Request"})
-    Unauthorized = AppError(40001, {"zh": "未授权，请登录", "en": "Unauthorized"})
-    Forbidden = AppError(40003, {"zh": "权限不足，禁止访问", "en": "Forbidden"})
-    NotFound = AppError(40004, {"zh": "资源不存在", "en": "Not Found"})
-    PayloadTooLarge = AppError(40005, {"zh": "请求载荷过大", "en": "Payload Too Large"})
-    UnprocessableEntity = AppError(40006, {"zh": "无法处理的实体", "en": "Unprocessable Entity"})
-
-    # 服务端错误 (50000 - 59999)
-    InternalServerError = AppError(50000, {"zh": "服务器内部错误", "en": "Internal Server Error"})
-
-
-global_codes = GlobalCodes
+    success = AppStatus(20000, {"zh": "", "en": ""})
 
 
 # =========================================================
@@ -167,7 +153,7 @@ class ResponseFactory:
         成功响应
         """
         data = self._process_success_data(data)
-        return self._make_response(code=GlobalCodes.Success.code, data=data, message=message)
+        return self._make_response(code=BaseCodes.success.code, data=data, message=message)
 
     def list(self, *, items: list, page: int, limit: int, total: int) -> CustomORJSONResponse:
         """
@@ -184,10 +170,6 @@ class ResponseFactory:
             message: 自定义详细信息。如果传入，将拼接到默认文案后面。
             data: 附加数据
             lang: 语言代码 ('zh', 'en')，默认为 'zh'
-
-        Examples:
-            >>> response_factory.error(GlobalCodes.BadRequest, message="ID不能为空")
-            >>> # Result: message="请求参数错误: ID不能为空"
         """
         # 1. 获取预定义的错误信息 (例如 "请求参数错误")
         base_msg = error.get_msg(lang)
@@ -242,3 +224,26 @@ def wrap_sse_data(content: str | dict) -> str:
         # 序列化并确保是 utf-8 字符串
         content = orjson_dumps(content)
     return f"data: {content}\n\n"
+
+
+'''
+使用示例
+class GlobalCodes(BaseCodes):
+    """
+    全局状态码定义
+    """
+
+    # 客户端错误 (40000 - 49999)
+    BadRequest = AppError(40000, {"zh": "请求参数错误", "en": "Bad Request"})
+    Unauthorized = AppError(40001, {"zh": "未授权，请登录", "en": "Unauthorized"})
+    Forbidden = AppError(40003, {"zh": "权限不足，禁止访问", "en": "Forbidden"})
+    NotFound = AppError(40004, {"zh": "资源不存在", "en": "Not Found"})
+    PayloadTooLarge = AppError(40005, {"zh": "请求载荷过大", "en": "Payload Too Large"})
+    UnprocessableEntity = AppError(40006, {"zh": "无法处理的实体", "en": "Unprocessable Entity"})
+
+    # 服务端错误 (50000 - 59999)
+    InternalServerError = AppError(50000, {"zh": "服务器内部错误", "en": "Internal Server Error"})
+
+
+global_codes = BaseCodes
+'''
