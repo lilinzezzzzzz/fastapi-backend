@@ -6,16 +6,8 @@ from functools import partial
 from typing import Any, Literal
 
 import anyio
-from anyio import (
-    CancelScope,
-    CapacityLimiter,
-    create_task_group,
-    fail_after,
-    to_process,
-    to_thread,
-    move_on_after,
-    get_cancelled_exc_class,
-)
+from anyio import (CancelScope, CapacityLimiter, create_task_group, fail_after, get_cancelled_exc_class, move_on_after,
+                   to_process, to_thread)
 from anyio.abc import TaskGroup
 
 from pkg.loguru_logger import logger
@@ -34,7 +26,7 @@ class TaskInfo:
     task_id: str
     name: str
     scope: CancelScope
-    status: str = "running"  # running | completed | failed | cancelled | timeout
+    status: str = "running"  # running | completed | failed | canceled | timeout
     result: Any = None
     exception: BaseException | None = None
 
