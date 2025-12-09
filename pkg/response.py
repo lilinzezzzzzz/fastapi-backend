@@ -121,12 +121,10 @@ class ResponseFactory:
             },
         )
 
-    def success(self, *, data: Any = None, message: str = "", lang: str = "zh") -> CustomORJSONResponse:
+    def success(self, *, data: Any = None, message: str = "") -> CustomORJSONResponse:
         """
         成功响应
         """
-        if not message:
-            message = GlobalCodes.Success.get_msg(lang)
         return self._make_response(code=GlobalCodes.Success.code, data=data, message=message)
 
     def list(self, *, data: list, page: int, limit: int, total: int) -> CustomORJSONResponse:
@@ -168,6 +166,28 @@ response_factory = ResponseFactory()
 # =========================================================
 # 4. 工具函数
 # =========================================================
+
+def success_response(data: Any = None, message: str = "") -> CustomORJSONResponse:
+    """
+    成功响应
+    """
+    return response_factory.success(data=data, message=message)
+
+
+def success_list_response(
+    data: list, page: int, limit: int, total: int
+) -> CustomORJSONResponse:
+    """
+    分页列表响应
+    """
+    return response_factory.list(data=data, page=page, limit=limit, total=total)
+
+
+def error_response(error: AppError, *, message: str = "", data: Any = None, lang: str = "zh") -> CustomORJSONResponse:
+    """
+    通用错误响应
+    """
+    return response_factory.error(error, message=message, data=data, lang=lang)
 
 
 def wrap_sse_data(content: str | dict) -> str:
