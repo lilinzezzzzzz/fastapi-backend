@@ -132,7 +132,7 @@ class ResponseFactory:
         )
 
     @staticmethod
-    def _process_success_data(data: Any) -> dict | None:
+    def _process_success_data(data: dict | BaseModel) -> dict | None:
         """
         验证成功响应的数据类型，并将其转换为最优格式（dict）。
 
@@ -162,7 +162,7 @@ class ResponseFactory:
             f"but received type: {type(data)}"
         )
 
-    def success(self, *, data: Any = None, message: str = "") -> CustomORJSONResponse:
+    def success(self, *, data: dict | BaseModel, message: str = "") -> CustomORJSONResponse:
         """
         成功响应
         """
@@ -209,7 +209,7 @@ response_factory = ResponseFactory()
 # 4. 工具函数
 # =========================================================
 
-def success_response(data: Any = None, message: str = "") -> CustomORJSONResponse:
+def success_response(data: dict | BaseModel, message: str = "") -> CustomORJSONResponse:
     """
     成功响应
     """
