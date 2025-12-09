@@ -136,7 +136,7 @@ class ResponseFactory:
         if isinstance(data, BaseModel):
             # 将 Pydantic 实例转换为字典，这是 ORJSONResponse 最期望的输入格式
             # 假设使用 Pydantic V2
-            return data.model_dump()
+            return data.model_dump(mode="json")
 
         # 2. 接着检查 Python 原生类型 (dict 或 None)
         if isinstance(data, dict) or data is None:
@@ -207,8 +207,7 @@ def success_list_response(
     return response_factory.list(items=data, page=page, limit=limit, total=total)
 
 
-def error_response(
-    error: AppError, *, message: str = "", data: Any = None, lang: str = "zh"
+def error_response(    error: AppError, *, message: str = "", data: Any = None, lang: str = "zh"
 ) -> CustomORJSONResponse:
     """
     通用错误响应
