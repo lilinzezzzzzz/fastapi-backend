@@ -1,5 +1,4 @@
 import asyncio
-import random
 import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -9,10 +8,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
 from internal.core.exception import AppException
-from internal.dao.user import user_dao
 from internal.infra.anyio_task import anyio_task_manager
-from internal.infra.database import get_session
-from internal.models.user import User
 from pkg.loguru_logger import logger
 from pkg.response import response_factory
 from pkg.stream_control import stream_with_chunk_control

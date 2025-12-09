@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any, TypeVar, cast, Optional, Self
 
 from sqlalchemy import (
-    BigInteger, DateTime, ColumnExpressionArgument, Delete, Select, Subquery, Update, distinct, func, or_, select,
+    BigInteger, DateTime, Delete, Select, Subquery, Update, distinct, func, or_, select,
     update, insert, inspect
 )
 from sqlalchemy.ext.asyncio import (
@@ -410,7 +410,7 @@ class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
         self, model_cls: type[T],
         *,
         session_provider: SessionProvider,
-        initial_where: ColumnExpressionArgument | None = None,
+        initial_where: ColumnElement[bool] | None = None,
         custom_stmt: Select | None = None, include_deleted: bool | None = None,
     ):
         super().__init__(model_cls, session_provider=session_provider)
