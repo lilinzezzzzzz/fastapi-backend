@@ -63,7 +63,7 @@ class ASGIRecordMiddleware:
                 logger.error(f"Unhandled exception, exc={get_last_exec_tb(exc)}")
                 if not response_started:
                     # 手动构建错误响应
-                    error_resp = response_factory.response(
+                    error_resp = response_factory.error(
                         code=global_codes.InternalServerError,
                         message=f"Unhandled Exception: {exc}"
                     )

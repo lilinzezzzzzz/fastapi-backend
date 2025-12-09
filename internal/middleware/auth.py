@@ -47,7 +47,7 @@ class ASGIAuthMiddleware:
             x_nonce = headers.get("X-Nonce")
 
             if not signature_auth_handler.verify(x_signature=x_signature, x_timestamp=x_timestamp, x_nonce=x_nonce):
-                resp = response_factory.resp_401(
+                resp = response_factory.error(
                     msg=f"signature_auth failed, x_signature={x_signature}, x_timestamp={x_timestamp}, x_nonce={x_nonce}"
                 )
                 # 直接调用 response 对象的 ASGI 接口发送

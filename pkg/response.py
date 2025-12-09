@@ -135,7 +135,7 @@ class ResponseFactory:
         """
         return self.success(data={"items": data, "meta": {"page": page, "limit": limit, "total": total}})
 
-    def error(self, error: AppError, message: str = "", data: Any = None, lang: str = "zh") -> CustomORJSONResponse:
+    def error(self, error: AppError, *, message: str = "", data: Any = None, lang: str = "zh") -> CustomORJSONResponse:
         """
         通用错误响应。
 

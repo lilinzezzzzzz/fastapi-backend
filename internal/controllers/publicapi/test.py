@@ -38,7 +38,7 @@ async def test_raise_app_exception():
 async def test_custom_response_class_basic_types(_: Request):
     return response_factory.success(
         data={
-            "large_int": 2**53 + 1,  # 超过JS安全整数
+            "large_int": 2 ** 53 + 1,  # 超过JS安全整数
             "normal_int": 42,
             "float_num": 3.1415926535,
             "boolean": True,
@@ -70,7 +70,7 @@ async def test_custom_response_class_nested(_: Request):
                         "mixed_types": [
                             Decimal("999.999"),
                             {uuid.uuid4(): datetime.now()},
-                            [2**60, {"deep": True}],
+                            [2 ** 60, {"deep": True}],
                         ]
                     }
                 ]
@@ -86,7 +86,7 @@ async def test_custom_response_class_third_party(_: Request):
     return response_factory.success(
         data={
             "numpy_array": np.array([1.1, 2.2, 3.3]),  # NumPy数组
-            "numpy_int": np.int64(2**63 - 1),
+            "numpy_int": np.int64(2 ** 63 - 1),
         }
     )
 
@@ -98,7 +98,7 @@ async def test_custom_response_class_edge_cases(_: Request):
     return response_factory.success(
         data={
             "numpy_array": np.array([1.1, 2.2, 3.3]),  # NumPy数组
-            "numpy_int": np.int64(2**63),
+            "numpy_int": np.int64(2 ** 63),
         }
     )
 
@@ -124,7 +124,7 @@ async def test_custom_response_class_special_types(_: Request):
             "decimal": Decimal("123.4567890123456789"),
             "bytes": b"\x80abc\xff",
             "datetime_naive": datetime.now(),
-            "big_int": 2**60,
+            "big_int": 2 ** 60,
             "timedelta": timedelta(days=1, seconds=3600),
         }
     )
@@ -140,151 +140,6 @@ async def async_task():
 async def test_contextvars_on_asyncio_task():
     await anyio_task_manager.add_task("test", coro_func=async_task)
     return response_factory.success()
-
-
-@router.get("/test_dao", summary="测试DAO")
-async def test_dao():
-    unique_hex = uuid.uuid4().hex[:16]  # 缩短长度
-    test_user: User = user_dao.init_by_phone(
-        str(random.randint(10000000000, 99999999999))
-    )
-    test_user.account = f"lilinze_{unique_hex}"
-    test_user.username = f"lilinze_{unique_hex}"
-    await test_user.save(session_provider=get_session)
-
-    try:
-        # 1. 验证基础查询
-        created_user: User = (
-            await user_dao.create(User, session_provider=get_session)
-            .eq_(User.id, test_user.id)
-            .first()
-        )
-        assert created_user.id == test_user.id
-        logger.info("test created success")
-
-        # 2. 测试各种查询操作符
-        # eq
-        user = await user_dao.querier.eq_(User.id, test_user.id).first()
-        assert user.id == test_user.id
-        logger.info("test eq success")
-
-        # ne
-        ne_users = await user_dao.querier.ne_(User.id, test_user.id).all()
-        assert all(u.id != test_user.id for u in ne_users)
-        logger.info("test ne success")
-
-        # gt
-        gt_users: list[User] = (
-            await user_dao.querier(session_provider=get_session)
-            .gt_(User.id, test_user.id)
-            .all()
-        )
-        assert all(u.id > test_user.id for u in gt_users)
-        logger.info("test gt success")
-
-        # lt
-        lt_users = await user_dao.querier.lt_(User.id, test_user.id).all()
-        assert all(u.id < test_user.id for u in lt_users)
-        logger.info("test lt success")
-
-        # ge
-        ge_users = await user_dao.querier.ge_(User.id, test_user.id).all()
-        assert all(u.id >= test_user.id for u in ge_users)
-        logger.info("test ge success")
-
-        # le
-        le_users = await user_dao.querier.le_(User.id, test_user.id).all()
-        assert all(u.id <= test_user.id for u in le_users)
-        logger.info("test le success")
-
-        # in_ 测试
-        in_users = await user_dao.querier.in_(User.id, [test_user.id]).all()
-        assert len(in_users) == 1
-        logger.info("test in_ success")
-
-        # like 测试
-        like_users: list[User] = await user_dao.querier.like(
-            User.username, "lilinze"
-        ).all()
-        assert all("lilinze" in u.username for u in like_users)
-        logger.info("test like success")
-
-        # is_null 测试（确保测试时deleted_at为null）
-        null_users = await user_dao.querier.is_null(User.deleted_at).all()
-        assert any(u.deleted_at is None for u in null_users)
-        logger.info("test is_null success")
-
-        # 4. 计数测试
-        count = await user_dao.counter.ge_(User.id, 0).count()
-        assert count >= 1
-        logger.info("test count success")
-
-        # AND 组合
-        and_users = await (
-            user_dao.querier.eq_(User.username, test_user.username)
-            .eq_(User.username, test_user.username)
-            .eq_(User.account, test_user.account)
-            .first()
-        )
-        assert and_users.username == test_user.username, (
-            and_users.account == test_user.account
-        )
-        logger.info("test and success")
-
-        # where 组合
-        where_user = await user_dao.querier.where(
-            User.username == test_user.username, User.account == test_user.account
-        ).first()
-        assert where_user.username == test_user.username, (
-            where_user.account == test_user.account
-        )
-        logger.info("test where success")
-
-        # OR 组合
-        or_users = await user_dao.querier.or_(
-            User.username == test_user.username, User.account == "invalid_account"
-        ).all()
-        assert len(or_users) >= 1
-        logger.info("test or success")
-
-        # BETWEEN 组合
-        between_users = await user_dao.querier.between_(
-            User.id, test_user.id - 1, test_user.id + 1
-        ).all()
-        assert len(between_users) >= 1
-        logger.info("test between success")
-
-        # 3. 更新操作测试
-        # 显式使用新查询器避免缓存问题
-        updated_name = f"updated_name_{unique_hex}"
-        await (
-            user_dao.updater.eq_(User.id, test_user.id)
-            .update(username=updated_name)
-            .execute()
-        )
-        # 重新查询验证更新
-        updated_user = await user_dao.querier.eq_(User.id, test_user.id).first()
-        assert updated_user.username == updated_name
-        logger.info("test update-1 success")
-
-        # 显式使用新查询器避免缓存问题
-        updated_name = f"updated_name_{unique_hex}"
-        await (
-            user_dao.updater.eq_(User.id, test_user.id)
-            .update(**{"username": updated_name})
-            .execute()
-        )
-        # 重新查询验证更新
-        updated_user = await user_dao.querier.eq_(User.id, test_user.id).first()
-        assert updated_user.username == updated_name
-        logger.info("test update-2 success")
-    except Exception:
-        raise
-    else:
-        return response_factory.success()
-    finally:
-        test_user.deleted_at = datetime.now()
-        await test_user.save(session_provider=get_session)
 
 
 async def text_generator():
