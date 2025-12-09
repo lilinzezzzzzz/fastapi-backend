@@ -6,6 +6,7 @@ from typing import Any
 import orjson
 from fastapi.responses import ORJSONResponse
 
+
 # =========================================================
 # 1. 定义错误结构与全局状态码
 # =========================================================
@@ -44,6 +45,9 @@ class GlobalCodes:
 
     # 服务端错误 (50000 - 59999)
     InternalServerError = AppError(50000, {"zh": "服务器内部错误", "en": "Internal Server Error"})
+
+
+global_codes = GlobalCodes
 
 
 # =========================================================

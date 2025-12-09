@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request
 
 from internal.services.user import user_svc
-from pkg.resp_tool import response_factory
+from pkg.response import response_factory
 
 router = APIRouter(prefix="/test", tags=["web v1 user"])
 

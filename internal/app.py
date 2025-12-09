@@ -13,7 +13,7 @@ from internal.infra.anyio_task import close_anyio_task_handler, init_anyio_task_
 from internal.infra.database import close_db, init_db
 from internal.infra.redis import close_redis, init_redis
 from pkg.loguru_logger import logger
-from pkg.resp_tool import response_factory
+from pkg.response import response_factory
 
 
 def create_app() -> FastAPI:

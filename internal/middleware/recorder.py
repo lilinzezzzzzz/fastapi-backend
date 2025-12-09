@@ -1,12 +1,13 @@
 import time
 import uuid
-from starlette.types import ASGIApp, Scope, Receive, Send
+
 from starlette.datastructures import MutableHeaders
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from internal.core.exception import get_last_exec_tb
 from pkg import ctx
 from pkg.loguru_logger import logger
-from pkg.resp_tool import error_code, response_factory
+from pkg.response import global_codes, response_factory
 
 
 class ASGIRecordMiddleware:
@@ -34,6 +35,7 @@ class ASGIRecordMiddleware:
 
             start_time = time.perf_counter()
             response_started = False
+
             # 定义 send_wrapper 来拦截响应，注入 Header
             async def send_wrapper(message):
                 nonlocal response_started
@@ -62,7 +64,7 @@ class ASGIRecordMiddleware:
                 if not response_started:
                     # 手动构建错误响应
                     error_resp = response_factory.response(
-                        code=error_code.InternalServerError,
+                        code=global_codes.InternalServerError,
                         message=f"Unhandled Exception: {exc}"
                     )
 
