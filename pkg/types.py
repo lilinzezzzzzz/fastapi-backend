@@ -7,6 +7,7 @@ from pydantic import BeforeValidator, PlainSerializer, WithJsonSchema
 # JavaScript 安全整数最大值 (2^53 - 1)
 JS_MAX_SAFE_INTEGER = 9007199254740991
 
+
 # ==========================================
 # 1. SmartInt (智能整数)
 # ==========================================
@@ -20,9 +21,10 @@ def _parse_smart_int(v: Any) -> int:
     if isinstance(v, int):
         return v
     try:
-        return int(float(str(v))) # 先 float 容错 "123.0" 这种情况
+        return int(float(str(v)))  # 先 float 容错 "123.0" 这种情况
     except (ValueError, TypeError) as e:
         raise ValueError(f"Invalid integer value: {v}") from e
+
 
 def _serialize_smart_int(v: int) -> Union[int, str]:
     """
@@ -35,10 +37,11 @@ def _serialize_smart_int(v: int) -> Union[int, str]:
         return str(v)
     return v
 
+
 SmartInt = Annotated[
     int,  # Python 内部类型始终是 int
     BeforeValidator(_parse_smart_int),
-    PlainSerializer(_serialize_smart_int, return_type=Union[int, str], when_used='json'),
+    PlainSerializer(_serialize_smart_int, return_type=Union[int, str], when_used="json"),
     WithJsonSchema({
         "anyOf": [{"type": "integer"}, {"type": "string"}],
         "title": "SmartInt",
@@ -59,10 +62,11 @@ def _parse_smart_decimal(v: Any) -> Decimal:
     """
     try:
         if isinstance(v, float):
-            return Decimal(str(v)) # float 转 str 再转 Decimal 避免精度丢失
+            return Decimal(str(v))  # float 转 str 再转 Decimal 避免精度丢失
         return Decimal(v)
     except (InvalidOperation, TypeError, ValueError) as e:
         raise ValueError(f"Invalid decimal value: {v}") from e
+
 
 def _serialize_smart_decimal(v: Decimal) -> Union[float, str]:
     """
@@ -76,10 +80,11 @@ def _serialize_smart_decimal(v: Decimal) -> Union[float, str]:
         return float(v)
     return str(v)
 
+
 SmartDecimal = Annotated[
-    Decimal, # Python 内部类型始终是 Decimal
+    Decimal,  # Python 内部类型始终是 Decimal
     BeforeValidator(_parse_smart_decimal),
-    PlainSerializer(_serialize_smart_decimal, return_type=Union[float, str], when_used='json'),
+    PlainSerializer(_serialize_smart_decimal, return_type=Union[float, str], when_used="json"),
     WithJsonSchema({
         "anyOf": [{"type": "number"}, {"type": "string"}],
         "title": "SmartDecimal",
@@ -90,28 +95,54 @@ SmartDecimal = Annotated[
 
 
 # ==========================================
-# 3. FlexibleDatetime (保持原逻辑，稍作清理)
+# 3. SmartDatetime (智能时间类型)
 # ==========================================
-def _validate_flexible_datetime(v: Any) -> datetime:
+
+def _parse_smart_datetime(v: Any) -> datetime:
+    """
+    [输入处理] Input -> Python (Naive datetime)
+    1. 接收 ISO 格式字符串 (如 "2023-01-01T12:00:00Z")
+    2. 接收 datetime 对象
+    3. 统一去除时区信息 (转为 Naive datetime)，方便内部无时区逻辑处理
+    """
     if isinstance(v, datetime):
         return v.replace(tzinfo=None)
+
     if isinstance(v, str):
         try:
             # 兼容带 Z 或不带 Z 的 ISO 格式
-            return datetime.fromisoformat(v.replace("Z", "+00:00")).replace(tzinfo=None)
+            # (Python 3.11+ 原生支持 Z，这里保留 replace 是为了兼容性更强)
+            dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
+            return dt.replace(tzinfo=None)
         except ValueError as e:
-            raise ValueError("Invalid ISO 8601 datetime string") from e
-    return v
+            raise ValueError(f"Invalid ISO 8601 datetime string: {v}") from e
 
-FlexibleDatetime = Annotated[
-    datetime,
-    BeforeValidator(_validate_flexible_datetime),
-    # Pydantic 默认会将 datetime 序列化为 ISO 字符串，通常不需要自定义 Serializer，
-    # 除非你需要特定格式
-    WithJsonSchema({"type": "string", "format": "date-time", "example": "2025-05-07T14:30:00Z"})
+    raise ValueError(f"Invalid datetime type: {type(v)}")
+
+
+def _serialize_smart_datetime(v: datetime) -> str | None:
+    """
+    [输出处理] Python -> JSON (ISO String)
+    将 datetime 对象转为标准的 ISO 8601 字符串格式
+    """
+    if v is None:
+        return None
+    # 返回标准 ISO 格式，例如: "2025-05-07T14:30:00"
+    return v.isoformat()
+
+
+SmartDatetime = Annotated[
+    datetime,  # <--- Python 内部类型明确为 datetime
+    BeforeValidator(_parse_smart_datetime),
+    PlainSerializer(_serialize_smart_datetime, return_type=str, when_used="json"),
+    WithJsonSchema({
+        "type": "string",
+        "format": "date-time",
+        "example": "2025-05-07T14:30:00",
+        "title": "SmartDatetime",
+        "description": "Auto-converts ISO string to Naive datetime on input; Serializes to ISO string on output."
+    })
 ]
-
-
 # ==========================================
 # 4. IntStr (强制字符串 ID)
 # ==========================================
