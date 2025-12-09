@@ -5,6 +5,7 @@ from typing import Any
 
 import orjson
 from fastapi.responses import ORJSONResponse
+from pydantic import BaseModel
 
 from pkg import orjson_dumps
 
@@ -130,10 +131,42 @@ class ResponseFactory:
             },
         )
 
+    @staticmethod
+    def _process_success_data(data: Any) -> dict | None:
+        """
+        验证成功响应的数据类型，并将其转换为最优格式（dict）。
+
+        Args:
+            data: 传入的响应数据。
+
+        Returns:
+            转换后的 dict 或 None。
+
+        Raises:
+            TypeError: 如果数据类型不符合要求。
+        """
+
+        # 1. 🌟 优先处理 Pydantic 模型并转换
+        if isinstance(data, BaseModel):
+            # 将 Pydantic 实例转换为字典，这是 ORJSONResponse 最期望的输入格式
+            # 假设使用 Pydantic V2
+            return data.model_dump()
+
+        # 2. 接着检查 Python 原生类型 (dict 或 None)
+        if isinstance(data, dict) or data is None:
+            return data
+
+        # 3. 如果都不是，抛出错误
+        raise TypeError(
+            f"Success response data must be a dict, a Pydantic model instance, or None, "
+            f"but received type: {type(data)}"
+        )
+
     def success(self, *, data: Any = None, message: str = "") -> CustomORJSONResponse:
         """
         成功响应
         """
+        data = self._process_success_data(data)
         return self._make_response(code=GlobalCodes.Success.code, data=data, message=message)
 
     def list(self, *, items: list, page: int, limit: int, total: int) -> CustomORJSONResponse:
