@@ -28,16 +28,16 @@ SessionProvider = Callable[..., AbstractAsyncContextManager[AsyncSession]]
 
 
 def new_async_engine(
-        *,
-        database_uri: str,
-        echo: bool = True,
-        pool_pre_ping: bool = True,
-        pool_size: int = 10,
-        max_overflow: int = 20,
-        pool_timeout: int = 30,
-        pool_recycle: int = 1800,
-        json_serializer: Callable[[Any], str] = orjson_dumps,
-        json_deserializer: Callable[[orjson_loads_types], Any] = orjson_loads
+    *,
+    database_uri: str,
+    echo: bool = True,
+    pool_pre_ping: bool = True,
+    pool_size: int = 10,
+    max_overflow: int = 20,
+    pool_timeout: int = 30,
+    pool_recycle: int = 1800,
+    json_serializer: Callable[[Any], str] = orjson_dumps,
+    json_deserializer: Callable[[orjson_loads_types], Any] = orjson_loads
 ) -> AsyncEngine:
     return create_async_engine(
         url=database_uri,
@@ -406,15 +406,20 @@ class BaseBuilder[T: ModelMixin]:
 
 
 class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
-    def __init__(self, model_cls: type[T], *, session_provider: SessionProvider,
-                 initial_where: ColumnExpressionArgument | None = None,
-                 custom_stmt: Select | None = None, include_deleted: bool | None = None):
+    def __init__(
+        self, model_cls: type[T],
+        *,
+        session_provider: SessionProvider,
+        initial_where: ColumnExpressionArgument | None = None,
+        custom_stmt: Select | None = None, include_deleted: bool | None = None,
+    ):
         super().__init__(model_cls, session_provider=session_provider)
 
         self._stmt = custom_stmt if custom_stmt is not None else select(self._model_cls)
 
         if include_deleted is False and self._model_cls.has_deleted_at_column:
             self._apply_delete_at_is_none()
+
         if initial_where is not None:
             self._stmt = self._stmt.where(initial_where)
 
@@ -440,7 +445,7 @@ class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
     async def first(self) -> T | None:
         async with self._session_provider() as sess:
             result = await sess.execute(self._stmt)
-            return cast(T | None, result.scalars().first())
+            return result.scalars().first()
 
 
 class CountBuilder[T: ModelMixin](BaseBuilder[T]):
@@ -462,11 +467,11 @@ class CountBuilder[T: ModelMixin](BaseBuilder[T]):
 
 class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
     def __init__(
-            self,
-            *,
-            model_cls: type[T] | None = None,
-            model_ins: T | None = None,
-            session_provider: SessionProvider
+        self,
+        *,
+        model_cls: type[T] | None = None,
+        model_ins: T | None = None,
+        session_provider: SessionProvider
     ):
         target_cls = model_cls if model_cls is not None else model_ins.__class__
         super().__init__(target_cls, session_provider=session_provider)
@@ -595,11 +600,11 @@ class BaseDao[T: ModelMixin]:
 
     # --- Common Methods ---
     async def query_by_primary_id(
-            self,
-            primary_id: int,
-            *,
-            creator_id: int = None,
-            include_deleted: bool = False
+        self,
+        primary_id: int,
+        *,
+        creator_id: int = None,
+        include_deleted: bool = False
     ) -> T | None:
         qb = self.querier_inc_deleted if include_deleted else self.querier
         qb = qb.eq_(self._model_cls.id, primary_id)
