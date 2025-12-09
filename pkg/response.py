@@ -6,17 +6,18 @@ from typing import Any
 import orjson
 from fastapi.responses import ORJSONResponse
 
+from pkg import orjson_dumps
+
 
 # =========================================================
-# 1. 定义错误结构与全局状态码
+# 1. 定义状态码结构与全局状态码
 # =========================================================
-
 
 @dataclass(frozen=True)
-class AppError:
+class AppStatus:
     """
-    应用错误对象 (Rich Error Object)
-    将错误码与多语言文案绑定在一起
+    应用状态对象基类
+    将状态码与多语言文案绑定在一起
     """
 
     code: int
@@ -24,7 +25,15 @@ class AppError:
 
     def get_msg(self, lang: str = "zh") -> str:
         """根据语言获取文案，默认回退到中文"""
-        return self.message.get(lang, self.message.get("zh", "Unknown Error"))
+        return self.message.get(lang, self.message.get("zh", "Unknown Status"))
+
+
+@dataclass(frozen=True)
+class AppError(AppStatus):
+    """
+    专门用于表示应用错误的子类 (继承自 AppStatus)
+    """
+    pass  # AppError 继承了 AppStatus 的所有属性和方法
 
 
 class GlobalCodes:
@@ -33,7 +42,7 @@ class GlobalCodes:
     不使用 Enum，直接使用类属性，方便代码跳转和类型提示
     """
 
-    Success = AppError(20000, {"zh": "操作成功", "en": "Success"})
+    Success = AppStatus(20000, {"zh": "操作成功", "en": "Success"})
 
     # 客户端错误 (40000 - 49999)
     BadRequest = AppError(40000, {"zh": "请求参数错误", "en": "Bad Request"})
@@ -127,11 +136,11 @@ class ResponseFactory:
         """
         return self._make_response(code=GlobalCodes.Success.code, data=data, message=message)
 
-    def list(self, *, data: list, page: int, limit: int, total: int) -> CustomORJSONResponse:
+    def list(self, *, items: list, page: int, limit: int, total: int) -> CustomORJSONResponse:
         """
         分页列表响应
         """
-        return self.success(data={"items": data, "meta": {"page": page, "limit": limit, "total": total}})
+        return self.success(data={"items": items, "meta": {"page": page, "limit": limit, "total": total}})
 
     def error(self, error: AppError, *, message: str = "", data: Any = None, lang: str = "zh") -> CustomORJSONResponse:
         """
@@ -180,7 +189,7 @@ def success_list_response(
     """
     分页列表响应
     """
-    return response_factory.list(data=data, page=page, limit=limit, total=total)
+    return response_factory.list(items=data, page=page, limit=limit, total=total)
 
 
 def error_response(error: AppError, *, message: str = "", data: Any = None, lang: str = "zh") -> CustomORJSONResponse:
@@ -196,5 +205,5 @@ def wrap_sse_data(content: str | dict) -> str:
     """
     if isinstance(content, dict):
         # 序列化并确保是 utf-8 字符串
-        content = orjson.dumps(content).decode("utf-8")
+        content = orjson_dumps(content)
     return f"data: {content}\n\n"
