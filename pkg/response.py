@@ -225,7 +225,9 @@ def success_list_response(
     return response_factory.list(items=data, page=page, limit=limit, total=total)
 
 
-def error_response(error: AppError, *, message: str = "", data: Any = None, lang: str = "zh") -> CustomORJSONResponse:
+def error_response(
+    error: AppError, *, message: str = "", data: Any = None, lang: str = "zh"
+) -> CustomORJSONResponse:
     """
     通用错误响应
     """
