@@ -90,7 +90,7 @@ def _validate_flexible_datetime(v: Any) -> datetime:
 FlexibleDatetime = Annotated[
     datetime | str,
     BeforeValidator(_validate_flexible_datetime),
-    WithJsonSchema({"type": "string", "format": "date-time", "example": "2025-05-07T14:30:00Z"}),
+    WithJsonSchema({"type": "string", "format": "date-time", "example": "2025-05-07T14:30:00Z"})
 ]
 
 

@@ -1,7 +1,7 @@
 import os
 from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import Literal, overload, cast
+from typing import Literal, overload
 
 import anyio
 
@@ -41,9 +41,12 @@ class AnyioFile:
 
     # 使用 overload 提供更准确的类型推断提示
     @overload
-    async def read(self, mode: Literal["r"] = "r", encoding: str | None = "utf-8") -> str: ...
+    async def read(self, mode: Literal["r"] = "r", encoding: str | None = "utf-8") -> str:
+        ...
+
     @overload
-    async def read(self, mode: Literal["rb", "br"], encoding: None = None) -> bytes: ...
+    async def read(self, mode: Literal["rb", "br"], encoding: None = None) -> bytes:
+        ...
 
     async def read(self, mode: str = "r", encoding: str | None = "utf-8") -> str | bytes:
         """
@@ -58,10 +61,10 @@ class AnyioFile:
                 return await f.read()
 
     async def read_chunks(
-            self,
-            chunk_size: int = 1024 * 64,  # 默认 64KB
-            mode: str = "rb",
-            encoding: str | None = "utf-8"
+        self,
+        chunk_size: int = 1024 * 64,  # 默认 64KB
+        mode: str = "rb",
+        encoding: str | None = "utf-8"
     ) -> AsyncGenerator[bytes | str, None]:
         """
         [新增] 分块读取大文件（生成器）。
@@ -84,9 +87,9 @@ class AnyioFile:
                 yield chunk
 
     async def read_lines(
-            self,
-            encoding: str | None = "utf-8",
-            strip_newline: bool = False
+        self,
+        encoding: str | None = "utf-8",
+        strip_newline: bool = False
     ) -> AsyncGenerator[str, None]:
         """
         [新增] 逐行读取大文本文件（生成器）。
@@ -104,12 +107,12 @@ class AnyioFile:
                     yield line
 
     async def write(
-            self,
-            data: str | bytes,
-            mode: str = "w",
-            encoding: str | None = "utf-8",
-            ensure_parent: bool = True,
-            flush: bool = False,
+        self,
+        data: str | bytes,
+        mode: str = "w",
+        encoding: str | None = "utf-8",
+        ensure_parent: bool = True,
+        flush: bool = False,
     ) -> int:
         """
         写入文件。
