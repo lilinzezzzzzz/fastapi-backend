@@ -20,9 +20,9 @@ def _validate_smart_int(v: Any) -> int | str:
             val = int(v)
         else:
             val = int(str(v))
-    except (ValueError, TypeError):
+    except (ValueError, TypeError) as e:
         # 如果无法转数字，抛出 Pydantic 验证错误
-        raise ValueError(f"Invalid integer value: {v}")
+        raise ValueError(f"Invalid integer value: {v}") from e
 
     # 核心保护逻辑：检测雪花算法 ID
     if abs(val) > JS_MAX_SAFE_INTEGER:
@@ -78,8 +78,8 @@ def _validate_flexible_datetime(v: Any) -> datetime:
             # 兼容带 Z 或不带 Z 的 ISO 格式
             dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
             return dt.replace(tzinfo=None)
-        except ValueError:
-            raise ValueError("Invalid ISO 8601 datetime string")
+        except ValueError as e:
+            raise ValueError("Invalid ISO 8601 datetime string") from e
     return v
 
 
@@ -105,8 +105,8 @@ def _validate_smart_decimal(v: Any) -> float | str:
             obj = Decimal(str(v))
         else:
             obj = Decimal(v)
-    except (InvalidOperation, TypeError, ValueError):
-        raise ValueError(f"Invalid decimal value: {v}")
+    except (InvalidOperation, TypeError, ValueError) as e:
+        raise ValueError(f"Invalid decimal value: {v}") from e
 
     # 判断范围和精度
     if -1e15 < obj < 1e15 and obj.as_tuple().exponent >= -6:
