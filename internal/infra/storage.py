@@ -1,4 +1,4 @@
-from pkg.oss_storage import AliyunOSSBackend
+from pkg.oss.aliyun import AliyunOSSBackend
 
 aliyun_oss: AliyunOSSBackend | None = None
 
