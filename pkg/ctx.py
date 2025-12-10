@@ -61,8 +61,8 @@ def set_val(key: str, value: Any):
     ctx_manager.set(key, value)
 
 
-def get_val(key: str):
-    return ctx_manager.get(key)
+def get_val(key: str, default: Any = None):
+    return ctx_manager.get(key, default)
 
 
 def set_user_id(user_id: int):
