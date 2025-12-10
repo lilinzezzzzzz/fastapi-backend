@@ -89,7 +89,7 @@ class AliyunOSSBackend(BaseStorage):
         self.bucket = oss2.Bucket(auth, real_endpoint, bucket_name)
 
     async def upload(self, file_obj, path: str, content_type: str = None) -> str:
-        headers = {'Content-Type': content_type} if content_type else None
+        headers = {"Content-Type": content_type} if content_type else None
 
         def _sync_upload():
             try:
@@ -104,7 +104,7 @@ class AliyunOSSBackend(BaseStorage):
                     # 兼容 FastAPI UploadFile
                     real_file = file_obj.file if hasattr(file_obj, "file") else file_obj
 
-                    if hasattr(real_file, 'seek'):
+                    if hasattr(real_file, "seek"):
                         real_file.seek(0)
 
                     self.bucket.put_object(path, real_file, headers=headers)
@@ -114,10 +114,10 @@ class AliyunOSSBackend(BaseStorage):
 
         await asyncio.to_thread(_sync_upload)
         # 阿里云签名 URL (或根据需求直接拼接 CDN 域名)
-        return await asyncio.to_thread(self.bucket.sign_url, 'GET', path, 3600)
+        return await asyncio.to_thread(self.bucket.sign_url, "GET", path, 3600)
 
     async def generate_presigned_url(self, path: str, expiration: int = 3600) -> str:
-        return await asyncio.to_thread(self.bucket.sign_url, 'GET', path, expiration)
+        return await asyncio.to_thread(self.bucket.sign_url, "GET", path, expiration)
 
     async def delete(self, path: str) -> bool:
         result = await asyncio.to_thread(self.bucket.delete_object, path)
@@ -138,7 +138,7 @@ class S3Backend(BaseStorage):
         self.bucket_name = bucket_name
         self.endpoint = endpoint
         self.client = boto3.client(
-            's3',
+            "s3",
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
             region_name=region,
@@ -148,7 +148,7 @@ class S3Backend(BaseStorage):
     async def upload(self, file_obj, path: str, content_type: str = None) -> str:
         extra_args = {}
         if content_type:
-            extra_args['ContentType'] = content_type
+            extra_args["ContentType"] = content_type
 
         def _sync_upload():
             try:
@@ -166,7 +166,7 @@ class S3Backend(BaseStorage):
                         data_stream = io.BytesIO(real_file)
                     else:
                         data_stream = real_file
-                        if hasattr(data_stream, 'seek'):
+                        if hasattr(data_stream, "seek"):
                             data_stream.seek(0)
 
                     self.client.upload_fileobj(data_stream, self.bucket_name, path, ExtraArgs=extra_args)
@@ -184,8 +184,8 @@ class S3Backend(BaseStorage):
     async def generate_presigned_url(self, path: str, expiration: int = 3600) -> str:
         def _gen():
             return self.client.generate_presigned_url(
-                'get_object',
-                Params={'Bucket': self.bucket_name, 'Key': path},
+                "get_object",
+                Params={"Bucket": self.bucket_name, "Key": path},
                 ExpiresIn=expiration
             )
 
@@ -224,6 +224,6 @@ def get_storage_class(storage_type: StorageType) -> type[BaseStorage]:
     storage_class = _STORAGE_REGISTRY.get(storage_type)
     if not storage_class:
         raise NotImplementedError(
-            f"Storage type '{storage_type}' is not registered or implemented."
+            f"Storage type <{storage_type}> is not registered or implemented."
         )
     return storage_class
