@@ -3,7 +3,7 @@ import functools
 import time
 import uuid
 from contextlib import AbstractAsyncContextManager
-from typing import Any, Callable, Optional, List, Union
+from typing import Any, Callable, List, Optional
 
 from loguru import logger
 from redis.asyncio import Redis
