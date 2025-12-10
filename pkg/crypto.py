@@ -6,6 +6,7 @@ import anyio
 import bcrypt
 from cryptography.fernet import Fernet, InvalidToken
 
+
 # =========================================================
 # 1. 定义算法枚举
 # =========================================================
@@ -188,6 +189,14 @@ class PasswordHasher:
 
 
 password_hasher = PasswordHasher()
+
+
+async def hash_password(password: str) -> str:
+    return await password_hasher.hash(password)
+
+
+async def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return await password_hasher.verify(plain_password, hashed_password)
 
 
 # =========================================================
