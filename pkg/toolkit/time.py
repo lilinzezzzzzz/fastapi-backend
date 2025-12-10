@@ -1,22 +1,26 @@
 import datetime
 
 
-def format_iso_string(val: datetime.datetime) -> str:
+def format_iso_string(val: datetime.datetime, *, use_z: bool = False) -> str:
     """
     将 datetime 对象格式化为 ISO 8601 字符串。
     - 有时区信息：保留时区并输出 ISO 格式
-    - 无时区信息：假定为 UTC，输出为 '2024-12-06T14:12:31Z' 格式
+    - 无时区信息：假定为 UTC
 
     Args:
         val: 要格式化的 datetime 对象。
+        use_z: 如果为 True 且时区为 UTC，输出 'Z' 格式；否则输出 '+00:00' 格式。
 
     Returns:
         ISO 8601 格式的字符串。
     """
-    if val.tzinfo:
-        return val.isoformat()
-    else:
-        return val.replace(tzinfo=datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    if val.tzinfo is None:
+        val = val.replace(tzinfo=datetime.UTC)
+
+    if use_z and val.utcoffset() == datetime.timedelta(0):
+        return val.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    return val.isoformat()
 
 
 def parse_iso_datetime(iso_string: str) -> datetime.datetime:
