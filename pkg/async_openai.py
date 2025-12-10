@@ -14,7 +14,7 @@ from openai.types.chat import (
 )
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 
-from pkg.loguru_logger import logger  # 假设这个日志模块是可用的
+from pkg.async_logger import logger  # 假设这个日志模块是可用的
 
 
 class ChatCompletionRes(NamedTuple):

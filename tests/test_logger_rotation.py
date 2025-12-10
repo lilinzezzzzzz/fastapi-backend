@@ -1,8 +1,8 @@
 import os
 import time as time_module
-from datetime import timedelta, timezone, time
+from datetime import time, timedelta, timezone
 
-from pkg.loguru_logger import LoggerManager
+from pkg.async_logger import LoggerManager
 
 
 class TestLogRotationRetention:

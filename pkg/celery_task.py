@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import Mapping, Sequence, Callable, Coroutine
+from collections.abc import Callable, Coroutine, Mapping, Sequence
 from datetime import datetime
 from typing import Any
 
@@ -7,7 +7,7 @@ from celery import Celery, chain, chord, group, signals
 from celery.result import AsyncResult, GroupResult
 from kombu.utils.uuid import uuid
 
-from pkg.loguru_logger import logger
+from pkg.async_logger import logger
 
 LifecycleHook = Callable[[], Any] | Callable[[], Coroutine[Any, Any, Any]]
 

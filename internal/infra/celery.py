@@ -4,10 +4,10 @@ from celery import Celery
 from celery.schedules import crontab
 
 from internal.config.load_config import setting
-from internal.infra.database import init_db, close_db
-from internal.infra.redis import init_redis, close_redis
+from internal.infra.database import close_db, init_db
+from internal.infra.redis import close_redis, init_redis
+from pkg.async_logger import logger
 from pkg.celery_task import CeleryClient
-from pkg.loguru_logger import logger
 
 # =========================================================
 # 1. 基础配置定义

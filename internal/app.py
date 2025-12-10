@@ -12,7 +12,7 @@ from internal.core.snowflake import init_snowflake_id_generator
 from internal.infra.anyio_task import close_anyio_task_handler, init_anyio_task_handler
 from internal.infra.database import close_db, init_db
 from internal.infra.redis import close_redis, init_redis
-from pkg.loguru_logger import logger
+from pkg.async_logger import logger
 from pkg.response import response_factory
 
 

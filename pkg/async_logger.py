@@ -5,7 +5,7 @@ from typing import Any
 
 import loguru
 
-from pkg import orjson_dumps
+from pkg.toolkit.json import orjson_dumps
 
 # 当前文件的父级路径
 _DEFAULT_BASE_LOG_DIR = Path(__file__).parent.parent / "logs"

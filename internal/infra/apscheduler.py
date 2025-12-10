@@ -1,6 +1,6 @@
 from internal.tasks.apscheduler.tasks import number_sum
 from pkg.apscheduler_task import ApsSchedulerManager
-from pkg.loguru_logger import logger
+from pkg.async_logger import logger
 
 _apscheduler_manager: ApsSchedulerManager | None = None
 

@@ -3,7 +3,7 @@ import hmac
 import time
 from typing import Any
 
-from pkg.loguru_logger import logger
+from pkg.async_logger import logger
 
 
 class SignatureAuthHandler:

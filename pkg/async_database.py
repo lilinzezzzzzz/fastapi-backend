@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import (AsyncEngine, AsyncSession, async_sessionmake
 from sqlalchemy.orm import (DeclarativeBase, InstrumentedAttribute, Mapped, aliased, mapped_column)
 from sqlalchemy.sql.elements import ClauseElement, ColumnElement
 
-from pkg.loguru_logger import logger
+from pkg.async_logger import logger
 from pkg.snowflake import snowflake_id_generator
 from pkg.toolkit.json import orjson_dumps, orjson_loads, orjson_loads_types
 from pkg.toolkit.list import unique_list

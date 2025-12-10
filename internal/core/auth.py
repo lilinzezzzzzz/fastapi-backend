@@ -1,7 +1,7 @@
 from internal.infra.redis import cache_client
 from internal.utils.cache import token_cache_key, token_list_cache_key
 from pkg import orjson_loads
-from pkg.loguru_logger import logger
+from pkg.async_logger import logger
 
 
 async def get_cache_user_info(token: str) -> dict | None:

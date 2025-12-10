@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 
 from internal.core.exception import AppException
 from internal.infra.anyio_task import anyio_task_manager
-from pkg.loguru_logger import logger
+from pkg.async_logger import logger
 from pkg.response import response_factory
 from pkg.stream_control import stream_with_chunk_control
 

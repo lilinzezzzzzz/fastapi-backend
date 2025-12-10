@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from datetime import timezone, time, timedelta
+from datetime import time, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from internal import BASE_DIR
-from pkg.loguru_logger import LoggerManager, RotationType, RetentionType, logger as default_logger
+from pkg.async_logger import LoggerManager, RetentionType, RotationType, logger as default_logger
 
 if TYPE_CHECKING:
     from loguru import Logger
