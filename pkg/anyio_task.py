@@ -55,15 +55,17 @@ class AnyioTaskHandler:
 
     async def shutdown(self):
         logger.info("Shutting down AsyncTaskManagerAnyIO...")
+        # 只在创建快照时持有锁，减少锁粒度
         async with self._lock:
-            # fix: 使用 list() 创建快照，防止遍历时字典大小因任务完成而改变
             active_tasks = list(self.tasks.values())
-            for info in active_tasks:
-                try:
-                    # 这会触发 _run_task_inner 中的 CancelledError
-                    info.scope.cancel()
-                except Exception as e:
-                    logger.warning(f"Error canceling task {info.task_id}: {e}")
+
+        # cancel 操作只是设置标志，无需在锁内执行
+        for info in active_tasks:
+            try:
+                # 这会触发 _run_task_inner 中的 CancelledError
+                info.scope.cancel()
+            except Exception as e:
+                logger.warning(f"Error canceling task {info.task_id}: {e}")
 
         if self._tg_started and self._tg is not None:
             try:
