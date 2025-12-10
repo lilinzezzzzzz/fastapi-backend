@@ -1,7 +1,7 @@
-import asyncio
 import io
 from pathlib import Path
 
+import anyio
 import boto3
 from botocore.exceptions import ClientError
 
@@ -55,7 +55,7 @@ class S3Backend(BaseStorage):
             except ClientError as e:
                 raise Exception(f"S3 Upload failed: {str(e)}") from e
 
-        await asyncio.to_thread(_sync_upload)
+        await anyio.to_thread.run_sync(_sync_upload)
 
         # 返回逻辑
         if self.endpoint:
@@ -70,15 +70,15 @@ class S3Backend(BaseStorage):
                 ExpiresIn=expiration
             )
 
-        return await asyncio.to_thread(_gen)
+        return await anyio.to_thread.run_sync(_gen)
 
     async def delete(self, path: str) -> bool:
-        await asyncio.to_thread(self.client.delete_object, Bucket=self.bucket_name, Key=path)
+        await anyio.to_thread.run_sync(self.client.delete_object, Bucket=self.bucket_name, Key=path)
         return True
 
     async def exists(self, path: str) -> bool:
         try:
-            await asyncio.to_thread(self.client.head_object, Bucket=self.bucket_name, Key=path)
+            await anyio.to_thread.run_sync(self.client.head_object, Bucket=self.bucket_name, Key=path)
             return True
         except ClientError:
             return False
