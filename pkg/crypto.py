@@ -109,14 +109,14 @@ class AESCipher(BaseCryptoUtil):
 
 
 @overload
-def crypto_factory(algo: Literal[EncryptionAlgorithm.AES]) -> type[AESCipher]: ...
+def get_crypto(algo: Literal[EncryptionAlgorithm.AES]) -> type[AESCipher]: ...
 
 
 @overload
-def crypto_factory(algo: EncryptionAlgorithm) -> type[BaseCryptoUtil]: ...
+def get_crypto(algo: EncryptionAlgorithm) -> type[BaseCryptoUtil]: ...
 
 
-def crypto_factory(algo: EncryptionAlgorithm) -> type[BaseCryptoUtil]:
+def get_crypto(algo: EncryptionAlgorithm) -> type[BaseCryptoUtil]:
     """
     根据算法枚举获取加密工具实例。
     业务层只需要调用这个函数。
@@ -137,19 +137,19 @@ def crypto_factory(algo: EncryptionAlgorithm) -> type[BaseCryptoUtil]:
 
 def aes_encrypt(plaintext: str, secret_key: str | bytes) -> str:
     """Convenience function: AES encrypt."""
-    crypto_class: type[AESCipher] = crypto_factory(EncryptionAlgorithm.AES)
+    crypto_class: type[AESCipher] = get_crypto(EncryptionAlgorithm.AES)
     return crypto_class(secret_key).encrypt(plaintext)
 
 
 def aes_decrypt(ciphertext: str, secret_key: str | bytes) -> str:
     """Convenience function: AES decrypt."""
-    crypto_class: type[AESCipher] = crypto_factory(EncryptionAlgorithm.AES)
+    crypto_class: type[AESCipher] = get_crypto(EncryptionAlgorithm.AES)
     return crypto_class(secret_key).decrypt(ciphertext)
 
 
 def aes_generate_key() -> str:
     """Convenience function: Generate AES key."""
-    crypto_class: type[AESCipher] = crypto_factory(EncryptionAlgorithm.AES)
+    crypto_class: type[AESCipher] = get_crypto(EncryptionAlgorithm.AES)
     return crypto_class.generate_key()
 
 
