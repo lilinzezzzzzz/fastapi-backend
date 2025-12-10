@@ -12,3 +12,6 @@ class SnowflakeIDGenerator:
 
     def generate_batch(self, count: int) -> list[int]:
         return [next(self._generator) for _ in range(count)]
+
+
+snowflake_id_generator = SnowflakeIDGenerator()

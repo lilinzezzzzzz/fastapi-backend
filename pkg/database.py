@@ -2,23 +2,17 @@ from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, TypeVar, cast, Optional, Self
+from typing import Any, Optional, Self, TypeVar, cast
 
-from sqlalchemy import (
-    BigInteger, DateTime, Delete, Select, Subquery, Update, distinct, func, or_, select,
-    update, insert, inspect
-)
-from sqlalchemy.ext.asyncio import (
-    AsyncSession, create_async_engine, async_sessionmaker, AsyncEngine
-)
-from sqlalchemy.orm import (
-    DeclarativeBase, Mapped, mapped_column, InstrumentedAttribute, aliased
-)
+from sqlalchemy import (BigInteger, DateTime, Delete, Select, Subquery, Update, distinct, func, insert, inspect, or_,
+                        select, update)
+from sqlalchemy.ext.asyncio import (AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine)
+from sqlalchemy.orm import (DeclarativeBase, InstrumentedAttribute, Mapped, aliased, mapped_column)
 from sqlalchemy.sql.elements import ClauseElement, ColumnElement
 
-from internal.core.snowflake import generate_snowflake_id
-from pkg import orjson_dumps, orjson_loads_types, orjson_loads, get_utc_without_tzinfo, unique_list, ctx
+from pkg import ctx, get_utc_without_tzinfo, orjson_dumps, orjson_loads, orjson_loads_types, unique_list
 from pkg.loguru_logger import logger
+from pkg.snowflake import snowflake_id_generator
 
 # ==============================================================================
 # 1. 基础配置 (Base Configuration)
@@ -213,7 +207,7 @@ class ModelMixin(Base):
         defaults = self._get_context_defaults()
 
         if not self.id:
-            self.id = generate_snowflake_id()
+            self.id = snowflake_id_generator.generate()
 
         if not self.created_at:
             self.created_at = defaults.now
@@ -245,7 +239,7 @@ class ModelMixin(Base):
         data.setdefault("updated_at", defaults.now)
 
         if "id" not in data:
-            data["id"] = generate_snowflake_id()
+            data["id"] = snowflake_id_generator.generate()
 
         if cls.has_creator_id_column() and "creator_id" not in data and defaults.user_id:
             data["creator_id"] = defaults.user_id
