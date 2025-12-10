@@ -39,6 +39,7 @@ class AnyioTaskHandler:
 
         self._tg: TaskGroup | None = None
         self._tg_started = False
+        self._accepting = False  # 是否接受新任务
         self._lock = anyio.Lock()
         self.tasks: dict[str, TaskInfo] = {}
         self.max_queue = ANYIO_TM_MAX_QUEUE
@@ -51,10 +52,14 @@ class AnyioTaskHandler:
         # 创建持久运行的 TaskGroup
         self._tg = await create_task_group().__aenter__()
         self._tg_started = True
+        self._accepting = True
         logger.info("AsyncTaskManagerAnyIO started.")
 
     async def shutdown(self):
         logger.info("Shutting down AsyncTaskManagerAnyIO...")
+        # 停止接受新任务
+        self._accepting = False
+
         # 只在创建快照时持有锁，减少锁粒度
         async with self._lock:
             active_tasks = list(self.tasks.values())
@@ -180,6 +185,8 @@ class AnyioTaskHandler:
             kwargs_dict: dict | None = None,
             timeout: float | None = None,
     ) -> bool:
+        if not self._accepting:
+            raise RuntimeError("AsyncTaskManagerAnyIO is shutting down, not accepting new tasks.")
         if not self._tg_started or self._tg is None:
             raise RuntimeError("AsyncTaskManagerAnyIO is not started. Call await start() first.")
 
