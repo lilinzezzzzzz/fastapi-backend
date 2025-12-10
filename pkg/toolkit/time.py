@@ -57,5 +57,8 @@ def get_utc_timestamp() -> int:
     return int(datetime.datetime.now(tz=datetime.timezone.utc).timestamp())
 
 
-def get_utc_without_tzinfo() -> datetime.datetime:
+def utc_now_naive() -> datetime.datetime:
+    """
+    获取当前 UTC 时间，不带时区信息（naive datetime），精度到秒。
+    """
     return datetime.datetime.now(datetime.UTC).replace(microsecond=0, tzinfo=None)

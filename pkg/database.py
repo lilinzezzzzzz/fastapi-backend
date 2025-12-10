@@ -15,7 +15,7 @@ from pkg.loguru_logger import logger
 from pkg.snowflake import snowflake_id_generator
 from pkg.toolkit.json import orjson_dumps, orjson_loads, orjson_loads_types
 from pkg.toolkit.list import unique_list
-from pkg.toolkit.time import get_utc_without_tzinfo
+from pkg.toolkit.time import utc_now_naive
 
 # ==============================================================================
 # 1. 基础配置 (Base Configuration)
@@ -192,7 +192,7 @@ class ModelMixin(Base):
     async def soft_delete(self, session_provider: SessionProvider) -> None:
         if self.has_deleted_at_column():
             # update 方法会自动调用 _fill_ins_update_fields 处理 updated_at
-            await self.update(session_provider, **{self.deleted_at_column_name(): get_utc_without_tzinfo()})
+            await self.update(session_provider, **{self.deleted_at_column_name(): utc_now_naive()})
 
     # ==========================================================================
     # 字段补全辅助方法
@@ -201,7 +201,7 @@ class ModelMixin(Base):
     @staticmethod
     def _get_context_defaults() -> ContextDefaults:
         return ContextDefaults(
-            now=get_utc_without_tzinfo(),
+            now=utc_now_naive(),
             user_id=ctx.get_user_id()
         )
 
@@ -491,7 +491,7 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
 
     def soft_delete(self) -> Self:
         if self._model_cls.has_deleted_at_column():
-            self._update_dict[self._model_cls.deleted_at_column_name()] = get_utc_without_tzinfo()
+            self._update_dict[self._model_cls.deleted_at_column_name()] = utc_now_naive()
         return self
 
     @property
@@ -504,7 +504,7 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
 
         if deleted_col in self._update_dict:
             self._update_dict.setdefault(updated_col, self._update_dict[deleted_col])
-        self._update_dict.setdefault(updated_col, get_utc_without_tzinfo())
+        self._update_dict.setdefault(updated_col, utc_now_naive())
 
         if self._model_cls.has_updater_id_column():
             self._update_dict.setdefault(self._model_cls.updater_id_column_name(), ctx.get_user_id())

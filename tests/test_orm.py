@@ -23,7 +23,7 @@ mock_pkg.__path__ = [pkg_path]
 mock_pkg.orjson_dumps = lambda x: "json"
 mock_pkg.orjson_loads = lambda x: {}
 mock_pkg.orjson_loads_types = (str, bytes)
-mock_pkg.get_utc_without_tzinfo = lambda: datetime.utcnow()
+mock_pkg.utc_now_naive = lambda: datetime.utcnow()
 mock_pkg.unique_list = lambda x, exclude_none=False: list(set([i for i in x if i is not None] if exclude_none else x))
 
 mock_context = MagicMock()
