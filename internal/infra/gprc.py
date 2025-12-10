@@ -1,4 +1,4 @@
-from pkg.grpc import GrpcChannel
+from pkg.async_grpc import GrpcChannel
 
 grpc_channel: GrpcChannel | None = None
 _channels: list[GrpcChannel] = []

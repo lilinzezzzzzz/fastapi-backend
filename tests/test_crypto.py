@@ -1,6 +1,7 @@
 import pytest
 from cryptography.fernet import Fernet
 
+from pkg.async_hasher import PasswordHasher
 from pkg.crypto import (
     AESCipher,
     EncryptionAlgorithm,
@@ -8,7 +9,6 @@ from pkg.crypto import (
     aes_encrypt,
     get_crypto_class,
 )
-from pkg.hasher import PasswordHasher
 
 
 @pytest.fixture

@@ -3,7 +3,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from internal.core.auth import verify_token
 from internal.core.signature import signature_auth_handler
-from pkg.ctx import set_user_id
+from pkg.async_context import set_user_id
 from pkg.loguru_logger import logger
 from pkg.response import response_factory
 

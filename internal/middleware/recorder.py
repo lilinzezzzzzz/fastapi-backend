@@ -5,7 +5,6 @@ from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from internal.core.exception import get_last_exec_tb
-from pkg import ctx
 from pkg.loguru_logger import logger
 from pkg.response import global_codes, response_factory
 

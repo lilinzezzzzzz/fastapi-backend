@@ -10,7 +10,7 @@ sys.modules["pkg.logger_tool"] = MagicMock()
 sys.modules["pkg.logger_tool"].logger = mock_logger
 
 # --- 导入你的代码 ---
-from pkg.ctx import (
+from pkg.async_context import (
     set_user_id,
     get_user_id,
     get_trace_id, ctx_manager,
@@ -62,7 +62,7 @@ def test_get_without_init():
 
 def test_set_without_init_fallback():
     """测试没有 Init 时，Set 的防御性行为"""
-    import pkg.ctx
+    import pkg.async_context
     from contextvars import ContextVar
 
     # 1. 保存旧的 ContextVar (避免影响其他测试)

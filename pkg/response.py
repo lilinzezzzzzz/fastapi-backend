@@ -7,7 +7,7 @@ import orjson
 from fastapi.responses import ORJSONResponse
 from pydantic import BaseModel
 
-from pkg import orjson_dumps
+from pkg.toolkit.json import orjson_dumps
 
 
 # =========================================================
