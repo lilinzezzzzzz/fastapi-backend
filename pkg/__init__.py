@@ -12,15 +12,14 @@ from urllib.parse import urlencode, urlunparse
 
 import orjson
 import pytz
-import shortuuid
 import xxhash
 
 
 def orjson_dumps(
-        obj: Any,
-        *,
-        default: Callable[[Any], Any] | None = None,
-        option: int | None = None
+    obj: Any,
+    *,
+    default: Callable[[Any], Any] | None = None,
+    option: int | None = None
 ) -> str:
     """
     将 Python 对象序列化为 JSON 字符串。
@@ -221,21 +220,9 @@ def deep_compare_dict(d1, d2):
     return True
 
 
-def token_cache_key(token: str) -> str:
-    return f"token:{token}"
-
-
-def token_list_cache_key(user_id: int) -> str:
-    return f"token_list:{user_id}"
-
-
 # 生成唯一的文件名
 def generate_unique_filename(filename: str) -> str:
     return f"{uuid.uuid4().hex}_{filename}"
-
-
-def create_uuid_token():
-    return shortuuid.uuid()
 
 
 def validate_phone_number(phone: str) -> bool:
@@ -264,11 +251,11 @@ def generate_account_by_phone(phone_number: str) -> str:
 
 
 def build_url(
-        scheme: str = "http",
-        netloc: str = "localhost",
-        path: str = "/",
-        query: dict | None = None,  # 仅支持字典或 None
-        fragment: str = ""
+    scheme: str = "http",
+    netloc: str = "localhost",
+    path: str = "/",
+    query: dict | None = None,  # 仅支持字典或 None
+    fragment: str = ""
 ):
     """
     构建一个 URL，使用默认值填充缺失的部分。

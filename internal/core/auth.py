@@ -1,5 +1,6 @@
 from internal.infra.redis import cache_client
-from pkg import token_list_cache_key, token_cache_key, orjson_loads
+from internal.utils.cache import token_cache_key, token_list_cache_key
+from pkg import orjson_loads
 from pkg.loguru_logger import logger
 
 
