@@ -4,11 +4,11 @@ from cryptography.fernet import Fernet
 from pkg.crypto import (
     AESCipher,
     EncryptionAlgorithm,
-    PasswordHasher,
     aes_decrypt,
     aes_encrypt,
-    crypto_factory,
+    get_crypto_class,
 )
+from pkg.hasher import PasswordHasher
 
 
 @pytest.fixture
@@ -191,13 +191,13 @@ class TestAESCipher:
 class TestCryptoFactory:
     def test_get_aes_util(self):
         key = AESCipher.generate_key()
-        util = crypto_factory(algo=EncryptionAlgorithm.AES)(key=key)
+        util = get_crypto_class(algo=EncryptionAlgorithm.AES)(key=key)
         assert isinstance(util, AESCipher)
 
     def test_factory_invalid_algo(self):
         # 这里的 ignore 是为了欺骗类型检查器去测试运行时错误
         with pytest.raises(NotImplementedError):
-            crypto_factory(algo="unknown_algo")  # type: ignore
+            get_crypto_class(algo="unknown_algo")  # type: ignore
 
 
 def test_helper_functions_round_trip():

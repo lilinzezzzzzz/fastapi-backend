@@ -2,8 +2,6 @@ from abc import ABC, abstractmethod
 from enum import Enum, unique
 from typing import Literal, overload
 
-import anyio
-import bcrypt
 from cryptography.fernet import Fernet, InvalidToken
 
 
@@ -109,16 +107,16 @@ class AESCipher(BaseCryptoUtil):
 
 
 @overload
-def get_crypto(algo: Literal[EncryptionAlgorithm.AES]) -> type[AESCipher]: ...
+def get_crypto_class(algo: Literal[EncryptionAlgorithm.AES]) -> type[AESCipher]: ...
 
 
 @overload
-def get_crypto(algo: EncryptionAlgorithm) -> type[BaseCryptoUtil]: ...
+def get_crypto_class(algo: EncryptionAlgorithm) -> type[BaseCryptoUtil]: ...
 
 
-def get_crypto(algo: EncryptionAlgorithm) -> type[BaseCryptoUtil]:
+def get_crypto_class(algo: EncryptionAlgorithm) -> type[BaseCryptoUtil]:
     """
-    根据算法枚举获取加密工具实例。
+    根据算法枚举获取对应的加密器类。
     业务层只需要调用这个函数。
     """
     crypto_class = _ALGORITHM_REGISTRY.get(algo)
@@ -137,66 +135,20 @@ def get_crypto(algo: EncryptionAlgorithm) -> type[BaseCryptoUtil]:
 
 def aes_encrypt(plaintext: str, secret_key: str | bytes) -> str:
     """Convenience function: AES encrypt."""
-    crypto_class: type[AESCipher] = get_crypto(EncryptionAlgorithm.AES)
+    crypto_class: type[AESCipher] = get_crypto_class(EncryptionAlgorithm.AES)
     return crypto_class(secret_key).encrypt(plaintext)
 
 
 def aes_decrypt(ciphertext: str, secret_key: str | bytes) -> str:
     """Convenience function: AES decrypt."""
-    crypto_class: type[AESCipher] = get_crypto(EncryptionAlgorithm.AES)
+    crypto_class: type[AESCipher] = get_crypto_class(EncryptionAlgorithm.AES)
     return crypto_class(secret_key).decrypt(ciphertext)
 
 
 def aes_generate_key() -> str:
     """Convenience function: Generate AES key."""
-    crypto_class: type[AESCipher] = get_crypto(EncryptionAlgorithm.AES)
+    crypto_class: type[AESCipher] = get_crypto_class(EncryptionAlgorithm.AES)
     return crypto_class.generate_key()
-
-
-# =========================================================
-# Password Hasher (Bcrypt) - 保持不变
-# =========================================================
-
-
-class PasswordHasher:
-    def __init__(self, rounds: int = 12):
-        self.rounds = rounds
-
-    def _hash_sync(self, password: str) -> str:
-        salt = bcrypt.gensalt(rounds=self.rounds)
-        return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
-
-    @staticmethod
-    def _verify_sync(plain_password: str, hashed_password: str) -> bool:
-        try:
-            return bcrypt.checkpw(
-                plain_password.encode("utf-8"), hashed_password.encode("utf-8")
-            )
-        except (ValueError, TypeError):
-            return False
-
-    async def hash(self, password: str) -> str:
-        if not password:
-            raise ValueError("Password cannot be empty")
-        return await anyio.to_thread.run_sync(self._hash_sync, password)
-
-    async def verify(self, plain_password: str, hashed_password: str) -> bool:
-        if not plain_password or not hashed_password:
-            return False
-        return await anyio.to_thread.run_sync(
-            self._verify_sync, plain_password, hashed_password
-        )
-
-
-password_hasher = PasswordHasher()
-
-
-async def hash_password(password: str) -> str:
-    return await password_hasher.hash(password)
-
-
-async def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return await password_hasher.verify(plain_password, hashed_password)
 
 
 # =========================================================
