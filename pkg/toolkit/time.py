@@ -42,14 +42,21 @@ def parse_iso_datetime(iso_string: str) -> datetime.datetime:
         raise ValueError(f"Invalid ISO format string: {iso_string}") from e
 
 
-def convert_to_utc_tz(val: datetime.datetime) -> datetime.datetime:
+def convert_to_utc(val: datetime.datetime) -> datetime.datetime:
     """
+    将 datetime 转换为带 UTC 时区信息的 datetime。
+    - 有时区信息：转换为 UTC
+    - 无时区信息：假定已经是 UTC，直接添加时区标记
+
     Args:
         val: 要转换的 datetime 对象。
 
     Returns:
         带 UTC 时区信息的 datetime 对象。
     """
+    if val.tzinfo is None:
+        # naive datetime 假定为 UTC
+        return val.replace(tzinfo=datetime.timezone.utc)
     return val.astimezone(datetime.timezone.utc)
 
 
