@@ -3,87 +3,51 @@ import io
 from abc import ABC, abstractmethod
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, BinaryIO, Optional, Union
+from typing import BinaryIO, Literal, overload
 
-# 尝试导入 boto3 和 oss2，如果用户没装对应的包，可以在 init 时再报错，或者这里直接导入
-try:
-    import boto3
-    from botocore.exceptions import ClientError
-except ImportError:
-    boto3 = None
-    ClientError = None
+import boto3
+import oss2
+from botocore.exceptions import ClientError
 
-try:
-    import oss2
-except ImportError:
-    oss2 = None
 
 # ==========================================
-# 1. 全局单例管理
+# 1. 定义存储类型枚举
 # ==========================================
-
-_GLOBAL_STORAGE_CLIENT: Optional["BaseStorage"] = None
 
 
 class StorageType(StrEnum):
     ALIYUN = "aliyun"
     S3 = "s3"
-    LOCAL = "local"  # 预留
-
-
-def init(
-    storage_type: str,
-    bucket_name: str,
-    access_key: str | None = None,
-    secret_key: str | None = None,
-    region: str | None = None,
-    endpoint: str | None = None,
-    base_path: str = "uploads",
-) -> None:
-    """
-    初始化存储模块 (Singleton)。
-    在 FastAPI lifespan 中调用。
-    """
-    global _GLOBAL_STORAGE_CLIENT
-
-    if storage_type == StorageType.ALIYUN:
-        if not oss2:
-            raise ImportError("oss2 package is not installed.")
-        _GLOBAL_STORAGE_CLIENT = AliyunOSSBackend(
-            bucket_name=bucket_name,
-            access_key=access_key,
-            secret_key=secret_key,
-            endpoint=endpoint,
-            region=region
-        )
-    elif storage_type == StorageType.S3:
-        if not boto3:
-            raise ImportError("boto3 package is not installed.")
-        _GLOBAL_STORAGE_CLIENT = S3Backend(
-            bucket_name=bucket_name,
-            access_key=access_key,
-            secret_key=secret_key,
-            endpoint=endpoint,
-            region=region
-        )
-    else:
-        raise ValueError(f"Unsupported storage type: {storage_type}")
-
-
-def get_storage() -> "BaseStorage":
-    """获取存储客户端实例"""
-    if _GLOBAL_STORAGE_CLIENT is None:
-        raise RuntimeError("Storage module not initialized. Call init() first.")
-    return _GLOBAL_STORAGE_CLIENT
 
 
 # ==========================================
-# 2. 核心逻辑实现
+# 2. 全局注册表 (Registry)
 # ==========================================
+
+# 用于存储 存储类型枚举 -> 实现类 的映射
+_STORAGE_REGISTRY: dict[StorageType, type["BaseStorage"]] = {}
+
+
+def register_storage(storage_type: StorageType):
+    """
+    装饰器：将存储实现类注册到全局注册表中。
+    """
+
+    def decorator(cls):
+        _STORAGE_REGISTRY[storage_type] = cls
+        return cls
+
+    return decorator
+
+
+# ==========================================
+# 3. 策略接口 (Base Class)
+# ==========================================
+
 
 class BaseStorage(ABC):
     @abstractmethod
-    async def upload(self, file_obj: Union[BinaryIO, bytes, str, Any], path: str, content_type: str = None) -> str:
+    async def upload(self, file_obj: BinaryIO | bytes | str, path: str, content_type: str = None) -> str:
         pass
 
     @abstractmethod
@@ -99,8 +63,19 @@ class BaseStorage(ABC):
         pass
 
 
+# ==========================================
+# 4. 具体实现 (Implementation)
+# ==========================================
+
+
+@register_storage(StorageType.ALIYUN)
 class AliyunOSSBackend(BaseStorage):
-    def __init__(self, bucket_name: str, access_key: str, secret_key: str, endpoint: str = None, region: str = None):
+    """
+    阿里云 OSS 存储后端实现。
+    已自动注册到 _STORAGE_REGISTRY。
+    """
+
+    def __init__(self, *, bucket_name: str, access_key: str, secret_key: str, endpoint: str = None, region: str = None):
         if not access_key or not secret_key:
             raise ValueError("Aliyun OSS requires access_key and secret_key")
 
@@ -152,7 +127,13 @@ class AliyunOSSBackend(BaseStorage):
         return await asyncio.to_thread(self.bucket.object_exists, path)
 
 
+@register_storage(StorageType.S3)
 class S3Backend(BaseStorage):
+    """
+    AWS S3 / S3 兼容存储后端实现。
+    已自动注册到 _STORAGE_REGISTRY。
+    """
+
     def __init__(self, bucket_name: str, access_key: str, secret_key: str, endpoint: str = None, region: str = None):
         self.bucket_name = bucket_name
         self.endpoint = endpoint
@@ -220,3 +201,29 @@ class S3Backend(BaseStorage):
             return True
         except ClientError:
             return False
+
+
+# ==========================================
+# 5. 公共入口函数 (Factory Function)
+# ==========================================
+
+
+@overload
+def get_storage_class(storage_type: Literal[StorageType.ALIYUN]) -> type[AliyunOSSBackend]: ...
+
+
+@overload
+def get_storage_class(storage_type: Literal[StorageType.S3]) -> type[S3Backend]: ...
+
+
+def get_storage_class(storage_type: StorageType) -> type[BaseStorage]:
+    """
+    根据存储类型枚举获取对应的存储后端类。
+    业务层只需要调用这个函数。
+    """
+    storage_class = _STORAGE_REGISTRY.get(storage_type)
+    if not storage_class:
+        raise NotImplementedError(
+            f"Storage type '{storage_type}' is not registered or implemented."
+        )
+    return storage_class
