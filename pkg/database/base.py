@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Callable, Any, Optional, TypeVar
 
-from sqlalchemy import BigInteger, DateTime, Insert, insert, inspect
+from sqlalchemy import BigInteger, DateTime, Insert, insert, inspect, Executable
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, InstrumentedAttribute
 
@@ -110,15 +110,9 @@ class ModelMixin(Base):
         if not execute:
             return stmt
 
-        if session_provider is None:
-            raise ValueError("session_provider is required when execute=True")
-
-        try:
-            async with session_provider() as sess:
-                async with sess.begin():
-                    await sess.execute(insert(cls).values(db_values))
-        except Exception as e:
-            raise RuntimeError(f"{cls.__name__} insert_rows failed: {e}") from e
+        return await cls._execute_or_return(
+            stmt, session_provider, execute, error_context=f"{cls.__name__} insert_rows"
+        )
 
     @classmethod
     async def insert_instances(
@@ -149,20 +143,9 @@ class ModelMixin(Base):
 
         stmt = insert(cls).values(db_values)
 
-        if not execute:
-            return stmt
-
-        if session_provider is None:
-            raise ValueError("session_provider is required when execute=True")
-
-        try:
-            async with session_provider() as sess:
-                async with sess.begin():
-                    await sess.execute(stmt)
-        except Exception as e:
-            raise RuntimeError(f"{cls.__name__} insert_instances failed: {e}") from e
-
-        return None
+        return await cls._execute_or_return(
+            stmt, session_provider, execute, error_context=f"{cls.__name__} insert_instances"
+        )
 
     # ==========================================================================
     # 单例操作 (CRUD)
@@ -186,18 +169,9 @@ class ModelMixin(Base):
 
         stmt = insert(self.__class__).values(data)
 
-        if not execute:
-            return stmt
-
-        if session_provider is None:
-            raise ValueError("session_provider is required when execute=True")
-
-        try:
-            async with session_provider() as sess:
-                async with sess.begin():
-                    await sess.execute(insert(self.__class__).values(data))
-        except Exception as e:
-            raise RuntimeError(f"{self.__class__.__name__} save(insert) error: {e}") from e
+        return await self._execute_or_return(
+            stmt, session_provider, execute, error_context=f"{self.__class__.__name__} save(insert)"
+        )
 
     async def update(self, session_provider: SessionProvider | None = None, **kwargs) -> None:
         """[Strict Update] 仅用于更新已存在的对象。"""
@@ -295,6 +269,33 @@ class ModelMixin(Base):
             if hasattr(self, col_name):
                 values[col_name] = getattr(self, col_name)
         return values
+
+    @staticmethod
+    async def _execute_or_return(
+            stmt: Executable,
+            session_provider: SessionProvider | None,
+            execute: bool,
+            error_context: str
+    ) -> Executable | None:
+        """
+        统一处理 SQL 语句的执行逻辑：
+        - 如果 execute=False，直接返回语句对象。
+        - 如果 execute=True，校验 session_provider 并执行事务。
+        """
+        if not execute:
+            return stmt
+
+        if session_provider is None:
+            raise ValueError(f"session_provider is required when execute=True ({error_context})")
+
+        try:
+            async with session_provider() as sess:
+                async with sess.begin():
+                    await sess.execute(stmt)
+        except Exception as e:
+            raise RuntimeError(f"{error_context} failed: {e}") from e
+
+        return None
 
     def to_dict(self, *, exclude_column: list[str] = None) -> dict[str, Any]:
         return {
