@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlparse
 
+import anyio
 import httpx
 
 from pkg.async_logger import logger
@@ -48,7 +49,7 @@ class RequestResult:
             )
 
 
-class HTTPXClient:
+class AsyncHttpClient:
     """
     基于 httpx 封装的单例/长连接客户端。
     建议配合 async with 使用，或全局初始化一次。
@@ -192,6 +193,83 @@ class HTTPXClient:
             content_type = ct or "application/octet-stream"
 
         return file_name, result.response.content, content_type
+
+    async def download_file(
+        self,
+        url: str,
+        save_path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: int | None = None,
+        chunk_size: int = 1024 * 64,  # 64KB
+        on_progress: Any | None = None,  # Callable[[int, int | None], None]
+    ) -> tuple[bool, str]:
+        """
+        流式下载大文件，边下载边写入磁盘，避免内存溢出。
+
+        Args:
+            url: 下载地址
+            save_path: 保存路径
+            params: URL 查询参数
+            headers: 请求头
+            timeout: 超时时间
+            chunk_size: 分块大小（默认 64KB）
+            on_progress: 进度回调 (downloaded_bytes, total_bytes)
+
+        Returns:
+            (success, error_message)
+        """
+        start_time = time.perf_counter()
+        logger.info(f"Download file: {url} -> {save_path}")
+
+        try:
+            async with self.client.stream(
+                "GET",
+                url,
+                params=params,
+                headers=headers,
+                timeout=timeout or self.timeout,
+            ) as response:
+                if response.is_error:
+                    err_msg = f"HTTP {response.status_code}"
+                    logger.error(f"Download failed: {err_msg}")
+                    return False, err_msg
+
+                # 获取文件总大小（可能为 None）
+                total_size = response.headers.get("Content-Length")
+                total_size = int(total_size) if total_size else None
+
+                # 确保父目录存在
+                parent_dir = os.path.dirname(save_path)
+                if parent_dir:
+                    os.makedirs(parent_dir, exist_ok=True)
+
+                downloaded = 0
+                async with await anyio.Path(save_path).open("wb") as f:
+                    async for chunk in response.aiter_bytes(chunk_size):
+                        await f.write(chunk)
+                        downloaded += len(chunk)
+                        if on_progress:
+                            on_progress(downloaded, total_size)
+
+                cost = time.perf_counter() - start_time
+                size_mb = downloaded / (1024 * 1024)
+                logger.info(f"Download complete: {save_path} | size={size_mb:.2f}MB | cost={cost:.2f}s")
+                return True, ""
+
+        except httpx.HTTPStatusError as exc:
+            err_msg = f"HTTPStatusError: {exc.response.status_code}"
+            logger.error(err_msg)
+            return False, err_msg
+        except httpx.RequestError as exc:
+            err_msg = f"Network Error: {exc}"
+            logger.error(err_msg)
+            return False, err_msg
+        except Exception as exc:
+            err_msg = f"Download Error: {exc}"
+            logger.exception(err_msg)
+            return False, err_msg
 
     async def stream_request(
         self, method: str, url: str, chunk_size: int = 1024, **kwargs
