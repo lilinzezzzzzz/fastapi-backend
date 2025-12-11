@@ -234,9 +234,9 @@ class AsyncHttpClient:
         method: str,
         url: str,
         chunk_size: int = 1024,
-        params: dict = None,
-        headers: dict = None,
-        timeout: int = None
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: int | None = None,
     ) -> AsyncGenerator[bytes, None]:
         """
         通用流式请求，复用 _stream_context
