@@ -1,3 +1,4 @@
+import asyncio
 import os
 from collections.abc import AsyncGenerator
 from pathlib import Path
@@ -100,6 +101,7 @@ class AnyioFile:
             strip_newline: 是否去除行尾换行符
         """
         async with await self.anyio_path.open(mode="r", encoding=encoding) as f:
+            line: str
             async for line in f:
                 if strip_newline:
                     yield line.rstrip("\n")
