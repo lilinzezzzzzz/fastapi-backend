@@ -11,8 +11,8 @@ class _RequestContextManager:
     请求上下文管理工具类
     """
 
-    @classmethod
-    def init(cls) -> dict[str, Any]:
+    @staticmethod
+    def init() -> dict[str, Any]:
         """
         初始化上下文，必须在中间件开始时调用
         """
@@ -29,8 +29,8 @@ class _RequestContextManager:
             # 如果没有 init，返回 default，兼容非 Web 环境调用
             return default
 
-    @classmethod
-    def set(cls, key: str, value: Any):
+    @staticmethod
+    def set(key: str, value: Any):
         try:
             ctx = _request_context_var.get()
             ctx[key] = value
@@ -49,28 +49,30 @@ class _RequestContextManager:
             return {}
 
 
-ctx_manager = _RequestContextManager
+_ctx_manager = _RequestContextManager()
 
 
 def init():
-    ctx = ctx_manager.init()
+    ctx = _ctx_manager.init()
     return ctx
 
+def clear():
+    _ctx_manager.all().clear()
 
 def set_val(key: str, value: Any):
-    ctx_manager.set(key, value)
+    _ctx_manager.set(key, value)
 
 
 def get_val(key: str, default: Any = None):
-    return ctx_manager.get(key, default)
+    return _ctx_manager.get(key, default)
 
 
 def set_user_id(user_id: int):
-    ctx_manager.set("user_id", user_id)
+    _ctx_manager.set("user_id", user_id)
 
 
 def get_user_id() -> int:
-    user_id = ctx_manager.get("user_id")
+    user_id = _ctx_manager.get("user_id")
     if user_id is None:
         logger.warning("user_id is not set in current context")
         raise LookupError("user_id is not set")
@@ -84,12 +86,12 @@ def set_trace_id(trace_id: str):
     if not isinstance(trace_id, str):
         raise ValueError("trace_id must be a string")
 
-    ctx_manager.set("trace_id", trace_id)
+    _ctx_manager.set("trace_id", trace_id)
 
 
 def get_trace_id() -> str:
     # 这里不需要 try-except LookupError 了，因为 context.get 内部处理了
-    trace_id = ctx_manager.get("trace_id")
+    trace_id = _ctx_manager.get("trace_id")
 
     if trace_id is None or trace_id == "unknown":
         raise LookupError("trace_id is unknown or not set")
