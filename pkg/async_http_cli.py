@@ -20,7 +20,7 @@ class RequestResult:
 
     @property
     def success(self) -> bool:
-        return self.error is None and 200 <= self.status_code < 300
+        return self.error is None and self.status_code is not None and 200 <= self.status_code < 300
 
     def json(self) -> Any:
         if self._json is not None:
@@ -65,8 +65,7 @@ class AsyncHttpClient:
     async def close(self):
         await self.client.aclose()
 
-    @asynccontextmanager
-    async def _stream_context(
+    def _stream_context(
         self,
         method: str,
         url: str,
@@ -76,38 +75,36 @@ class AsyncHttpClient:
         timeout: int | None = None,
         raise_exception: bool = True,
     ):
-        """
-        [封装核心]：统一的流式上下文管理器。
-        处理连接建立、超时合并、状态检查、日志记录。
-        """
-        method = method.upper()
-        # 修正问题1：确保 stream 请求也能吃到默认 timeout
         req_timeout = timeout or self.timeout
+        method = method.upper()
 
-        logger.info(f"Stream Start: {method} {url}")
-        try:
-            async with self.client.stream(
-                method,
-                url,
-                params=params,
-                headers=headers,
-                timeout=req_timeout,
-            ) as response:
+        # 在内部定义上下文管理器
+        @asynccontextmanager
+        async def inner():
+            logger.info(f"Stream Start: {method} {url}")
+            try:
+                # 这里依然可以访问外层的 self, method, url 等变量（闭包特性）
+                async with self.client.stream(
+                    method,
+                    url,
+                    params=params,
+                    headers=headers,
+                    timeout=req_timeout,
+                ) as response:
+                    if raise_exception:
+                        response.raise_for_status()
+                    elif response.is_error:
+                        logger.warning(f"Stream responded with error: {response.status_code}")
 
-                # 统一状态码检查逻辑
-                if raise_exception:
-                    # 如果需要抛出异常，利用 httpx 原生能力
-                    response.raise_for_status()
-                elif response.is_error:
-                    # 如果不抛出异常（供 download_file 使用），记录错误并交给调用方处理
-                    logger.warning(f"Stream responded with error: {response.status_code}")
+                    yield response
 
-                yield response
+            except httpx.HTTPStatusError as exc:
+                raise Exception(f"Stream HTTPStatusError: {exc.response.status_code} - {exc}") from exc
+            except Exception as exc:
+                raise Exception(f"Stream Connection Error: {exc}") from exc
 
-        except httpx.HTTPStatusError as exc:
-            raise Exception(f"Stream HTTPStatusError: {exc.response.status_code} - {exc}") from exc
-        except Exception as exc:
-            raise Exception(f"Stream Connection Error: {exc}") from exc
+        # 调用内部函数并返回
+        return inner()
 
     async def _request(
         self,
@@ -137,14 +134,12 @@ class AsyncHttpClient:
                 timeout=timeout or self.timeout,
             )
 
-            # 修正问题3：非 stream 请求 httpx 已经读取了 body，无需 await response.aread()
             err_msg = None
             if response.is_error:
-                # 尝试直接从已读取的 content 中获取文本
                 try:
                     err_msg = response.text
                 except Exception as e:
-                    logger.warning(f"Failed to get error message from response: {e}")
+                    logger.warning(f"Failed to get error message: {e}")
                     err_msg = f"HTTP {response.status_code}"
 
             return RequestResult(
@@ -195,16 +190,22 @@ class AsyncHttpClient:
         logger.info(f"Download file: {url} -> {save_path}")
 
         try:
-            # 1. 使用封装的 _stream_context，不主动抛出异常以便返回 bool
+            # -------------------------------------------------------
+            # 【核心修复】：显式使用 method=... 和 url=...
+            # 解决 "形参 url 未填" 的歧义问题
+            # -------------------------------------------------------
             async with self._stream_context(
-                "GET", url, params=params, headers=headers, timeout=timeout, raise_exception=False
+                method="GET",
+                url=url,
+                params=params,
+                headers=headers,
+                timeout=timeout,
+                raise_exception=False
             ) as response:
 
-                # 手动处理错误返回，保持原本的 return False 风格
                 if response.is_error:
                     return False, f"HTTP {response.status_code}"
 
-                # 2. 准备文件写入
                 total_size = response.headers.get("Content-Length")
                 total_size = int(total_size) if total_size else None
 
@@ -213,7 +214,6 @@ class AsyncHttpClient:
                     os.makedirs(parent_dir, exist_ok=True)
 
                 downloaded = 0
-                # 使用 anyio 异步写入文件
                 async with await anyio.Path(save_path).open("wb") as f:
                     async for chunk in response.aiter_bytes(chunk_size):
                         await f.write(chunk)
@@ -227,7 +227,9 @@ class AsyncHttpClient:
                 return True, ""
 
         except Exception as exc:
-            return False, f"Download process failed: {exc}"
+            err_msg = f"Download process failed: {exc}"
+            logger.exception(err_msg)  # 建议加上日志记录，方便排查
+            return False, err_msg
 
     async def stream_request(
         self,
@@ -239,11 +241,18 @@ class AsyncHttpClient:
         timeout: int | None = None,
     ) -> AsyncGenerator[bytes, None]:
         """
-        通用流式请求，复用 _stream_context
+        通用流式请求
         """
-        # 使用封装的上下文，默认抛出异常（符合流式处理的一般逻辑：出错即中断）
+        # -------------------------------------------------------
+        # 【核心修复】：同样显式指定 method=... 和 url=...
+        # -------------------------------------------------------
         async with self._stream_context(
-            method, url, params=params, headers=headers, timeout=timeout, raise_exception=True
+            method=method,
+            url=url,
+            params=params,
+            headers=headers,
+            timeout=timeout,
+            raise_exception=True
         ) as response:
             async for chunk in response.aiter_bytes(chunk_size):
                 yield chunk
