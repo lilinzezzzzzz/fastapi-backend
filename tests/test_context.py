@@ -6,16 +6,18 @@ import pytest
 
 # --- Mock 依赖 ---
 mock_logger = MagicMock()
-sys.modules["pkg.logger_tool"] = MagicMock()
-sys.modules["pkg.logger_tool"].logger = mock_logger
+sys.modules["pkg.async_logger"] = MagicMock()
+sys.modules["pkg.async_logger"].logger = mock_logger
 
 # --- 导入你的代码 ---
 from pkg.async_context import (
     set_user_id,
     get_user_id,
     get_trace_id,
+    set_trace_id,
+    set_val,
     init,
-    clear
+    clear,
 )
 
 
@@ -32,7 +34,8 @@ def clean_context():
 def test_basic_lifecycle():
     """测试正常的生命周期"""
     tid = "trace-123"
-    init(trace_id=tid)  # 正常传入
+    init()
+    set_trace_id(tid)
 
     assert get_trace_id() == tid
 
@@ -40,18 +43,23 @@ def test_basic_lifecycle():
     assert get_user_id() == 1001
 
 
-def test_init_validation_error():
+def test_set_trace_id_validation_error():
     """
-    【修正后】测试必填参数校验
-    需求：trace_id 为必须参数，不能为 None
+    测试 set_trace_id 的参数校验
     """
+    init()
+
     # 验证：传入 None 应引发 ValueError
     with pytest.raises(ValueError, match="trace_id is mandatory"):
-        _ctx_manager.init(trace_id=None)
+        set_trace_id(None)
 
     # 验证：传入空字符串 应引发 ValueError
     with pytest.raises(ValueError, match="trace_id is mandatory"):
-        _ctx_manager.init(trace_id="")
+        set_trace_id("")
+
+    # 验证：传入非字符串 应引发 ValueError
+    with pytest.raises(ValueError, match="trace_id must be a string"):
+        set_trace_id(123)
 
 
 def test_get_without_init():
@@ -61,32 +69,25 @@ def test_get_without_init():
         get_user_id()
 
 
-def test_set_without_init_fallback():
-    """测试没有 Init 时，Set 的防御性行为"""
+def test_set_without_init_raises_error():
+    """测试没有 Init 时，Set 会抛出 RuntimeError"""
     import pkg.async_context
     from contextvars import ContextVar
 
     # 1. 保存旧的 ContextVar (避免影响其他测试)
-    old_var = pkg.ctx._request_context_var
+    old_var = pkg.async_context._request_context_var
 
-    # 2. 【关键步骤】临时替换为一个全新的、未初始化的 ContextVar
-    # 这样调用 get() 时一定会抛出 LookupError
-    pkg.ctx._request_context_var = ContextVar("temp_test_ctx")
+    # 2. 临时替换为一个全新的、未初始化的 ContextVar
+    pkg.async_context._request_context_var = ContextVar("temp_test_ctx")
 
     try:
-        # 3. 执行测试：直接 Set
-        # 此时 get() 会失败 -> 进入 except -> 初始化 dict -> 打印日志
-        _ctx_manager.set("temp_key", "temp_value")
-
-        # 验证值是否存进去了
-        assert _ctx_manager.get("temp_key") == "temp_value"
-
-        # 4. 验证日志是否被调用
-        mock_logger.warning.assert_called_with("RequestContext used without initialization! Check Middleware.")
+        # 3. 执行测试：直接 Set 应该抛出 RuntimeError
+        with pytest.raises(RuntimeError, match="Request Context not initialized"):
+            set_val("temp_key", "temp_value")
 
     finally:
-        # 5. 【恢复现场】一定要把旧的变量还原回去，否则后续测试会挂
-        pkg.ctx._request_context_var = old_var
+        # 4. 恢复现场
+        pkg.async_context._request_context_var = old_var
 
 
 @pytest.mark.asyncio
@@ -94,7 +95,8 @@ async def test_async_context_isolation():
     """测试并发隔离性"""
 
     async def request_handler(trace_id, user_id, delay):
-        _ctx_manager.init(trace_id=trace_id)  # 必须传入有效的 trace_id
+        init()
+        set_trace_id(trace_id)
         set_user_id(user_id)
         await asyncio.sleep(delay)
         return get_trace_id(), get_user_id()
