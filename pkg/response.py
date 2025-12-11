@@ -58,12 +58,12 @@ class CustomORJSONResponse(ORJSONResponse):
     """
 
     SERIALIZER_OPTIONS = (
-        orjson.OPT_SERIALIZE_NUMPY
-        | orjson.OPT_SERIALIZE_UUID
-        | orjson.OPT_NAIVE_UTC
-        | orjson.OPT_UTC_Z
-        | orjson.OPT_OMIT_MICROSECONDS
-        | orjson.OPT_NON_STR_KEYS
+            orjson.OPT_SERIALIZE_NUMPY
+            | orjson.OPT_SERIALIZE_UUID
+            | orjson.OPT_NAIVE_UTC
+            | orjson.OPT_UTC_Z
+            | orjson.OPT_OMIT_MICROSECONDS
+            | orjson.OPT_NON_STR_KEYS
     )
 
     def render(self, content: Any) -> bytes:
@@ -105,7 +105,7 @@ class CustomORJSONResponse(ORJSONResponse):
 class ResponseFactory:
     @staticmethod
     def _make_response(
-        *, code: int, data: Any = None, message: str = "", http_status: int = 200
+            *, code: int, data: Any = None, message: str = "", http_status: int = 200
     ) -> CustomORJSONResponse:
         """基础响应构造器"""
         return CustomORJSONResponse(
@@ -199,7 +199,7 @@ def success_response(data: dict | BaseModel) -> CustomORJSONResponse:
 
 
 def success_list_response(
-    data: list, page: int, limit: int, total: int
+        data: list, page: int, limit: int, total: int
 ) -> CustomORJSONResponse:
     """
     分页列表响应
@@ -207,8 +207,9 @@ def success_list_response(
     return response_factory.list(items=data, page=page, limit=limit, total=total)
 
 
-def error_response(error: AppError, *, message: str = "", data: Any = None, lang: str = "zh"
-                   ) -> CustomORJSONResponse:
+def error_response(
+        error: AppError, *, message: str = "", data: Any = None, lang: str = "zh"
+) -> CustomORJSONResponse:
     """
     通用错误响应
     """

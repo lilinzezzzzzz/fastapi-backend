@@ -1,7 +1,7 @@
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from pkg.database import ModelMixin
+from pkg.database.base import ModelMixin
 
 
 class User(ModelMixin):

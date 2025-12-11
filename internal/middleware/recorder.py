@@ -4,9 +4,10 @@ import uuid
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from internal.core.exception import get_last_exec_tb
+from internal.core.exception import get_last_exec_tb, global_codes
+from pkg import async_context
 from pkg.async_logger import logger
-from pkg.response import global_codes, response_factory
+from pkg.response import response_factory
 
 
 class ASGIRecordMiddleware:
@@ -21,7 +22,7 @@ class ASGIRecordMiddleware:
         # 1. 获取或生成 Trace ID
         # ASGI headers 是 list of (bytes, bytes) tuple
         headers = MutableHeaders(scope=scope)
-        ctx.set_trace_id(trace_id := headers.get("X-Trace-ID", uuid.uuid4().hex))
+        async_context.set_trace_id(trace_id := headers.get("X-Trace-ID", uuid.uuid4().hex))
 
         # 2. 上下文注入
         with logger.contextualize(trace_id=trace_id):

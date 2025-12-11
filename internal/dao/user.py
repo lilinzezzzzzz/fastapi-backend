@@ -1,6 +1,6 @@
 from internal.infra.database import get_session
 from internal.models.user import User
-from pkg.database import BaseDao
+from pkg.database.dao import BaseDao
 
 
 class UserDao(BaseDao[User]):
