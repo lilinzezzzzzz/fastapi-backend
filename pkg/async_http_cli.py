@@ -197,7 +197,7 @@ class AsyncHttpClient:
         try:
             # 1. 使用封装的 _stream_context，不主动抛出异常以便返回 bool
             async with self._stream_context(
-                url, method="GET", params=params, headers=headers, timeout=timeout, raise_exception=False
+                "GET", url, params=params, headers=headers, timeout=timeout, raise_exception=False
             ) as response:
 
                 # 手动处理错误返回，保持原本的 return False 风格
