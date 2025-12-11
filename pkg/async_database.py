@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any, Optional, Self, TypeVar, cast
 
 from sqlalchemy import (BigInteger, DateTime, Delete, Insert, Select, Subquery, Update, distinct, func, insert, inspect,
-                        or_, select, update)
+                        or_, select, update, Executable)
 from sqlalchemy.ext.asyncio import (AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine)
 from sqlalchemy.orm import (DeclarativeBase, InstrumentedAttribute, Mapped, aliased, mapped_column)
 from sqlalchemy.sql.elements import ClauseElement, ColumnElement
@@ -657,3 +657,27 @@ class BaseDao[T: ModelMixin]:
 
     async def query_by_ids(self, ids: list[int]) -> list[T]:
         return await self.querier.in_(self._model_cls.id, ids).all()
+
+
+async def execute_transaction_atomic(
+        session_provider: SessionProvider,
+        autoflush: bool = True,
+        *stmts: Executable | None
+) -> None:
+    """
+    [Transaction] 在同一个事务中原子性地执行多个 SQL 语句。
+    会自动过滤掉 None 的语句（例如当 insert_instances 没有数据返回 None 时）。
+    """
+    # 过滤掉 None (比如空列表调用 insert_instances 返回的 None)
+    valid_stmts = [s for s in stmts if s is not None]
+
+    if not valid_stmts:
+        return
+
+    try:
+        async with session_provider(autoflush=autoflush) as sess:
+            async with sess.begin():
+                for stmt in valid_stmts:
+                    await sess.execute(stmt)
+    except Exception as e:
+        raise RuntimeError(f"Atomic execution failed: {e}") from e
