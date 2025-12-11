@@ -12,11 +12,13 @@ class _RequestContextManager:
     """
 
     @staticmethod
-    def init() -> dict[str, Any]:
+    def init(**kwargs) -> dict[str, Any]:
         """
         初始化上下文，必须在中间件开始时调用
         """
-        ctx = {}
+        ctx = {
+            **kwargs,
+        }
         _request_context_var.set(ctx)
         return ctx
 
@@ -48,16 +50,25 @@ class _RequestContextManager:
         except LookupError:
             return {}
 
+    @staticmethod
+    def clear():
+        try:
+            _request_context_var.get().clear()
+        except LookupError:
+            pass  # 未初始化时无需清理
+
 
 _ctx_manager = _RequestContextManager()
 
 
-def init():
-    ctx = _ctx_manager.init()
+def init(**kwargs) -> dict[str, Any]:
+    ctx = _ctx_manager.init(**kwargs)
     return ctx
 
+
 def clear():
-    _ctx_manager.all().clear()
+    _ctx_manager.clear()
+
 
 def set_val(key: str, value: Any):
     _ctx_manager.set(key, value)
