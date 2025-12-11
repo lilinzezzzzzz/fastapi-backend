@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional, Self, TypeVar, cast
 
-from sqlalchemy import (BigInteger, DateTime, Delete, Select, Subquery, Update, distinct, func, insert, inspect, or_,
-                        select, update)
+from sqlalchemy import (BigInteger, DateTime, Delete, Insert, Select, Subquery, Update, distinct, func, insert, inspect,
+                        or_, select, update)
 from sqlalchemy.ext.asyncio import (AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine)
 from sqlalchemy.orm import (DeclarativeBase, InstrumentedAttribute, Mapped, aliased, mapped_column)
 from sqlalchemy.sql.elements import ClauseElement, ColumnElement
@@ -122,22 +122,48 @@ class ModelMixin(Base):
             raise RuntimeError(f"{cls.__name__} insert_rows failed: {e}") from e
 
     @classmethod
-    async def insert_instances(cls, *, items: list["ModelMixin"], session_provider: SessionProvider) -> None:
-        """[Batch Instance] 高性能批量插入对象实例。"""
+    async def insert_instances(
+        cls,
+        *,
+        items: list["ModelMixin"],
+        session_provider: SessionProvider | None = None,
+        execute: bool = True,
+    ) -> Insert | None:
+        """
+        [Batch Instance] 高性能批量插入对象实例。
+
+        Args:
+            items: 要插入的实例列表
+            session_provider: 会话提供者（execute=True 时必填）
+            execute: 是否执行 SQL，False 时仅返回 Insert 语句
+
+        Returns:
+            execute=False 时返回 Insert 语句，否则返回 None
+        """
         if not items:
-            return
+            return None
 
         db_values = []
         for ins in items:
             ins._fill_ins_insert_fields()
             db_values.append(ins._extract_db_values())
 
+        stmt = insert(cls).values(db_values)
+
+        if not execute:
+            return stmt
+
+        if session_provider is None:
+            raise ValueError("session_provider is required when execute=True")
+
         try:
             async with session_provider() as sess:
                 async with sess.begin():
-                    await sess.execute(insert(cls).values(db_values))
+                    await sess.execute(stmt)
         except Exception as e:
             raise RuntimeError(f"{cls.__name__} insert_instances failed: {e}") from e
+
+        return None
 
     # ==========================================================================
     # 单例操作 (CRUD)
