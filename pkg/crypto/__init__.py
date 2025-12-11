@@ -1,44 +1,15 @@
-from abc import ABC, abstractmethod
-from enum import Enum, unique
 from typing import Literal, overload
 
+# 先导入基础类（无循环依赖）
+from pkg.crypto.base import (
+    BaseCryptoUtil,
+    EncryptionAlgorithm,
+    register_algorithm,
+    _ALGORITHM_REGISTRY,
+)
+
+# 再导入具体实现（会触发 @register_algorithm 装饰器注册）
 from pkg.crypto.aes import AESCipher
-
-
-@unique
-class EncryptionAlgorithm(str, Enum):
-    AES = "aes"
-    # 将来可以在这里添加 SM4 = "sm4"
-
-
-_ALGORITHM_REGISTRY: dict[EncryptionAlgorithm, type["BaseCryptoUtil"]] = {}
-
-
-def register_algorithm(algo: EncryptionAlgorithm):
-    """
-    装饰器：将加密实现类注册到全局注册表中。
-    """
-
-    def decorator(cls):
-        _ALGORITHM_REGISTRY[algo] = cls
-        return cls
-
-    return decorator
-
-
-class BaseCryptoUtil(ABC):
-    def __init__(self, key: str | bytes):
-        if not key:
-            raise ValueError("Key cannot be empty")
-        self.key = key
-
-    @abstractmethod
-    def encrypt(self, plain_text: str) -> str:
-        pass
-
-    @abstractmethod
-    def decrypt(self, cipher_text: str) -> str:
-        pass
 
 
 @overload
