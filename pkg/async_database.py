@@ -107,13 +107,23 @@ class ModelMixin(Base):
     # ==========================================================================
 
     @classmethod
-    async def insert_rows(cls, *, rows: list[dict[str, Any]], session_provider: SessionProvider) -> None:
+    async def insert_rows(
+            cls, *, rows: list[dict[str, Any]], session_provider: SessionProvider, execute: bool = True
+    ) -> Insert | None:
         """[Batch Dict] 高性能批量插入字典。"""
         if not rows:
-            return
+            return None
 
         defaults = cls._get_context_defaults()
         db_values = [cls._fill_dict_insert_fields(row, defaults) for row in rows]
+
+        stmt = insert(cls).values(db_values)
+
+        if not execute:
+            return stmt
+
+        if session_provider is None:
+            raise ValueError("session_provider is required when execute=True")
 
         try:
             async with session_provider() as sess:
@@ -170,7 +180,9 @@ class ModelMixin(Base):
     # 单例操作 (CRUD)
     # ==========================================================================
 
-    async def save(self, session_provider: SessionProvider) -> None:
+    async def save(
+            self, session_provider: SessionProvider | None = None, execute: bool = True
+    ) -> Insert | None:
         """[Strict Insert] 仅用于保存新对象。"""
         state = inspect(self)
 
@@ -184,6 +196,14 @@ class ModelMixin(Base):
         self._fill_ins_insert_fields()
         data = self._extract_db_values()
 
+        stmt = insert(self.__class__).values(data)
+
+        if not execute:
+            return stmt
+
+        if session_provider is None:
+            raise ValueError("session_provider is required when execute=True")
+
         try:
             async with session_provider() as sess:
                 async with sess.begin():
@@ -191,7 +211,7 @@ class ModelMixin(Base):
         except Exception as e:
             raise RuntimeError(f"{self.__class__.__name__} save(insert) error: {e}") from e
 
-    async def update(self, session_provider: SessionProvider, **kwargs) -> None:
+    async def update(self, session_provider: SessionProvider | None = None, **kwargs) -> None:
         """[Strict Update] 仅用于更新已存在的对象。"""
         state = inspect(self)
 
