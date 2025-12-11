@@ -1,4 +1,8 @@
-from sqlalchemy import Subquery, select, Executable
+from collections.abc import Callable, Awaitable
+from typing import TypeVar
+
+from sqlalchemy import Subquery, select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, InstrumentedAttribute
 
 from pkg.database.base import ModelMixin, SessionProvider
@@ -7,6 +11,7 @@ from pkg.database.builder import QueryBuilder, CountBuilder, UpdateBuilder
 """
 数据访问对象 (DAO)
 """
+
 
 class BaseDao[T: ModelMixin]:
     _model_cls: type[T] = None  # 类型提示
@@ -99,25 +104,78 @@ class BaseDao[T: ModelMixin]:
         return await self.querier.in_(self._model_cls.id, ids).all()
 
 
-async def execute_transaction_atomic(
+T = TypeVar("T")
+
+
+async def execute_transaction(
         session_provider: SessionProvider,
+        callback: Callable[[AsyncSession], Awaitable[T]],
         autoflush: bool = True,
-        *stmts: Executable | None
-) -> None:
+) -> T:
     """
-    [Transaction] 在同一个事务中原子性地执行多个 SQL 语句。
-    会自动过滤掉 None 的语句（例如当 insert_instances 没有数据返回 None 时）。
-    """
-    # 过滤掉 None (比如空列表调用 insert_instances 返回的 None)
-    valid_stmts = [s for s in stmts if s is not None]
+        [Transaction] 手动事务执行器：通过回调函数在同一个事务中执行复杂逻辑。
 
-    if not valid_stmts:
-        return
+        该方法解决了简单的批量执行无法处理 "先插入获取ID，再使用ID插入关联表" 的逻辑依赖问题。
+        它会自动开启事务，并在回调执行完毕后提交；如果发生异常则自动回滚。
 
+        Args:
+            session_provider: Session 提供者
+            callback: 包含业务逻辑的异步函数。接收当前事务的 `AsyncSession`，返回任意类型 `T`。
+            autoflush: 是否自动刷新（默认 True）。如果在事务中需要立即获取自增 ID，请保持为 True。
+
+        Returns:
+            返回 callback 函数的执行结果。
+
+        Raises:
+            RuntimeError: 当事务执行失败时抛出，并包含原始异常信息。
+
+        Examples:
+            **场景 1：简单的混合操作 (无返回值)**
+            ```python
+            async def _do_work(sess: AsyncSession):
+                # 1. ORM 添加
+                sess.add(User(name="Alice"))
+                # 2. SQL 执行
+                await sess.execute(update(Log).where(...))
+
+            await execute_transaction(session_provider, _do_work)
+            ```
+
+            **场景 2：有逻辑依赖的操作 (先插后查/后改)**
+            *注意：需要调用 await sess.flush() 来获取生成的 ID*
+            ```python
+            async def _create_order_flow(sess: AsyncSession) -> int:
+                # 1. 创建主订单
+                order = Order(user_id=1, amount=100)
+                sess.add(order)
+
+                # [关键] 刷新到数据库以获取自增 ID (此时并未 commit)
+                await sess.flush()
+
+                # 2. 使用生成的 ID 创建子项
+                item = OrderItem(order_id=order.id, product="Apple")
+                sess.add(item)
+
+                return order.id
+
+            # 拿到返回值
+            new_order_id = await execute_transaction(session_provider, _create_order_flow)
+            ```
+
+            **场景 3：使用 Lambda (极简模式)**
+            ```python
+            # 仅在只有一行代码且不需要返回值时推荐
+            await execute_transaction(
+                session_provider,
+                lambda sess: sess.execute(insert(Log).values(...))
+            )
+            ```
+        """
     try:
         async with session_provider(autoflush=autoflush) as sess:
             async with sess.begin():
-                for stmt in valid_stmts:
-                    await sess.execute(stmt)
+                # 执行回调，并将结果返回
+                return await callback(sess)
     except Exception as e:
-        raise RuntimeError(f"Atomic execution failed: {e}") from e
+        # 这里可以加日志 logging.error(...)
+        raise RuntimeError(f"Transaction failed: {e}") from e
