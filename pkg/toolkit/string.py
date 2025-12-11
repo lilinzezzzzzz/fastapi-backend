@@ -1,4 +1,5 @@
 import random
+import re
 import string
 import time
 import uuid
@@ -108,3 +109,20 @@ def build_url(
 
     # 组装 URL（去掉 params 参数）
     return urlunparse((scheme, netloc, path, "", query_string, fragment))
+
+
+def generate_unique_int_id():
+    """
+    使用 UUIDv7 标准 (uuid6.uuid7) 生成一个 64 位的通用、时间排序的整数 ID。
+
+    UUIDv7 确保了 ID 的时间可排序性，这在数据库索引中非常有用。
+    该函数返回的是 128 位 UUID 的高 64 位。
+
+    返回值:
+        int: 生成的 64 位整数 ID (时间排序)。
+    """
+    # 1. 生成一个 128 位的 UUIDv7 对象
+    # 2. .int 获取其 128 位整数表示
+    # 3. >> 64 取高 64 位作为 ID，因为 UUIDv7 的时间戳信息主要集中在高位
+    unique_id = uuid6.uuid7().int >> 64
+    return unique_id
