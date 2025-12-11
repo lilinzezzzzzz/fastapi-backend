@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Annotated, Any, Union
 
@@ -124,10 +124,14 @@ def _serialize_smart_datetime(v: datetime) -> str | None:
     """
     [输出处理] Python -> JSON (ISO String)
     将 datetime 对象转为标准的 ISO 8601 字符串格式
+    如果是 naive datetime（无时区），默认作为 UTC 处理
     """
     if v is None:
         return None
-    # 返回标准 ISO 格式，例如: "2025-05-07T14:30:00"
+    # 如果是 naive datetime，默认作为 UTC 处理
+    if v.tzinfo is None:
+        v = v.replace(tzinfo=timezone.utc)
+    # 返回标准 ISO 格式，例如: "2025-05-07T14:30:00+00:00"
     return v.isoformat()
 
 
