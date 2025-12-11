@@ -5,7 +5,7 @@ from sqlalchemy import Select, Delete, Update, ClauseElement, ColumnElement, or_
 from sqlalchemy.orm import InstrumentedAttribute, Mapped
 
 from pkg import async_context
-from pkg.async_database.base import ModelMixin, SessionProvider
+from pkg.database.base import ModelMixin, SessionProvider
 from pkg.async_logger import logger
 from pkg.toolkit.list import unique_list
 from pkg.toolkit.time import utc_now_naive

@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from internal.config.load_config import setting
-from pkg.async_database import new_async_engine, new_async_session_maker
+from pkg.database import new_async_engine, new_async_session_maker
 from pkg.async_logger import logger
 from pkg.toolkit.json import orjson_dumps, orjson_loads
 

@@ -53,7 +53,7 @@ sys.modules["pkg.snowflake_tool"] = mock_snowflake
 # 2. 导入目标代码
 # ==========================================
 try:
-    from pkg.async_database import ModelMixin, BaseDao, Base, new_async_session_maker
+    from pkg.database import ModelMixin, BaseDao, Base, new_async_session_maker
 except ImportError as e:
     print(f"Import Error: {e}")
     print(f"Looking for pkg at: {pkg_path}")

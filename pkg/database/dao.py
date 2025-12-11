@@ -1,8 +1,8 @@
 from sqlalchemy import Subquery, select, Executable
 from sqlalchemy.orm import aliased, InstrumentedAttribute
 
-from pkg.async_database.base import ModelMixin, SessionProvider
-from pkg.async_database.builder import QueryBuilder, CountBuilder, UpdateBuilder
+from pkg.database.base import ModelMixin, SessionProvider
+from pkg.database.builder import QueryBuilder, CountBuilder, UpdateBuilder
 
 """
 数据访问对象 (DAO)
