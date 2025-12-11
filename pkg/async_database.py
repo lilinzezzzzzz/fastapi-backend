@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import (AsyncEngine, AsyncSession, async_sessionmake
 from sqlalchemy.orm import (DeclarativeBase, InstrumentedAttribute, Mapped, aliased, mapped_column)
 from sqlalchemy.sql.elements import ClauseElement, ColumnElement
 
+from pkg import async_context
 from pkg.async_logger import logger
 from pkg.snowflake import snowflake_id_generator
 from pkg.toolkit.json import orjson_dumps, orjson_loads, orjson_loads_types
@@ -24,16 +25,16 @@ SessionProvider = Callable[..., AbstractAsyncContextManager[AsyncSession]]
 
 
 def new_async_engine(
-    *,
-    database_uri: str,
-    echo: bool = True,
-    pool_pre_ping: bool = True,
-    pool_size: int = 10,
-    max_overflow: int = 20,
-    pool_timeout: int = 30,
-    pool_recycle: int = 1800,
-    json_serializer: Callable[[Any], str] = orjson_dumps,
-    json_deserializer: Callable[[orjson_loads_types], Any] = orjson_loads
+        *,
+        database_uri: str,
+        echo: bool = True,
+        pool_pre_ping: bool = True,
+        pool_size: int = 10,
+        max_overflow: int = 20,
+        pool_timeout: int = 30,
+        pool_recycle: int = 1800,
+        json_serializer: Callable[[Any], str] = orjson_dumps,
+        json_deserializer: Callable[[orjson_loads_types], Any] = orjson_loads
 ) -> AsyncEngine:
     return create_async_engine(
         url=database_uri,
@@ -123,11 +124,11 @@ class ModelMixin(Base):
 
     @classmethod
     async def insert_instances(
-        cls,
-        *,
-        items: list["ModelMixin"],
-        session_provider: SessionProvider | None = None,
-        execute: bool = True,
+            cls,
+            *,
+            items: list["ModelMixin"],
+            session_provider: SessionProvider | None = None,
+            execute: bool = True,
     ) -> Insert | None:
         """
         [Batch Instance] 高性能批量插入对象实例。
@@ -227,7 +228,7 @@ class ModelMixin(Base):
     def _get_context_defaults() -> ContextDefaults:
         return ContextDefaults(
             now=utc_now_naive(),
-            user_id=ctx.get_user_id()
+            user_id=async_context.get_user_id()
         )
 
     def _fill_ins_insert_fields(self):
@@ -429,11 +430,11 @@ class BaseBuilder[T: ModelMixin]:
 
 class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
     def __init__(
-        self, model_cls: type[T],
-        *,
-        session_provider: SessionProvider,
-        initial_where: ColumnElement[bool] | None = None,
-        custom_stmt: Select | None = None, include_deleted: bool | None = None,
+            self, model_cls: type[T],
+            *,
+            session_provider: SessionProvider,
+            initial_where: ColumnElement[bool] | None = None,
+            custom_stmt: Select | None = None, include_deleted: bool | None = None,
     ):
         super().__init__(model_cls, session_provider=session_provider)
 
@@ -489,11 +490,11 @@ class CountBuilder[T: ModelMixin](BaseBuilder[T]):
 
 class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
     def __init__(
-        self,
-        *,
-        model_cls: type[T] | None = None,
-        model_ins: T | None = None,
-        session_provider: SessionProvider
+            self,
+            *,
+            model_cls: type[T] | None = None,
+            model_ins: T | None = None,
+            session_provider: SessionProvider
     ):
         target_cls = model_cls if model_cls is not None else model_ins.__class__
         super().__init__(target_cls, session_provider=session_provider)
@@ -532,7 +533,7 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
         self._update_dict.setdefault(updated_col, utc_now_naive())
 
         if self._model_cls.has_updater_id_column():
-            self._update_dict.setdefault(self._model_cls.updater_id_column_name(), ctx.get_user_id())
+            self._update_dict.setdefault(self._model_cls.updater_id_column_name(), async_context.get_user_id())
 
         return self._stmt.values(**self._update_dict).execution_options(synchronize_session=False)
 
@@ -622,11 +623,11 @@ class BaseDao[T: ModelMixin]:
 
     # --- Common Methods ---
     async def query_by_primary_id(
-        self,
-        primary_id: int,
-        *,
-        creator_id: int = None,
-        include_deleted: bool = False
+            self,
+            primary_id: int,
+            *,
+            creator_id: int = None,
+            include_deleted: bool = False
     ) -> T | None:
         qb = self.querier_inc_deleted if include_deleted else self.querier
         qb = qb.eq_(self._model_cls.id, primary_id)
