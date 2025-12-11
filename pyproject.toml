@@ -65,10 +65,6 @@ dependencies = [
     "boto3>=1.42.6",
     "boto3-stubs>=1.42.6",
     "uuid6>=2025.0.1",
-    "pandas-stubs>=2.3.3.251201",
-    "httpx",
-    "types-redis",
-    "types-pytz"
 ]
 
 # 分组依赖 —— 开发环境才需要
@@ -81,8 +77,13 @@ dev = [
     # 常规开发工具（可根据你需要继续添加）
     "pytest",
     "pytest-asyncio",
+    "httpx", # 测试请求常用
+    "black",
     "ruff",
     "mypy",
+    "types-redis",
+    "types-pytz",
+    "pandas-stubs>=2.3.3.251201",
 ]
 
 # CI 构建相关工具（可选，按需添加）
