@@ -1,12 +1,11 @@
-from collections.abc import Callable, Awaitable
-from typing import TypeVar
+from collections.abc import Awaitable, Callable
 
 from sqlalchemy import Subquery, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased, InstrumentedAttribute
+from sqlalchemy.orm import InstrumentedAttribute, aliased
 
 from pkg.database.base import ModelMixin, SessionProvider
-from pkg.database.builder import QueryBuilder, CountBuilder, UpdateBuilder
+from pkg.database.builder import CountBuilder, QueryBuilder, UpdateBuilder
 
 """
 数据访问对象 (DAO)
@@ -88,11 +87,11 @@ class BaseDao[T: ModelMixin]:
 
     # --- Common Methods ---
     async def query_by_primary_id(
-            self,
-            primary_id: int,
-            *,
-            creator_id: int = None,
-            include_deleted: bool = False
+        self,
+        primary_id: int,
+        *,
+        creator_id: int = None,
+        include_deleted: bool = False
     ) -> T | None:
         qb = self.querier_inc_deleted if include_deleted else self.querier
         qb = qb.eq_(self._model_cls.id, primary_id)
@@ -104,13 +103,10 @@ class BaseDao[T: ModelMixin]:
         return await self.querier.in_(self._model_cls.id, ids).all()
 
 
-T = TypeVar("T")
-
-
-async def execute_transaction(
-        session_provider: SessionProvider,
-        callback: Callable[[AsyncSession], Awaitable[T]],
-        autoflush: bool = True,
+async def execute_transaction[T](
+    session_provider: SessionProvider,
+    callback: Callable[[AsyncSession], Awaitable[T]],
+    autoflush: bool = True,
 ) -> T:
     """
         [Transaction] 手动事务执行器：通过回调函数在同一个事务中执行复杂逻辑。
