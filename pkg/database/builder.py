@@ -1,12 +1,12 @@
 from datetime import datetime
-from typing import Self, Any, cast
+from typing import Any, Self, cast
 
-from sqlalchemy import Select, Delete, Update, ClauseElement, ColumnElement, or_, select, func, distinct, update
+from sqlalchemy import ClauseElement, ColumnElement, Delete, Select, Update, distinct, func, or_, select, update
 from sqlalchemy.orm import InstrumentedAttribute, Mapped
 
 from pkg import async_context
-from pkg.database.base import ModelMixin, SessionProvider
 from pkg.async_logger import logger
+from pkg.database.base import ModelMixin, SessionProvider
 from pkg.toolkit.list import unique_list
 from pkg.toolkit.time import utc_now_naive
 
@@ -27,6 +27,24 @@ class BaseBuilder[T: ModelMixin]:
     # --- 条件构造 ---
     def where(self, *conditions: ClauseElement) -> Self:
         if conditions: self._stmt = self._stmt.where(*conditions)
+        return self
+
+    def apply_kwargs_filters(self, **kwargs):
+        """将 kwargs 筛选条件应用到 builder（querier/counter/updater）
+
+        Args:
+            **kwargs: 字段名=值 的筛选条件
+
+        Returns:
+            应用了筛选条件的 builder
+
+        Example:
+            await builder.apply_kwargs_filters(dao.querier, organization_id=1, status="active").all()
+            await builder.apply_kwargs_filters(dao.counter, organization_id=1).count()
+        """
+        for k, v in kwargs.items():
+            if column := self._model_cls.get_column_or_none(k):
+                self.where(column == v)
         return self
 
     def eq_(self, column: InstrumentedAttribute | Mapped, value: Any) -> Self:
@@ -90,11 +108,11 @@ class BaseBuilder[T: ModelMixin]:
 
 class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
     def __init__(
-            self, model_cls: type[T],
-            *,
-            session_provider: SessionProvider,
-            initial_where: ColumnElement[bool] | None = None,
-            custom_stmt: Select | None = None, include_deleted: bool | None = None,
+        self, model_cls: type[T],
+        *,
+        session_provider: SessionProvider,
+        initial_where: ColumnElement[bool] | None = None,
+        custom_stmt: Select | None = None, include_deleted: bool | None = None,
     ):
         super().__init__(model_cls, session_provider=session_provider)
 
@@ -150,11 +168,11 @@ class CountBuilder[T: ModelMixin](BaseBuilder[T]):
 
 class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
     def __init__(
-            self,
-            *,
-            model_cls: type[T] | None = None,
-            model_ins: T | None = None,
-            session_provider: SessionProvider
+        self,
+        *,
+        model_cls: type[T] | None = None,
+        model_ins: T | None = None,
+        session_provider: SessionProvider
     ):
         target_cls = model_cls if model_cls is not None else model_ins.__class__
         super().__init__(target_cls, session_provider=session_provider)
