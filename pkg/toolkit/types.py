@@ -66,13 +66,18 @@ def _parse_smart_decimal(v: Any) -> Decimal:
     """
     [输入处理]
     前端传 string/float，后端统一转为 Decimal 以保证计算精度。
+    仅支持 Decimal、int、float、str 类型，其他类型返回错误。
     """
-    try:
-        if isinstance(v, float):
-            return Decimal(str(v))  # float 转 str 再转 Decimal 避免精度丢失
-        return Decimal(v)
-    except (InvalidOperation, TypeError, ValueError) as e:
-        raise ValueError(f"Invalid decimal value: {v}") from e
+    if isinstance(v, Decimal):
+        return v
+    if isinstance(v, float):
+        return Decimal(str(v))
+    if isinstance(v, str):
+        try:
+            return Decimal(v)
+        except InvalidOperation as e:
+            raise ValueError(f"Invalid decimal value: {v}") from e
+    raise TypeError(f"Expected Decimal, int, float or str, got {type(v).__name__}")
 
 
 def _serialize_smart_decimal(v: Decimal) -> float | str:
