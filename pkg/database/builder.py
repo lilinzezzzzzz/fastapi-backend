@@ -17,6 +17,7 @@ from pkg.toolkit.time import utc_now_naive
 
 class BaseBuilder[T: ModelMixin]:
     """SQL查询构建器基类"""
+
     __slots__ = ("_model_cls", "_stmt", "_session_provider")
 
     def __init__(self, model_cls: type[T], *, session_provider: SessionProvider):
@@ -26,7 +27,8 @@ class BaseBuilder[T: ModelMixin]:
 
     # --- 条件构造 ---
     def where(self, *conditions: ClauseElement) -> Self:
-        if conditions: self._stmt = self._stmt.where(*conditions)
+        if conditions:
+            self._stmt = self._stmt.where(*conditions)
         return self
 
     def apply_kwargs_filters(self, **kwargs):
@@ -108,11 +110,13 @@ class BaseBuilder[T: ModelMixin]:
 
 class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
     def __init__(
-        self, model_cls: type[T],
+        self,
+        model_cls: type[T],
         *,
         session_provider: SessionProvider,
         initial_where: ColumnElement[bool] | None = None,
-        custom_stmt: Select | None = None, include_deleted: bool | None = None,
+        custom_stmt: Select | None = None,
+        include_deleted: bool | None = None,
     ):
         super().__init__(model_cls, session_provider=session_provider)
 
@@ -150,9 +154,15 @@ class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
 
 
 class CountBuilder[T: ModelMixin](BaseBuilder[T]):
-    def __init__(self, model_cls: type[T], *, session_provider: SessionProvider,
-                 count_column: InstrumentedAttribute = None, is_distinct: bool = False,
-                 include_deleted: bool = None):
+    def __init__(
+        self,
+        model_cls: type[T],
+        *,
+        session_provider: SessionProvider,
+        count_column: InstrumentedAttribute = None,
+        is_distinct: bool = False,
+        include_deleted: bool = None,
+    ):
         super().__init__(model_cls, session_provider=session_provider)
         col = count_column if count_column is not None else self._model_cls.id
         expr = func.count(distinct(col)) if is_distinct else func.count(col)
@@ -168,11 +178,7 @@ class CountBuilder[T: ModelMixin](BaseBuilder[T]):
 
 class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
     def __init__(
-        self,
-        *,
-        model_cls: type[T] | None = None,
-        model_ins: T | None = None,
-        session_provider: SessionProvider
+        self, *, model_cls: type[T] | None = None, model_ins: T | None = None, session_provider: SessionProvider
     ):
         target_cls = model_cls if model_cls is not None else model_ins.__class__
         super().__init__(target_cls, session_provider=session_provider)
@@ -200,7 +206,8 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
 
     @property
     def update_stmt(self) -> Update:
-        if not self._update_dict: return self._stmt
+        if not self._update_dict:
+            return self._stmt
 
         # 自动处理 updated_at 和 deleted_at 同步
         updated_col = self._model_cls.updated_at_column_name()
@@ -216,7 +223,8 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
         return self._stmt.values(**self._update_dict).execution_options(synchronize_session=False)
 
     async def execute(self):
-        if not self._update_dict: return
+        if not self._update_dict:
+            return
         async with self._session_provider() as sess:
             await sess.execute(self.update_stmt)
             await sess.commit()
