@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
-from typing import Annotated, Any, Union
+from typing import Annotated, Any
 
 from pydantic import BeforeValidator, PlainSerializer, WithJsonSchema
 
@@ -11,6 +11,7 @@ JS_MAX_SAFE_INTEGER = 9007199254740991
 # ==========================================
 # 1. SmartInt (智能整数)
 # ==========================================
+
 
 def _parse_smart_int(v: Any) -> int:
     """
@@ -26,7 +27,7 @@ def _parse_smart_int(v: Any) -> int:
         raise ValueError(f"Invalid integer value: {v}") from e
 
 
-def _serialize_smart_int(v: int) -> Union[int, str]:
+def _serialize_smart_int(v: int) -> int | str:
     """
     [输出处理]
     序列化给前端时：
@@ -41,19 +42,22 @@ def _serialize_smart_int(v: int) -> Union[int, str]:
 SmartInt = Annotated[
     int,  # Python 内部类型始终是 int
     BeforeValidator(_parse_smart_int),
-    PlainSerializer(_serialize_smart_int, return_type=Union[int, str], when_used="json"),
-    WithJsonSchema({
-        "anyOf": [{"type": "integer"}, {"type": "string"}],
-        "title": "SmartInt",
-        "description": "Int in Python. Auto-converts to string in JSON if > JS safe range.",
-        "example": 12345,
-    }),
+    PlainSerializer(_serialize_smart_int, return_type=int | str, when_used="json"),
+    WithJsonSchema(
+        {
+            "anyOf": [{"type": "integer"}, {"type": "string"}],
+            "title": "SmartInt",
+            "description": "Int in Python. Auto-converts to string in JSON if > JS safe range.",
+            "example": 12345,
+        }
+    ),
 ]
 
 
 # ==========================================
 # 2. SmartDecimal (智能浮点数)
 # ==========================================
+
 
 def _parse_smart_decimal(v: Any) -> Decimal:
     """
@@ -68,7 +72,7 @@ def _parse_smart_decimal(v: Any) -> Decimal:
         raise ValueError(f"Invalid decimal value: {v}") from e
 
 
-def _serialize_smart_decimal(v: Decimal) -> Union[float, str]:
+def _serialize_smart_decimal(v: Decimal) -> float | str:
     """
     [输出处理]
     - 范围在 -1e15 到 1e15 且小数位 <= 6 位 -> 转 float (前端友好)
@@ -84,19 +88,22 @@ def _serialize_smart_decimal(v: Decimal) -> Union[float, str]:
 SmartDecimal = Annotated[
     Decimal,  # Python 内部类型始终是 Decimal
     BeforeValidator(_parse_smart_decimal),
-    PlainSerializer(_serialize_smart_decimal, return_type=Union[float, str], when_used="json"),
-    WithJsonSchema({
-        "anyOf": [{"type": "number"}, {"type": "string"}],
-        "title": "SmartDecimal",
-        "description": "Decimal in Python. Float in JSON if simple, String if high precision.",
-        "example": 12.3456,
-    }),
+    PlainSerializer(_serialize_smart_decimal, return_type=float | str, when_used="json"),
+    WithJsonSchema(
+        {
+            "anyOf": [{"type": "number"}, {"type": "string"}],
+            "title": "SmartDecimal",
+            "description": "Decimal in Python. Float in JSON if simple, String if high precision.",
+            "example": 12.3456,
+        }
+    ),
 ]
 
 
 # ==========================================
 # 3. SmartDatetime (智能时间类型)
 # ==========================================
+
 
 def _parse_smart_datetime(v: Any) -> datetime:
     """
@@ -139,13 +146,15 @@ SmartDatetime = Annotated[
     datetime,  # <--- Python 内部类型明确为 datetime
     BeforeValidator(_parse_smart_datetime),
     PlainSerializer(_serialize_smart_datetime, return_type=str, when_used="json"),
-    WithJsonSchema({
-        "type": "string",
-        "format": "date-time",
-        "example": "2025-05-07T14:30:00",
-        "title": "SmartDatetime",
-        "description": "Auto-converts ISO string to Naive datetime on input; Serializes to ISO string on output."
-    })
+    WithJsonSchema(
+        {
+            "type": "string",
+            "format": "date-time",
+            "example": "2025-05-07T14:30:00",
+            "title": "SmartDatetime",
+            "description": "Auto-converts ISO string to Naive datetime on input; Serializes to ISO string on output.",
+        }
+    ),
 ]
 # ==========================================
 # 4. IntStr (强制字符串 ID)
@@ -156,10 +165,12 @@ SmartDatetime = Annotated[
 IntStr = Annotated[
     str,
     BeforeValidator(lambda v: str(v)),
-    WithJsonSchema({
-        "type": "string",
-        "title": "IntStr",
-        "description": "Force serialization to string",
-        "example": "115603251198457884",
-    }),
+    WithJsonSchema(
+        {
+            "type": "string",
+            "title": "IntStr",
+            "description": "Force serialization to string",
+            "example": "115603251198457884",
+        }
+    ),
 ]
