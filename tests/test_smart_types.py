@@ -6,7 +6,7 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 # 引入我们定义的类型
-from pkg.toolkit.smart_types import JS_MAX_SAFE_INTEGER, SmartDatetime, SmartDecimal, SmartInt
+from pkg.toolkit.types import JS_MAX_SAFE_INTEGER, SmartDatetime, SmartDecimal, SmartInt
 
 
 # 定义一个用于测试的模型

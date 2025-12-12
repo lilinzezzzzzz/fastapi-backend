@@ -18,13 +18,16 @@ def _parse_smart_int(v: Any) -> int:
     [输入处理]
     前端传 "123" 或 123，后端统一转为 int 类型，
     以便 Python 内部进行数学运算或数据库存储。
+    仅支持整数或纯数字字符串，其他类型返回错误。
     """
     if isinstance(v, int):
         return v
-    try:
-        return int(float(str(v)))  # 先 float 容错 "123.0" 这种情况
-    except (ValueError, TypeError) as e:
-        raise ValueError(f"Invalid integer value: {v}") from e
+    if isinstance(v, str):
+        try:
+            return int(v)
+        except ValueError as e:
+            raise ValueError(f"Invalid integer value: {v}") from e
+    raise TypeError(f"Expected int or str, got {type(v).__name__}, {v}")
 
 
 def _serialize_smart_int(v: int) -> int | str:
