@@ -13,9 +13,7 @@ class PasswordHasher:
     @staticmethod
     def _verify_sync(plain_password: str, hashed_password: str) -> bool:
         try:
-            return bcrypt.checkpw(
-                plain_password.encode("utf-8"), hashed_password.encode("utf-8")
-            )
+            return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
         except (ValueError, TypeError):
             return False
 
@@ -27,9 +25,7 @@ class PasswordHasher:
     async def verify(self, plain_password: str, hashed_password: str) -> bool:
         if not plain_password or not hashed_password:
             return False
-        return await anyio.to_thread.run_sync(
-            self._verify_sync, plain_password, hashed_password
-        )
+        return await anyio.to_thread.run_sync(self._verify_sync, plain_password, hashed_password)
 
 
 password_hasher = PasswordHasher()
