@@ -36,12 +36,12 @@ class _RequestContextManager:
         try:
             ctx = _request_context_var.get()
             ctx[key] = value
-        except LookupError:
+        except LookupError as e:
             # 修改：移除自动 init，直接报错或记录严重错误
             # 如果这是一个纯 Web 包，应该 raise 异常。
             # 如果为了兼容，打印 Error 且不执行操作可能更安全。
             logger.error(f"Try to set context key '{key}' but Context is not initialized!")
-            raise RuntimeError("Request Context not initialized. Is Middleware added?")
+            raise RuntimeError("Request Context not initialized. Is Middleware added?") from e
 
     @staticmethod
     def all() -> dict[str, Any]:
