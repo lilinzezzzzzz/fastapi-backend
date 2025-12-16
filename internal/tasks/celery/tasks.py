@@ -18,7 +18,7 @@ def number_sum(self, x: int, y: int):
     except Exception as e:
         logger.error(f"Task failed: {e}")
         # 任务重试逻辑
-        raise self.retry(exc=e, countdown=5, max_retries=3)
+        raise self.retry(exc=e, countdown=5, max_retries=3) from e
 
 
 @celery_client.app.task(bind=True, name="task_sum_every_15_min")
@@ -32,4 +32,4 @@ def task_sum_every_15_min(self, x: int, y: int):
         return result
     except Exception as e:
         logger.error(f"Task failed: {e}")
-        raise self.retry(exc=e, countdown=5, max_retries=3)
+        raise self.retry(exc=e, countdown=5, max_retries=3) from e
