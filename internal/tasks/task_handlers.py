@@ -17,16 +17,3 @@ async def handle_number_sum(x: int, y: int) -> int:
     result = x + y
     logger.info(f"计算结果: {result}")
     return result
-
-
-async def handle_scheduled_sum(x: int, y: int) -> int:
-    """
-    定时任务：计算两个数字的和
-    :param x: 数字1
-    :param y: 数字2
-    :return: 两个数字的和
-    """
-    logger.info(f"定时任务开始: {x} + {y}")
-    result = x + y
-    logger.info(f"定时任务完成: {result}")
-    return result

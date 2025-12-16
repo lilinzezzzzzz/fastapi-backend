@@ -15,15 +15,15 @@ from pkg.celery_task import CeleryClient
 
 # 需要加载的任务模块 (Python 模块路径)
 CELERY_INCLUDE_MODULES = [
-    "internal.aps_tasks.tasks",
+    "internal.tasks.celery.tasks",
 ]
 
 # 任务路由配置 (决定任务去哪个队列)
 CELERY_TASK_ROUTES = {
+    # Celery 任务统一走 celery_queue
+    "internal.celery.tasks.*": {"queue": "celery_queue"},
     # 定时任务统一走 cron_queue
-    "internal.aps_tasks.*": {"queue": "cron_queue"},
-    # 视频转码走高优先级队列
-    "internal.business.video.transcode": {"queue": "video_queue", "priority": 10},
+    "task_sum_every_15_min": {"queue": "cron_queue"},
 }
 
 # 静态定时任务表 (Beat Schedule)
@@ -31,28 +31,23 @@ CELERY_TASK_ROUTES = {
 STATIC_BEAT_SCHEDULE = {
     # 案例 1：Cron 风格 - 每隔 15 分钟执行一次
     "task_sum_every_15_min": {
-        "task": "math.number_sum",
+        "task": "number_sum",
         "schedule": crontab(minute="*/15"),
         "args": (10, 20),
     },
-    # 案例 2：Cron 风格 - 每天早上 8:30 执行
-    "task_daily_report_morning": {
-        "task": "math.number_sum",
-        "schedule": crontab(hour=8, minute=30),
-        "kwargs": {"x": 100, "y": 200},
-    },
-    # 案例 3：Interval 风格 - 每 30 秒执行一次
+    # 案例 2：Interval 风格 - 每 30 秒执行一次
     "task_heartbeat_30s": {
-        "task": "math.number_sum",
+        "task": "internal.celery.tasks.number_sum",
         "schedule": 30.0,
         "args": (1, 1),
-    }
+    },
 }
 
 
 # =========================================================
 # 2. Worker 生命周期钩子 (资源管理)
 # =========================================================
+
 
 def _worker_startup():
     """
@@ -75,11 +70,7 @@ async def _worker_shutdown():
     logger.info(">>> Worker Process Stopping: Releasing resources...")
     try:
         # 并发关闭 DB 和 Redis，加快关闭速度
-        await asyncio.gather(
-            close_redis(),
-            close_db(),
-            return_exceptions=True
-        )
+        await asyncio.gather(close_redis(), close_db(), return_exceptions=True)
     except Exception as e:
         logger.error(f"Error during resource shutdown: {e}")
     logger.info("<<< Worker Process Resources Released.")
@@ -94,24 +85,18 @@ celery_client = CeleryClient(
     app_name="my_fastapi_server",
     broker_url=setting.redis_url,
     backend_url=setting.redis_url,
-
     # 注册模块与路由
     include=CELERY_INCLUDE_MODULES,
     task_routes=CELERY_TASK_ROUTES,
     task_default_queue="default",
-
     # 注入静态定时任务配置 (之前漏了这里)
     beat_schedule=STATIC_BEAT_SCHEDULE,
-
     # 基础配置
-    timezone="Asia/Shanghai"
+    timezone="Asia/Shanghai",
 )
 
 # 注册生命周期钩子
-celery_client.register_worker_hooks(
-    on_startup=_worker_startup,
-    on_shutdown=_worker_shutdown
-)
+celery_client.register_worker_hooks(on_startup=_worker_startup, on_shutdown=_worker_shutdown)
 
 # 导出原生 App 对象供 Celery CLI 使用
 celery_app: Celery = celery_client.app
@@ -120,6 +105,7 @@ celery_app: Celery = celery_client.app
 # =========================================================
 # 4. FastAPI 集成辅助函数
 # =========================================================
+
 
 def init_celery():
     """
@@ -130,7 +116,7 @@ def init_celery():
     logger.info(f"Celery Modules Included: {CELERY_INCLUDE_MODULES}")
 
     # 调试模式下可打印路由表
-    # logger.debug(f"Celery Routes: {CELERY_TASK_ROUTES}")
+    logger.info(f"Celery Routes: {CELERY_TASK_ROUTES}")
 
     try:
         # 主动检测 Broker 连接 (Health Check)
@@ -140,6 +126,7 @@ def init_celery():
     except Exception as e:
         # 即使连不上也不要阻断 API 启动，只是记录错误，因为 Worker 是独立进程
         logger.error(f"Celery Broker connection failed: {e}")
+
 
 # =========================================================
 # 启动命令说明
