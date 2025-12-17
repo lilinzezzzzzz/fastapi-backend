@@ -167,6 +167,3 @@ cython_debug/
 
 # VSCode
 .vscode/
-
-# Qoder
-.qoder/
