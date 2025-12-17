@@ -10,14 +10,15 @@ sys.modules["pkg.async_logger"] = MagicMock()
 sys.modules["pkg.async_logger"].logger = mock_logger
 
 # --- 导入你的代码 ---
-from pkg.async_context import (
-    set_user_id,
-    get_user_id,
-    get_trace_id,
-    set_trace_id,
-    set_val,
-    init,
+# NOTE: 必须在 mock 之后导入，因为 async_context 依赖 async_logger
+from pkg.async_context import (  # noqa: E402
     clear,
+    get_trace_id,
+    get_user_id,
+    init,
+    set_trace_id,
+    set_user_id,
+    set_val,
 )
 
 
@@ -30,6 +31,7 @@ def clean_context():
 
 
 # --- 测试用例 ---
+
 
 def test_basic_lifecycle():
     """测试正常的生命周期"""
@@ -71,8 +73,9 @@ def test_get_without_init():
 
 def test_set_without_init_raises_error():
     """测试没有 Init 时，Set 会抛出 RuntimeError"""
-    import pkg.async_context
     from contextvars import ContextVar
+
+    import pkg.async_context
 
     # 1. 保存旧的 ContextVar (避免影响其他测试)
     old_var = pkg.async_context._request_context_var
