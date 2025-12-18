@@ -1,6 +1,7 @@
 from pkg.async_grpc import GrpcChannel
+from pkg.toolkit.types import LazyProxy
 
-grpc_channel: GrpcChannel | None = None
+_grpc_channel: GrpcChannel | None = None
 _channels: list[GrpcChannel] = []
 
 
@@ -8,9 +9,9 @@ def init_grpc_channel(*, host: str, port: int):
     """
     初始化gRPC 通道
     """
-    global grpc_channel
-    grpc_channel = GrpcChannel(host, port)
-    _channels.append(grpc_channel)
+    global _grpc_channel
+    _grpc_channel = GrpcChannel(host, port)
+    _channels.append(_grpc_channel)
 
 
 async def close_all_grpc_channel():
@@ -21,6 +22,16 @@ async def close_all_grpc_channel():
         await channel.close()
 
 
+def _get_grpc_channel():
+    """
+    获取gRPC通道
+    """
+    if not _grpc_channel:
+        raise RuntimeError("gRPC channel not initialized.")
+    return _grpc_channel
+
+
+grpc_channel = LazyProxy(_grpc_channel)
 """
 class UserGrpcClient:
     def __init__(self):

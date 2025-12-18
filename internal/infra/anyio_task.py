@@ -1,5 +1,6 @@
 from internal.core.logger import logger
 from pkg.anyio_task import AnyioTaskHandler
+from pkg.toolkit.types import LazyProxy
 
 _anyio_task_manager: AnyioTaskHandler | None = None
 
@@ -28,14 +29,10 @@ async def close_anyio_task_handler():
     logger.info("Stop anyio task manager completed.")
 
 
-class AnyioTaskManagerProxy:
-    """代理对象，动态转发调用到真实 anyio_task_manager"""
-
-    def __getattr__(self, name):
-        if _anyio_task_manager is None:
-            raise RuntimeError("Anyio task manager not initialized. Call init_anyio_task_handler() first.")
-        target = _anyio_task_manager
-        return getattr(target, name)
+def _get_anyio_task_manager() -> AnyioTaskHandler:
+    if _anyio_task_manager is None:
+        raise RuntimeError("Anyio task manager not initialized. Call init_anyio_task_handler() first.")
+    return _anyio_task_manager
 
 
-anyio_task_manager = AnyioTaskManagerProxy()
+anyio_task_manager = LazyProxy(_get_anyio_task_manager)
