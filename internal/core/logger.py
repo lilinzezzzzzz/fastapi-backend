@@ -8,8 +8,8 @@ from pkg.async_logger import LoggerManager, RetentionType, RotationType, logger 
 if TYPE_CHECKING:
     from loguru import Logger
 
-logger_manager: LoggerManager | None = None
-logger: "Logger | None" = None
+_logger_manager: LoggerManager | None = None
+_logger: "Logger | None" = None
 
 
 def init_logger(
@@ -33,3 +33,14 @@ def init_logger(
     )
     logger = logger_manager.setup()
     default_logger.info("Logger initialized.")
+
+
+class _LoggerProxy:
+    """代理对象，动态转发调用到真实 logger"""
+
+    def __getattr__(self, name):
+        target = _logger
+        return getattr(target, name)
+
+
+logger = _LoggerProxy()  # 导出代理对象
