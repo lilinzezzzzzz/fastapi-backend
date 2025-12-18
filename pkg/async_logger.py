@@ -147,15 +147,14 @@ class LoggerManager:
         if log_type in self._registered_types:
             existing_config = self._registered_types[log_type]
             if (existing_save_json := existing_config.get("save_json")) != save_json:
-                raise ValueError(
-                    f"Log type '{log_type}' conflict: registered save_json={existing_save_json}, "
-                    f"requested save_json={save_json}."
+                self._logger.warning(
+                    f"Log type '{log_type}' registered with different save_json: "
+                    f"registered={existing_save_json}, requested={save_json}."
                 )
             return self._logger.bind(type=log_type)
 
         # 2. 注册新的 Sink
         try:
-
             def _specific_filter(record):
                 return record["extra"].get("type") == log_type
 
