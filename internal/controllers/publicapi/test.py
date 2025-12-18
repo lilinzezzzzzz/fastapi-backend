@@ -32,7 +32,7 @@ async def test_raise_app_exception():
 async def test_custom_response_class_basic_types(_: Request):
     return success_response(
         data={
-            "large_int": 2 ** 53 + 1,  # 超过JS安全整数
+            "large_int": 2**53 + 1,  # 超过JS安全整数
             "normal_int": 42,
             "float_num": 3.1415926535,
             "boolean": True,
@@ -62,7 +62,7 @@ async def test_custom_response_class_nested(_: Request):
                         "mixed_types": [
                             Decimal("999.999"),
                             {uuid.uuid4(): datetime.now()},
-                            [2 ** 60, {"deep": True}],
+                            [2**60, {"deep": True}],
                         ]
                     }
                 ]
@@ -76,7 +76,7 @@ async def test_custom_response_class_third_party(_: Request):
     return success_response(
         data={
             "numpy_array": np.array([1.1, 2.2, 3.3]),  # NumPy数组
-            "numpy_int": np.int64(2 ** 63 - 1),
+            "numpy_int": np.int64(2**63 - 1),
         }
     )
 
@@ -86,7 +86,7 @@ async def test_custom_response_class_edge_cases(_: Request):
     return success_response(
         data={
             "numpy_array": np.array([1.1, 2.2, 3.3]),  # NumPy数组
-            "numpy_int": np.int64(2 ** 63),
+            "numpy_int": np.int64(2**63 - 1),  # int64 最大值
         }
     )
 
@@ -110,7 +110,7 @@ async def test_custom_response_class_special_types(_: Request):
             "decimal": Decimal("123.4567890123456789"),
             "bytes": b"\x80abc\xff",
             "datetime_naive": datetime.now(),
-            "big_int": 2 ** 60,
+            "big_int": 2**60,
             "timedelta": timedelta(days=1, seconds=3600),
         }
     )
