@@ -119,7 +119,7 @@ class ResponseFactory:
         )
 
     @staticmethod
-    def _process_success_data(data: dict | BaseModel) -> dict | None:
+    def _process_success_data(data: dict | list | BaseModel | None = None) -> dict | None:
         """
         验证成功响应的数据类型，并将其转换为最优格式（dict）。
 
@@ -132,6 +132,8 @@ class ResponseFactory:
         Raises:
             TypeError: 如果数据类型不符合要求。
         """
+        if data is None:
+            return data
 
         # 1. 🌟 优先处理 Pydantic 模型并转换
         if isinstance(data, BaseModel):
@@ -140,7 +142,7 @@ class ResponseFactory:
             return data.model_dump(mode="json")
 
         # 2. 接着检查 Python 原生类型 (dict 或 None)
-        if isinstance(data, dict) or data is None:
+        if isinstance(data, dict | list) or data is None:
             return data
 
         # 3. 如果都不是，抛出错误
@@ -148,7 +150,7 @@ class ResponseFactory:
             f"Success response data must be a dict, a Pydantic model instance, or None, but received type: {type(data)}"
         )
 
-    def success(self, *, data: dict | BaseModel) -> CustomORJSONResponse:
+    def success(self, *, data: dict | list | BaseModel | None = None) -> CustomORJSONResponse:
         """
         成功响应
         """
@@ -192,7 +194,7 @@ response_factory = ResponseFactory()
 # =========================================================
 
 
-def success_response(data: dict | BaseModel) -> CustomORJSONResponse:
+def success_response(data: dict | list | BaseModel | None = None) -> CustomORJSONResponse:
     """
     成功响应
     """

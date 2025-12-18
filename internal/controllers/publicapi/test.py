@@ -1,6 +1,6 @@
 import asyncio
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import numpy as np
@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from internal.core.exception import AppException
 from internal.infra.anyio_task import anyio_task_manager
 from pkg.async_logger import logger
-from pkg.response import response_factory
+from pkg.response import success_response
 from pkg.stream_control import stream_with_chunk_control
 
 router = APIRouter(prefix="/test", tags=["public v1 test"])
@@ -32,7 +32,7 @@ async def test_raise_app_exception():
     "/test_custom_response_class_basic_types", summary="测试自定义响应类-基本类型"
 )
 async def test_custom_response_class_basic_types(_: Request):
-    return response_factory.success(
+    return success_response(
         data={
             "large_int": 2 ** 53 + 1,  # 超过JS安全整数
             "normal_int": 42,
@@ -47,18 +47,18 @@ async def test_custom_response_class_basic_types(_: Request):
     "/test_custom_response_class_containers", summary="测试自定义响应类-容器类型"
 )
 async def test_custom_response_class_containers(_: Request):
-    return response_factory.success(
+    return success_response(
         data=[
             {"set_data": {1, 2, 3}},  # 集合转列表
             (4, 5, 6),  # 元组转列表
-            [datetime(2023, 1, 1), datetime(2023, 1, 1, tzinfo=timezone.utc)],
+            [datetime(2023, 1, 1), datetime(2023, 1, 1, tzinfo=UTC)],
         ]
     )
 
 
 @router.get("/test_custom_response_class_nested", summary="测试自定义响应类-嵌套结构")
 async def test_custom_response_class_nested(_: Request):
-    return response_factory.success(
+    return success_response(
         data={
             "level1": {
                 "level2": [
@@ -79,7 +79,7 @@ async def test_custom_response_class_nested(_: Request):
     "/test_custom_response_class_third_party", summary="测试自定义响应类-第三方库"
 )
 async def test_custom_response_class_third_party(_: Request):
-    return response_factory.success(
+    return success_response(
         data={
             "numpy_array": np.array([1.1, 2.2, 3.3]),  # NumPy数组
             "numpy_int": np.int64(2 ** 63 - 1),
@@ -91,7 +91,7 @@ async def test_custom_response_class_third_party(_: Request):
     "/test_custom_response_class_edge_cases", summary="测试自定义响应类-边缘情况"
 )
 async def test_custom_response_class_edge_cases(_: Request):
-    return response_factory.success(
+    return success_response(
         data={
             "numpy_array": np.array([1.1, 2.2, 3.3]),  # NumPy数组
             "numpy_int": np.int64(2 ** 63),
@@ -101,7 +101,7 @@ async def test_custom_response_class_edge_cases(_: Request):
 
 @router.get("/test_custom_response_class_complex", summary="测试自定义响应类-复杂情况")
 async def test_custom_response_class_complex(_: Request):
-    return response_factory.success(
+    return success_response(
         data={
             "empty_dict": {},
             "empty_list": [],
@@ -115,7 +115,7 @@ async def test_custom_response_class_complex(_: Request):
     "/test_custom_response_class_special_types", summary="测试自定义响应类-特殊类型"
 )
 async def test_custom_response_class_special_types(_: Request):
-    return response_factory.success(
+    return success_response(
         data={
             "decimal": Decimal("123.4567890123456789"),
             "bytes": b"\x80abc\xff",
@@ -135,7 +135,7 @@ async def async_task():
 @router.get("/test_contextvars_on_asyncio_task", summary="测试Contextvars在Asyncio任务")
 async def test_contextvars_on_asyncio_task():
     await anyio_task_manager.add_task("test", coro_func=async_task)
-    return response_factory.success()
+    return success_response()
 
 
 async def text_generator():

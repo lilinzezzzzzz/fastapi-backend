@@ -6,7 +6,7 @@ from internal.core.exception import global_codes
 from internal.core.signature import signature_auth_handler
 from pkg.async_context import set_user_id
 from pkg.async_logger import logger
-from pkg.response import error_response, response_factory
+from pkg.response import error_response
 
 # 转换成 set 查询更快
 auth_token_white = {
@@ -16,7 +16,7 @@ auth_token_white = {
     "/openapi.json",
     "/v1/auth/login_by_account",
     "/v1/auth/login_by_phone",
-    "/v1/auth/verify_token"
+    "/v1/auth/verify_token",
 }
 
 
@@ -50,7 +50,7 @@ class ASGIAuthMiddleware:
             if not signature_auth_handler.verify(x_signature=x_signature, x_timestamp=x_timestamp, x_nonce=x_nonce):
                 resp = error_response(
                     global_codes.SignatureInvalid,
-                    message=f"signature_auth failed, x_signature={x_signature}, x_timestamp={x_timestamp}, x_nonce={x_nonce}"
+                    message=f"signature_auth failed, x_signature={x_signature}, x_timestamp={x_timestamp}, x_nonce={x_nonce}",
                 )
                 # 直接调用 response 对象的 ASGI 接口发送
                 await resp(scope, receive, send)
@@ -70,20 +70,20 @@ class ASGIAuthMiddleware:
 
         if not token:
             logger.warning("get empty token from Authorization")
-            resp = response_factory.resp_401(message="invalid or missing token")
+            resp = error_response(error=global_codes.Unauthorized, message="invalid or missing token")
             await resp(scope, receive, send)
             return
 
         logger.info(f"verify token: {token}")
         user_data, ok = await verify_token(token)
         if not ok:
-            resp = response_factory.resp_401(message="invalid or missing token")
+            resp = error_response(error=global_codes.Unauthorized, message="invalid or missing token")
             await resp(scope, receive, send)
             return
 
         user_id = user_data.get("id")
         if not user_id:
-            resp = response_factory.resp_401(message="invalid or missing token, user_id is None")
+            resp = error_response(error=global_codes.Unauthorized, message="invalid or missing token, user_id is None")
             await resp(scope, receive, send)
             return
 

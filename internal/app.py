@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 
 from internal.config.load_config import APP_ENV, setting
+from internal.core.exception import global_codes
 from internal.core.logger import init_logger
 from internal.core.signature import init_signature_auth_handler
 from internal.core.snowflake import init_snowflake_id_generator
@@ -13,7 +14,7 @@ from internal.infra.anyio_task import close_anyio_task_handler, init_anyio_task_
 from internal.infra.database import close_db, init_db
 from internal.infra.redis import close_redis, init_redis
 from pkg.async_logger import logger
-from pkg.response import response_factory
+from pkg.response import error_response, response_factory
 
 
 def create_app() -> FastAPI:
@@ -54,7 +55,7 @@ def register_exception(app: FastAPI):
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(_: Request, exc: RequestValidationError):
         _record_log_error("Validation Error", repr(exc))
-        return response_factory.resp_422(message=f"Validation Error: {exc}")
+        return error_response(error=global_codes.BadRequest, message=f"Validation Error: {exc}")
 
 
 def register_middleware(app: FastAPI):
