@@ -1,9 +1,9 @@
 import os
 import time
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 import anyio
 import httpx
@@ -31,8 +31,7 @@ class RequestResult:
             self._json = self.response.json()
             return self._json
         except Exception as e:
-            logger.warning(f"Response is not valid JSON: {e}")
-            return {}
+            raise RuntimeError(f"Failed to parse JSON: {e}") from e
 
 
 class AsyncHttpClient:
@@ -142,9 +141,7 @@ class AsyncHttpClient:
                     logger.warning(f"Failed to get error message: {e}")
                     err_msg = f"HTTP {response.status_code}"
 
-            return RequestResult(
-                status_code=response.status_code, response=response, error=err_msg
-            )
+            return RequestResult(status_code=response.status_code, response=response, error=err_msg)
 
         except httpx.HTTPStatusError as exc:
             logger.error(f"HTTPStatusError: {exc}")
@@ -195,14 +192,8 @@ class AsyncHttpClient:
             # 解决 "形参 url 未填" 的歧义问题
             # -------------------------------------------------------
             async with self._stream_context(
-                method="GET",
-                url=url,
-                params=params,
-                headers=headers,
-                timeout=timeout,
-                raise_exception=False
+                method="GET", url=url, params=params, headers=headers, timeout=timeout, raise_exception=False
             ) as response:
-
                 if response.is_error:
                     return False, f"HTTP {response.status_code}"
 
@@ -247,12 +238,7 @@ class AsyncHttpClient:
         # 【核心修复】：同样显式指定 method=... 和 url=...
         # -------------------------------------------------------
         async with self._stream_context(
-            method=method,
-            url=url,
-            params=params,
-            headers=headers,
-            timeout=timeout,
-            raise_exception=True
+            method=method, url=url, params=params, headers=headers, timeout=timeout, raise_exception=True
         ) as response:
             async for chunk in response.aiter_bytes(chunk_size):
                 yield chunk

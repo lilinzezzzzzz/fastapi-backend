@@ -1,5 +1,7 @@
 import grpc
 
+from pkg.async_logger import logger
+
 
 class GrpcChannel:
     """
@@ -16,7 +18,7 @@ class GrpcChannel:
         if self._channel is None:
             target = f"{self.host}:{self.port}"
             # 日志现在更客观，只描述连接动作
-            print(f"🔌 [gRPC] Connecting to {target}...")
+            logger.info(f"🔌 [gRPC] Connecting to {target}...")
 
             self._channel = grpc.aio.insecure_channel(
                 target,
@@ -25,13 +27,13 @@ class GrpcChannel:
                     ("grpc.keepalive_time_ms", 10000),
                     ("grpc.keepalive_timeout_ms", 5000),
                     ("grpc.keepalive_permit_without_calls", 1),
-                ]
+                ],
             )
         return self._channel
 
     async def close(self):
         if self._channel:
             target = f"{self.host}:{self.port}"
-            print(f"🛑 [gRPC] Closing connection to {target}...")
+            logger.info(f"🛑 [gRPC] Closing connection to {target}...")
             await self._channel.close()
             self._channel = None

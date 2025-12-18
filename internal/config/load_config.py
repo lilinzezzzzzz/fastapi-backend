@@ -3,11 +3,11 @@ from pathlib import Path
 from urllib.parse import quote_plus
 
 from dotenv import dotenv_values, load_dotenv
+from loguru import logger
 from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from internal import BASE_DIR
-from pkg.async_logger import logger
 from pkg.crypto.aes import aes_decrypt
 
 # 密钥文件路径（不纳入版本控制，只存放解密密钥等敏感信息）
@@ -31,7 +31,7 @@ def _load_secrets() -> None:
         secrets = dotenv_values(SECRETS_FILE_PATH)
         for key, value in secrets.items():
             # 记录 key 和 value 是否存在（不记录实际值）
-            logger.info(f"{key}: [{value if value else "empty"}]")
+            logger.info(f"{key}: [{value if value else 'empty'}]")
     else:
         raise FileNotFoundError(f"Secrets file not found: {SECRETS_FILE_PATH}")
 
@@ -44,9 +44,7 @@ def _get_app_env() -> str:
     """
     app_env = os.getenv("APP_ENV")
     if not app_env:
-        raise ValueError(
-            "APP_ENV is not set. Please set it in .secrets file or environment variable."
-        )
+        raise ValueError("APP_ENV is not set. Please set it in .secrets file or environment variable.")
     return app_env.lower()
 
 
@@ -146,18 +144,14 @@ class BaseConfig(BaseSettings):
             # 从环境变量获取解密密钥
             aes_secret = os.getenv("AES_SECRET", "")
             if not aes_secret:
-                raise ValueError(
-                    f"Field '{info.field_name}' is encrypted but AES_SECRET is not set"
-                )
+                raise ValueError(f"Field '{info.field_name}' is encrypted but AES_SECRET is not set")
             try:
                 decrypted = aes_decrypt(encrypted, aes_secret)
                 logger.info(f"Field '{info.field_name}' decrypted successfully.")
                 return decrypted
             except Exception as e:
                 logger.error(f"Failed to decrypt field '{info.field_name}': {e}")
-                raise ValueError(
-                    f"Failed to decrypt field '{info.field_name}': {e}"
-                ) from e
+                raise ValueError(f"Failed to decrypt field '{info.field_name}': {e}") from e
 
         return v  # 非加密格式直接返回
 
@@ -186,10 +180,7 @@ class BaseConfig(BaseSettings):
 class Settings(BaseConfig):
     # 自动根据环境变量 APP_ENV 加载对应的 .env 文件
     model_config = SettingsConfigDict(
-        case_sensitive=True,
-        env_file=ENV_FILE_PATH.as_posix(),
-        env_file_encoding="utf-8",
-        extra="ignore"
+        case_sensitive=True, env_file=ENV_FILE_PATH.as_posix(), env_file_encoding="utf-8", extra="ignore"
     )
 
 
