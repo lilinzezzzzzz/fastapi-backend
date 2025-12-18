@@ -21,9 +21,9 @@ def init_logger(
     use_utc: bool = True,
     enqueue: bool = True,
 ):
-    global logger_manager, logger
+    global _logger_manager, _logger
     default_logger.info("Initializing logger...")
-    logger_manager = LoggerManager(
+    _logger_manager = LoggerManager(
         level=level,
         base_log_dir=base_log_dir or BASE_DIR / "logs",
         rotation=rotation,
@@ -31,7 +31,7 @@ def init_logger(
         use_utc=use_utc,
         enqueue=enqueue,
     )
-    logger = logger_manager.setup()
+    _logger = _logger_manager.setup()
     default_logger.info("Logger initialized.")
 
 
@@ -39,8 +39,19 @@ class _LoggerProxy:
     """代理对象，动态转发调用到真实 logger"""
 
     def __getattr__(self, name):
-        target = _logger
-        return getattr(target, name)
+        if _logger is None:
+            raise RuntimeError("Logger not initialized. Call init_logger() first.")
+        return getattr(_logger, name)
 
 
-logger = _LoggerProxy()  # 导出代理对象
+class _LoggerManagerProxy:
+    """代理对象，动态转发调用到真实 logger_manager"""
+
+    def __getattr__(self, name):
+        if _logger_manager is None:
+            raise RuntimeError("LoggerManager not initialized. Call init_logger() first.")
+        return getattr(_logger_manager, name)
+
+
+logger = _LoggerProxy()
+logger_manager = _LoggerManagerProxy()
