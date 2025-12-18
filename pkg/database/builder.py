@@ -143,14 +143,20 @@ class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
         return self
 
     async def all(self) -> list[T]:
-        async with self._session_provider() as sess:
-            result = await sess.execute(self._stmt)
-            return cast(list[T], result.scalars().all())
+        try:
+            async with self._session_provider() as sess:
+                result = await sess.execute(self._stmt)
+                return cast(list[T], result.scalars().all())
+        except Exception as e:
+            raise Exception(f"Error when querying all data, {self._model_cls.__name__}: {e}") from e
 
     async def first(self) -> T | None:
-        async with self._session_provider() as sess:
-            result = await sess.execute(self._stmt)
-            return result.scalars().first()
+        try:
+            async with self._session_provider() as sess:
+                result = await sess.execute(self._stmt)
+                return result.scalars().first()
+        except Exception as e:
+            raise Exception(f"Error when querying first data, {self._model_cls.__name__}: {e}") from e
 
 
 class CountBuilder[T: ModelMixin](BaseBuilder[T]):
@@ -172,8 +178,11 @@ class CountBuilder[T: ModelMixin](BaseBuilder[T]):
             self._apply_delete_at_is_none()
 
     async def count(self) -> int:
-        async with self._session_provider() as sess:
-            return (await sess.execute(self._stmt)).scalar()
+        try:
+            async with self._session_provider() as sess:
+                return (await sess.execute(self._stmt)).scalar()
+        except Exception as e:
+            raise Exception(f"Error when querying count data, {self._model_cls.__name__}: {e}") from e
 
 
 class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
@@ -225,6 +234,9 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
     async def execute(self):
         if not self._update_dict:
             return
-        async with self._session_provider() as sess:
-            await sess.execute(self.update_stmt)
-            await sess.commit()
+        try:
+            async with self._session_provider() as sess:
+                await sess.execute(self.update_stmt)
+                await sess.commit()
+        except Exception as e:
+            raise Exception(f"Error when updating data, {self._model_cls.__name__}: {e}") from e

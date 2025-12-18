@@ -1,4 +1,10 @@
 import datetime
+import time
+from collections.abc import AsyncGenerator, Callable
+from functools import wraps
+from typing import Any
+
+from pkg.async_logger import logger
 
 
 def format_iso_string(val: datetime.datetime, *, use_z: bool = False) -> str:
@@ -69,3 +75,43 @@ def utc_now_naive() -> datetime.datetime:
     获取当前 UTC 时间，不带时区信息（naive datetime），精度到秒。
     """
     return datetime.datetime.now(datetime.UTC).replace(microsecond=0, tzinfo=None)
+
+
+def async_generator_timer(slow_threshold: float = 5.0):
+    """
+    异步生成器计时装饰器，用于统计 Handler.handle 方法或普通异步生成器函数的执行时间。
+
+    Args:
+        slow_threshold: 慢执行阈值（秒），超过此时间会记录警告日志
+
+    Usage:
+        @async_generator_timer(slow_threshold=5.0)
+        async def handle(self, messages, **kwargs):
+            ...
+    """
+
+    def decorator(func: Callable[..., AsyncGenerator[Any, None]]):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            # 支持类方法和普通函数
+            if args and hasattr(args[0], "__class__"):
+                handler_name = f"{args[0].__class__.__name__}.{func.__name__}"
+            else:
+                handler_name = func.__name__
+
+            start_time = time.perf_counter()
+
+            logger.info(f"Starting {handler_name}...")
+            try:
+                async for response in func(*args, **kwargs):
+                    yield response
+            finally:
+                elapsed = time.perf_counter() - start_time
+                if elapsed > slow_threshold:
+                    logger.info(f"SLOW: {handler_name} took {elapsed:.3f}s (threshold: {slow_threshold}s)")
+                else:
+                    logger.info(f"Completed {handler_name} in {elapsed:.3f}s")
+
+        return wrapper
+
+    return decorator
