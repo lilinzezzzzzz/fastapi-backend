@@ -7,7 +7,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from internal.core.exception import get_last_exec_tb, global_codes
 from pkg import async_context
 from pkg.async_logger import logger
-from pkg.response import response_factory
+from pkg.response import error_response
 
 
 class ASGIRecordMiddleware:
@@ -49,7 +49,7 @@ class ASGIRecordMiddleware:
                     headers_list["X-Process-Time"] = str(process_time)
                     headers_list["X-Trace-ID"] = trace_id
 
-                    logger.info(f'response log, processing time={process_time:.2f}s')
+                    logger.info(f"response log, processing time={process_time:.2f}s")
 
                 await send(message)
 
@@ -63,9 +63,8 @@ class ASGIRecordMiddleware:
                 logger.error(f"Unhandled exception, exc={get_last_exec_tb(exc)}")
                 if not response_started:
                     # 手动构建错误响应
-                    error_resp = response_factory.error(
-                        code=global_codes.InternalServerError,
-                        message=f"Unhandled Exception: {exc}"
+                    error_resp = error_response(
+                        error=global_codes.InternalServerError, message=f"Unhandled Exception: {exc}"
                     )
 
                     # 使用 Starlette Response 对象来帮助我们发送 ASGI 消息 (比手写容易)

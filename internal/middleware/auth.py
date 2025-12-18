@@ -2,10 +2,11 @@ from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from internal.core.auth import verify_token
+from internal.core.exception import global_codes
 from internal.core.signature import signature_auth_handler
 from pkg.async_context import set_user_id
 from pkg.async_logger import logger
-from pkg.response import response_factory
+from pkg.response import error_response, response_factory
 
 # 转换成 set 查询更快
 auth_token_white = {
@@ -47,8 +48,9 @@ class ASGIAuthMiddleware:
             x_nonce = headers.get("X-Nonce")
 
             if not signature_auth_handler.verify(x_signature=x_signature, x_timestamp=x_timestamp, x_nonce=x_nonce):
-                resp = response_factory.error(
-                    msg=f"signature_auth failed, x_signature={x_signature}, x_timestamp={x_timestamp}, x_nonce={x_nonce}"
+                resp = error_response(
+                    global_codes.SignatureInvalid,
+                    message=f"signature_auth failed, x_signature={x_signature}, x_timestamp={x_timestamp}, x_nonce={x_nonce}"
                 )
                 # 直接调用 response 对象的 ASGI 接口发送
                 await resp(scope, receive, send)
