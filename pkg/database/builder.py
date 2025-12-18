@@ -146,7 +146,7 @@ class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
         try:
             async with self._session_provider() as sess:
                 result = await sess.execute(self._stmt)
-                return result.scalars().all()
+                return list(result.scalars().all())
         except Exception as e:
             raise Exception(f"Error when querying all data, {self._model_cls.__name__}: {e}") from e
 
