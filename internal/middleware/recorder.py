@@ -4,8 +4,8 @@ import uuid
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from internal.core import logger as logger_module
 from internal.core.exception import AppException, get_last_exec_tb, global_errors
-from internal.core.logger import logger
 from pkg import async_context
 from pkg.response import error_response
 
@@ -25,11 +25,11 @@ class ASGIRecordMiddleware:
         async_context.init(trace_id=(trace_id := headers.get("X-Trace-ID", uuid.uuid4().hex)))
 
         # 2. 上下文注入
-        with logger.contextualize(trace_id=trace_id):
+        with logger_module.logger.contextualize(trace_id=trace_id):
             # 注意：在纯 ASGI 中获取 body 或 params 比较麻烦，
             # 这里仅记录路径和方法，避免为了读 body 而消耗掉 receive stream
             client_host = scope.get("client", ["unknown"])[0]
-            logger.info(
+            logger_module.logger.info(
                 f"access log, ip={client_host}, method={scope['method']}, path={scope['path']}, query_string={scope.get('query_string', b'').decode()}"
             )
 
@@ -49,7 +49,7 @@ class ASGIRecordMiddleware:
                     headers_list["X-Process-Time"] = str(process_time)
                     headers_list["X-Trace-ID"] = trace_id
 
-                    logger.info(f"response log, processing time={process_time:.2f}s")
+                    logger_module.logger.info(f"response log, processing time={process_time:.2f}s")
 
                 await send(message)
 
@@ -60,7 +60,7 @@ class ASGIRecordMiddleware:
                 # 注意：在 ASGI 层捕获异常非常危险，通常建议让异常冒泡给 FastAPI 的 ExceptionHandlers 处理。
                 # 如果你必须在这里拦截所有未处理异常并返回 JSON，需要手动发送 ASGI 消息。
 
-                logger.error(f"Unhandled exception, exc={get_last_exec_tb(exc)}")
+                logger_module.logger.error(f"Unhandled exception, exc={get_last_exec_tb(exc)}")
                 if not response_started:
                     if isinstance(exc, AppException):
                         error_resp = error_response(error=exc.error, message=exc.detail)
@@ -70,5 +70,6 @@ class ASGIRecordMiddleware:
                     # 使用 Starlette Response 对象来帮助我们发送 ASGI 消息 (比手写容易)
                     await error_resp(scope, receive, send)
                 else:
-                    logger.error(f"Response already started, cannot send 500 error response for trace_id={trace_id}")
+                    logger_module.logger.error(
+                        f"Response already started, cannot send 500 error response for trace_id={trace_id}")
                     pass
