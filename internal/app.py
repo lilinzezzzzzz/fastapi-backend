@@ -94,8 +94,6 @@ async def lifespan(_app: FastAPI):
         raise Exception(f"Invalid ENV: {APP_ENV}")
     # 初始化日志
     init_logger()
-    logger.info("Init lifespan...")
-    logger.info(f"Current PID: {os.getpid()}")
     # 初始化 DB
     init_db()
     # 初始化 Redis
@@ -107,7 +105,7 @@ async def lifespan(_app: FastAPI):
     # 初始化 AnyIO Task Manager
     await init_anyio_task_handler()
 
-    logger.info("Application will start.")
+    logger.info("lifespan init completed, Application will start.")
 
     yield
 
