@@ -4,7 +4,7 @@ import uuid
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from internal.core.exception import get_last_exec_tb, global_errors
+from internal.core.exception import AppException, get_last_exec_tb, global_errors
 from pkg import async_context
 from pkg.async_logger import logger
 from pkg.response import error_response
@@ -62,10 +62,10 @@ class ASGIRecordMiddleware:
 
                 logger.error(f"Unhandled exception, exc={get_last_exec_tb(exc)}")
                 if not response_started:
-                    # 手动构建错误响应
-                    error_resp = error_response(
-                        error=global_errors.InternalServerError, message=f"Unhandled Exception: {exc}"
-                    )
+                    if isinstance(exc, AppException):
+                        error_resp = error_response(error=exc.error, message=exc.detail)
+                    else:
+                        error_resp = error_response(error=global_errors.InternalServerError, message=f"{exc}")
 
                     # 使用 Starlette Response 对象来帮助我们发送 ASGI 消息 (比手写容易)
                     await error_resp(scope, receive, send)

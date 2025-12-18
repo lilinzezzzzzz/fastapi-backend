@@ -7,7 +7,7 @@ import numpy as np
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
-from internal.core.exception import AppException
+from internal.core.exception import AppException, global_errors
 from internal.infra.anyio_task import anyio_task_manager
 from pkg.async_logger import logger
 from pkg.response import success_response
@@ -25,12 +25,10 @@ async def test_raise_exception(_: Request):
 
 @router.get("/test_raise_app_exception", summary="测试APP异常")
 async def test_raise_app_exception():
-    raise AppException(code=500, detail="test_raise_app_exception")
+    raise AppException(global_errors.InternalServerError, detail="test_raise_app_exception")
 
 
-@router.get(
-    "/test_custom_response_class_basic_types", summary="测试自定义响应类-基本类型"
-)
+@router.get("/test_custom_response_class_basic_types", summary="测试自定义响应类-基本类型")
 async def test_custom_response_class_basic_types(_: Request):
     return success_response(
         data={
@@ -43,9 +41,7 @@ async def test_custom_response_class_basic_types(_: Request):
     )
 
 
-@router.get(
-    "/test_custom_response_class_containers", summary="测试自定义响应类-容器类型"
-)
+@router.get("/test_custom_response_class_containers", summary="测试自定义响应类-容器类型")
 async def test_custom_response_class_containers(_: Request):
     return success_response(
         data=[
@@ -75,9 +71,7 @@ async def test_custom_response_class_nested(_: Request):
     )
 
 
-@router.get(
-    "/test_custom_response_class_third_party", summary="测试自定义响应类-第三方库"
-)
+@router.get("/test_custom_response_class_third_party", summary="测试自定义响应类-第三方库")
 async def test_custom_response_class_third_party(_: Request):
     return success_response(
         data={
@@ -87,9 +81,7 @@ async def test_custom_response_class_third_party(_: Request):
     )
 
 
-@router.get(
-    "/test_custom_response_class_edge_cases", summary="测试自定义响应类-边缘情况"
-)
+@router.get("/test_custom_response_class_edge_cases", summary="测试自定义响应类-边缘情况")
 async def test_custom_response_class_edge_cases(_: Request):
     return success_response(
         data={
@@ -111,9 +103,7 @@ async def test_custom_response_class_complex(_: Request):
     )
 
 
-@router.get(
-    "/test_custom_response_class_special_types", summary="测试自定义响应类-特殊类型"
-)
+@router.get("/test_custom_response_class_special_types", summary="测试自定义响应类-特殊类型")
 async def test_custom_response_class_special_types(_: Request):
     return success_response(
         data={
