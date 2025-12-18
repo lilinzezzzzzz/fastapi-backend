@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Self, cast
+from typing import Any, Self
 
 from sqlalchemy import ClauseElement, ColumnElement, Delete, Select, Update, distinct, func, or_, select, update
 from sqlalchemy.orm import InstrumentedAttribute, Mapped
@@ -146,7 +146,7 @@ class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
         try:
             async with self._session_provider() as sess:
                 result = await sess.execute(self._stmt)
-                return cast(list[T], result.scalars().all())
+                return result.scalars().all()
         except Exception as e:
             raise Exception(f"Error when querying all data, {self._model_cls.__name__}: {e}") from e
 
