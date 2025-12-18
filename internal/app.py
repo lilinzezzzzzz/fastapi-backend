@@ -97,6 +97,8 @@ async def lifespan(_app: FastAPI):
 
     cur_pid = os.getpid()
     logger.info(f"Current PID: {cur_pid}")
+    # 初始化日志
+    init_logger()
     # 初始化 DB
     init_db()
     # 初始化 Redis
@@ -105,8 +107,6 @@ async def lifespan(_app: FastAPI):
     init_signature_auth_handler()
     # 初始化 Snowflake ID Generator
     init_snowflake_id_generator()
-    # 初始化日志
-    init_logger()
     # 初始化 AnyIO Task Manager
     await init_anyio_task_handler()
 

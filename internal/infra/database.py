@@ -1,6 +1,7 @@
 import time
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator
+from typing import Any
 
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
@@ -10,8 +11,8 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from internal.config.load_config import setting
+from internal.core.logger import logger
 from pkg.database.base import new_async_engine, new_async_session_maker
-from pkg.async_logger import logger
 from pkg.toolkit.json import orjson_dumps, orjson_loads
 
 # 全局单例变量，初始为 None
@@ -104,14 +105,14 @@ def _register_event_listeners(engine: AsyncEngine):
 
 def _before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
     if context:
-        setattr(context, "_query_start_time", time.perf_counter())
+        context.query_start_time = time.perf_counter()
 
 
 def _after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
-    if not context or not hasattr(context, "_query_start_time"):
+    if not context or not hasattr(context, "query_start_time"):
         return
 
-    elapsed = time.perf_counter() - getattr(context, "_query_start_time")
+    elapsed = time.perf_counter() - context.query_start_time
 
     # 获取配置 (带有默认值防止报错)
     slow_threshold = getattr(setting, "SLOW_SQL_THRESHOLD", 0.5)
