@@ -22,7 +22,7 @@ class ASGIRecordMiddleware:
         # 1. 获取或生成 Trace ID
         # ASGI headers 是 list of (bytes, bytes) tuple
         headers = MutableHeaders(scope=scope)
-        async_context.set_trace_id(trace_id := headers.get("X-Trace-ID", uuid.uuid4().hex))
+        async_context.init(trace_id=(trace_id := headers.get("X-Trace-ID", uuid.uuid4().hex)))
 
         # 2. 上下文注入
         with logger.contextualize(trace_id=trace_id):
