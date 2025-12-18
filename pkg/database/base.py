@@ -2,7 +2,7 @@ from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Optional, TypeVar
+from typing import Any, TypeVar
 
 from sqlalchemy import BigInteger, DateTime, Executable, Insert, insert, inspect
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
@@ -343,11 +343,11 @@ class ModelMixin(Base):
         return list(inspect(cls).columns.keys())
 
     @classmethod
-    def get_column_or_none(cls, column_name: str) -> Optional[InstrumentedAttribute]:
+    def get_column_or_none(cls, column_name: str) -> InstrumentedAttribute | None:
         return getattr(cls, column_name, None)
 
     @classmethod
-    def get_creator_id_column(cls) -> Optional[InstrumentedAttribute]:
+    def get_creator_id_column(cls) -> InstrumentedAttribute | None:
         return cls.get_column_or_none(cls.creator_id_column_name())
 
 
