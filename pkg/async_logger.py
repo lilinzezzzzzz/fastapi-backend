@@ -93,20 +93,21 @@ class LoggerManager:
         if write_to_console:
             self._logger.add(
                 sink=sys.stderr,
-                format=self._console_formatter,
                 level=self.level,
                 enqueue=self.enqueue,
                 colorize=True,
                 diagnose=True,
+                format=self._console_formatter,
                 filter=self._filter_system,
             )
 
         # 4. File 输出 (System Log)
         if write_to_file:
             self._ensure_dir(self.system_log_dir)
+            sink_path = self.system_log_dir / "{time:YYYY-MM-DD}.log"
 
             self._logger.add(
-                sink=self.system_log_dir / "{time:YYYY-MM-DD}.log",
+                sink=sink_path,
                 level=self.level,
                 rotation=self.rotation,
                 retention=self.retention,
@@ -155,14 +156,15 @@ class LoggerManager:
 
         # 2. 注册新的 Sink
         try:
+
             def _specific_filter(record):
                 return record["extra"].get("type") == log_type
 
             # 2.1 注册文件 Sink
             if write_to_file:
-                log_dir = self.base_log_dir / log_type
-                self._ensure_dir(log_dir)
+                self._ensure_dir(log_dir := self.base_log_dir / log_type)
                 sink_path = log_dir / "{time:YYYY-MM-DD}.log"
+
                 log_format = self._json_formatter if save_json else self._file_formatter
 
                 self._logger.add(
