@@ -98,6 +98,7 @@ class LoggerManager:
                 enqueue=self.enqueue,
                 colorize=True,
                 diagnose=True,
+                filter=self._filter_system,
             )
 
         # 4. File 输出 (System Log)
@@ -127,11 +128,17 @@ class LoggerManager:
         log_type: str,
         *,
         write_to_file: bool = True,
+        write_to_console: bool = False,
         save_json: bool = True,
     ) -> "loguru.Logger":
         """
         获取动态类型的 Logger。
         使用实例属性 (self.rotation, self.retention 等) 创建新的 Sink。
+
+        :param log_type: 日志类型标识
+        :param write_to_file: 是否写入文件
+        :param write_to_console: 是否输出到控制台（仅针对该日志类型，不会重复输出）
+        :param save_json: 文件是否使用 JSON 格式
         """
         if not self._is_initialized:
             raise RuntimeError("LoggerManager is not initialized! Call setup() first.")
@@ -146,17 +153,17 @@ class LoggerManager:
                 )
             return self._logger.bind(type=log_type)
 
-        # 2. 注册新的文件 Sink
+        # 2. 注册新的 Sink
         try:
-            log_dir = self.base_log_dir / log_type
-            self._ensure_dir(log_dir)
-
-            sink_path = log_dir / "{time:YYYY-MM-DD}.log"
 
             def _specific_filter(record):
                 return record["extra"].get("type") == log_type
 
+            # 2.1 注册文件 Sink
             if write_to_file:
+                log_dir = self.base_log_dir / log_type
+                self._ensure_dir(log_dir)
+                sink_path = log_dir / "{time:YYYY-MM-DD}.log"
                 log_format = self._json_formatter if save_json else self._file_formatter
 
                 self._logger.add(
@@ -168,6 +175,18 @@ class LoggerManager:
                     enqueue=self.enqueue,
                     format=log_format,
                     serialize=False,
+                    filter=_specific_filter,
+                )
+
+            # 2.2 注册控制台 Sink（独立的，使用 filter 避免重复）
+            if write_to_console:
+                self._logger.add(
+                    sink=sys.stderr,
+                    format=self._console_formatter,
+                    level=self.level,
+                    enqueue=self.enqueue,
+                    colorize=True,
+                    diagnose=True,
                     filter=_specific_filter,
                 )
 
