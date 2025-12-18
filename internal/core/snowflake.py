@@ -1,3 +1,4 @@
+from internal.core.logger import logger
 from pkg.snowflake import SnowflakeIDGenerator
 
 _snowflake_id_generator: SnowflakeIDGenerator | None = None
@@ -6,6 +7,7 @@ _snowflake_id_generator: SnowflakeIDGenerator | None = None
 def init_snowflake_id_generator(node_id: int = 1):
     global _snowflake_id_generator
     _snowflake_id_generator = SnowflakeIDGenerator(node_id)
+    logger.info(f"Snowflake ID Generator initialized successfully. Node ID: {node_id}")
 
 
 def generate_snowflake_id() -> int:

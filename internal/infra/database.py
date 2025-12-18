@@ -22,6 +22,7 @@ _session_maker: async_sessionmaker[AsyncSession] | None = None
 
 # ---------------------- 1. 生命周期管理 ----------------------
 
+
 def init_db() -> None:
     """
     初始化数据库连接池。
@@ -44,7 +45,7 @@ def init_db() -> None:
         pool_timeout=30,
         pool_recycle=1800,
         json_serializer=orjson_dumps,
-        json_deserializer=orjson_loads
+        json_deserializer=orjson_loads,
     )
 
     # 2. 注册 SQL 监控事件 (整合了你原本 default_db_session 中的逻辑)
@@ -66,6 +67,7 @@ async def close_db() -> None:
 
 
 # ---------------------- 2. Session 获取 ----------------------
+
 
 @asynccontextmanager
 async def get_session(autoflush: bool = True) -> AsyncGenerator[AsyncSession, Any]:
@@ -96,6 +98,7 @@ async def get_session(autoflush: bool = True) -> AsyncGenerator[AsyncSession, An
 
 
 # ---------------------- 3. SQL 监控逻辑 (私有) ----------------------
+
 
 def _register_event_listeners(engine: AsyncEngine):
     """注册 SQLAlchemy 事件监听"""
@@ -129,10 +132,7 @@ def _after_cursor_execute(conn, cursor, statement, parameters, context, executem
 def _get_formatted_sql(context, statement, parameters) -> str:
     try:
         if context and context.compiled:
-            return context.compiled.statement.compile(
-                dialect=context.dialect,
-                compile_kwargs={"literal_binds": True}
-            )
+            return context.compiled.statement.compile(dialect=context.dialect, compile_kwargs={"literal_binds": True})
         if parameters:
             return f"{statement} | Params: {parameters}"
         return str(statement)

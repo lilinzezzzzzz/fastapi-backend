@@ -4,8 +4,8 @@ from contextlib import asynccontextmanager
 from redis.asyncio import ConnectionPool, Redis
 
 from internal.config.load_config import setting
+from internal.core.logger import logger
 from pkg.async_cache import CacheClient
-from pkg.async_logger import logger
 
 # 1. 定义全局变量，初始为 None
 _redis_pool: ConnectionPool | None = None

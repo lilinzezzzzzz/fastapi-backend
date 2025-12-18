@@ -1,5 +1,5 @@
+from internal.core.logger import logger
 from pkg.anyio_task import AnyioTaskHandler
-from pkg.async_logger import logger
 
 anyio_task_manager: AnyioTaskHandler | None = None
 

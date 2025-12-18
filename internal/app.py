@@ -7,13 +7,12 @@ from fastapi.exceptions import RequestValidationError
 
 from internal.config.load_config import APP_ENV, setting
 from internal.core.exception import global_errors
-from internal.core.logger import init_logger
+from internal.core.logger import init_logger, logger
 from internal.core.signature import init_signature_auth_handler
 from internal.core.snowflake import init_snowflake_id_generator
 from internal.infra.anyio_task import close_anyio_task_handler, init_anyio_task_handler
 from internal.infra.database import close_db, init_db
 from internal.infra.redis import close_redis, init_redis
-from pkg.async_logger import logger
 from pkg.response import error_response
 
 
@@ -90,15 +89,13 @@ def register_middleware(app: FastAPI):
 # 定义 lifespan 事件处理器
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    logger.info("Init lifespan...")
     # 检查环境变量
     if APP_ENV not in ["local", "dev", "test", "prod"]:
         raise Exception(f"Invalid ENV: {APP_ENV}")
-
-    cur_pid = os.getpid()
-    logger.info(f"Current PID: {cur_pid}")
     # 初始化日志
     init_logger()
+    logger.info("Init lifespan...")
+    logger.info(f"Current PID: {os.getpid()}")
     # 初始化 DB
     init_db()
     # 初始化 Redis
