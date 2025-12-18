@@ -2,7 +2,7 @@ from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from internal.core.auth import verify_token
-from internal.core.exception import global_codes
+from internal.core.exception import global_errors
 from internal.core.signature import signature_auth_handler
 from pkg.async_context import set_user_id
 from pkg.async_logger import logger
@@ -49,7 +49,7 @@ class ASGIAuthMiddleware:
 
             if not signature_auth_handler.verify(x_signature=x_signature, x_timestamp=x_timestamp, x_nonce=x_nonce):
                 resp = error_response(
-                    global_codes.SignatureInvalid,
+                    global_errors.SignatureInvalid,
                     message=f"signature_auth failed, x_signature={x_signature}, x_timestamp={x_timestamp}, x_nonce={x_nonce}",
                 )
                 # 直接调用 response 对象的 ASGI 接口发送
@@ -70,20 +70,20 @@ class ASGIAuthMiddleware:
 
         if not token:
             logger.warning("get empty token from Authorization")
-            resp = error_response(error=global_codes.Unauthorized, message="invalid or missing token")
+            resp = error_response(error=global_errors.Unauthorized, message="invalid or missing token")
             await resp(scope, receive, send)
             return
 
         logger.info(f"verify token: {token}")
         user_data, ok = await verify_token(token)
         if not ok:
-            resp = error_response(error=global_codes.Unauthorized, message="invalid or missing token")
+            resp = error_response(error=global_errors.Unauthorized, message="invalid or missing token")
             await resp(scope, receive, send)
             return
 
         user_id = user_data.get("id")
         if not user_id:
-            resp = error_response(error=global_codes.Unauthorized, message="invalid or missing token, user_id is None")
+            resp = error_response(error=global_errors.Unauthorized, message="invalid or missing token, user_id is None")
             await resp(scope, receive, send)
             return
 

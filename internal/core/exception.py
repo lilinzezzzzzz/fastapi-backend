@@ -1,9 +1,9 @@
 import traceback
 
-from pkg.response import AppError, BaseCodes
+from pkg.response import AppError
 
 
-class GlobalCodes(BaseCodes):
+class GlobalErrors:
     """
     全局状态码定义
     """
@@ -21,7 +21,7 @@ class GlobalCodes(BaseCodes):
     InternalServerError = AppError(50000, {"zh": "服务器内部错误", "en": "Internal Server Error"})
 
 
-global_codes = GlobalCodes()
+global_errors = GlobalErrors()
 
 
 class AppException(Exception):
