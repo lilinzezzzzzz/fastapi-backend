@@ -28,6 +28,9 @@ class AppStatus:
         """根据语言获取文案，默认回退到中文"""
         return self.message.get(lang, None)
 
+    def __repr__(self) -> str:
+        return f"AppStatus(code={self.code}, message={self.message})"
+
 
 success_status = AppStatus(20000, {"zh": "", "en": ""})
 
@@ -157,14 +160,13 @@ class ResponseFactory:
         """
         return self.success(data={"items": items, "meta": {"page": page, "limit": limit, "total": total}})
 
-    def error(self, error: AppError, *, message: str = "", data: Any = None, lang: str = "zh") -> CustomORJSONResponse:
+    def error(self, error: AppError, *, message: str = "", lang: str = "zh") -> CustomORJSONResponse:
         """
         通用错误响应。
 
         Args:
             error: GlobalCodes 中定义的错误对象
             message: 自定义详细信息。如果传入，将拼接到默认文案后面。
-            data: 附加数据
             lang: 语言代码 ('zh', 'en')，默认为 'zh'
         """
         # 1. 获取预定义的错误信息 (例如 "请求参数错误")
@@ -176,11 +178,11 @@ class ResponseFactory:
         else:
             final_message = base_msg
 
-        return self._make_response(code=error.code, message=final_message, data=data)
+        return self._make_response(code=error.code, message=final_message)
 
 
 # 全局单例
-response_factory = ResponseFactory()
+_response_factory = ResponseFactory()
 
 
 # =========================================================
@@ -192,21 +194,21 @@ def success_response(data: dict | list | BaseModel | None = None) -> CustomORJSO
     """
     成功响应
     """
-    return response_factory.success(data=data)
+    return _response_factory.success(data=data)
 
 
 def success_list_response(data: list, page: int, limit: int, total: int) -> CustomORJSONResponse:
     """
     分页列表响应
     """
-    return response_factory.list(items=data, page=page, limit=limit, total=total)
+    return _response_factory.list(items=data, page=page, limit=limit, total=total)
 
 
-def error_response(error: AppError, *, message: str = "", data: Any = None, lang: str = "zh") -> CustomORJSONResponse:
+def error_response(error: AppError, *, message: str = "", lang: str = "zh") -> CustomORJSONResponse:
     """
     通用错误响应
     """
-    return response_factory.error(error, message=message, data=data, lang=lang)
+    return _response_factory.error(error, message=message, lang=lang)
 
 
 def wrap_sse_data(content: str | dict) -> str:

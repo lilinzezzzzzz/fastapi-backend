@@ -14,7 +14,7 @@ from internal.infra.anyio_task import close_anyio_task_handler, init_anyio_task_
 from internal.infra.database import close_db, init_db
 from internal.infra.redis import close_redis, init_redis
 from pkg.async_logger import logger
-from pkg.response import error_response, response_factory
+from pkg.response import _response_factory, error_response
 
 
 def create_app() -> FastAPI:
