@@ -29,6 +29,9 @@ class AppStatus:
         return self.message.get(lang, None)
 
 
+success_status = AppStatus(20000, {"zh": "", "en": ""})
+
+
 @dataclass(frozen=True)
 class AppError(AppStatus):
     """
@@ -44,7 +47,7 @@ class BaseCodes:
     不使用 Enum，直接使用类属性，方便代码跳转和类型提示
     """
 
-    success = AppStatus(20000, {"zh": "", "en": ""})
+    ...
 
 
 # =========================================================
@@ -155,7 +158,7 @@ class ResponseFactory:
         成功响应
         """
         data = self._process_success_data(data)
-        return self._make_response(code=BaseCodes.success.code, data=data)
+        return self._make_response(code=success_status.code, data=data)
 
     def list(self, *, items: list, page: int, limit: int, total: int) -> CustomORJSONResponse:
         """
