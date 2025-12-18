@@ -62,12 +62,12 @@ def convert_to_utc(val: datetime.datetime) -> datetime.datetime:
     """
     if val.tzinfo is None:
         # naive datetime 假定为 UTC
-        return val.replace(tzinfo=datetime.timezone.utc)
-    return val.astimezone(datetime.timezone.utc)
+        return val.replace(tzinfo=datetime.UTC)
+    return val.astimezone(datetime.UTC)
 
 
 def get_utc_timestamp() -> int:
-    return int(datetime.datetime.now(tz=datetime.timezone.utc).timestamp())
+    return int(datetime.datetime.now(tz=datetime.UTC).timestamp())
 
 
 def utc_now_naive() -> datetime.datetime:
