@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Annotated, Any
 
@@ -145,7 +146,7 @@ def _serialize_smart_datetime(v: datetime) -> str | None:
         return None
     # 如果是 naive datetime，默认作为 UTC 处理
     if v.tzinfo is None:
-        v = v.replace(tzinfo=timezone.utc)
+        v = v.replace(tzinfo=UTC)
     # 返回标准 ISO 格式，例如: "2025-05-07T14:30:00+00:00"
     return v.isoformat()
 
@@ -182,3 +183,49 @@ IntStr = Annotated[
         }
     ),
 ]
+
+
+# ==========================================
+# 5. LazyProxy (懒加载代理)
+# ==========================================
+
+
+class LazyProxy:
+    """
+    通用懒加载代理，用于延迟初始化的单例对象。
+
+    解决问题：
+    - 模块导入时对象还未初始化 (None)
+    - 需要在运行时动态获取实际对象
+
+    用法示例:
+        _redis_client: Redis | None = None
+
+        def init_redis():
+            global _redis_client
+            _redis_client = Redis(...)
+
+        def _get_redis() -> Redis:
+            if _redis_client is None:
+                raise RuntimeError("Redis not initialized")
+            return _redis_client
+
+        redis = LazyProxy(_get_redis)  # 导出代理对象
+
+        # 使用时自动转发到真实对象
+        redis.get("key")  # 等价于 _get_redis().get("key")
+    """
+
+    __slots__ = ("_getter",)
+
+    def __init__(self, getter: "Callable[[], Any]"):
+        object.__setattr__(self, "_getter", getter)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._getter(), name)
+
+    def __repr__(self) -> str:
+        try:
+            return repr(self._getter())
+        except RuntimeError:
+            return "<LazyProxy: uninitialized>"
