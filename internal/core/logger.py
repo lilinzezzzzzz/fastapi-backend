@@ -17,7 +17,7 @@ _logger: "Logger | None" = None
 # --- Getter 函数 ---
 def _get_logger() -> "Logger":
     if _logger is None:
-        return default_logger  # 未初始化时回退到默认 logger
+        raise RuntimeError("Logger not initialized. Call init_logger() first.")
     return _logger
 
 

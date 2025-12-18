@@ -1,8 +1,18 @@
 from pkg.crypto import AESCipher
+from pkg.toolkit.types import LazyProxy
 
-aes_cipher: AESCipher | None = None
+_aes_cipher: AESCipher | None = None
 
 
 def init_aes_cipher(secret_key: str):
-    global aes_cipher
-    aes_cipher: AESCipher = AESCipher(secret_key)
+    global _aes_cipher
+    _aes_cipher: AESCipher = AESCipher(secret_key)
+
+
+def _get_aes_cipher() -> AESCipher:
+    if _aes_cipher is None:
+        raise RuntimeError("AES Cipher is not initialized")
+    return _aes_cipher
+
+
+aes_cipher = LazyProxy(_get_aes_cipher)
