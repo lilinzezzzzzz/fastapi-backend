@@ -5,8 +5,8 @@ from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from internal.core.exception import AppException, get_last_exec_tb, global_errors
+from internal.core.logger import logger
 from pkg import async_context
-from pkg.async_logger import logger
 from pkg.response import error_response
 
 

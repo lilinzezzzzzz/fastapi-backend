@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from loguru import Logger
 
 logger_manager: LoggerManager | None = None
-logger: Logger | None = None
+logger: "Logger | None" = None
 
 
 def init_logger(
