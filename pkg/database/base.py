@@ -1,32 +1,32 @@
+from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Callable, Any, Optional, TypeVar
+from typing import Any, Optional, TypeVar
 
-from sqlalchemy import BigInteger, DateTime, Insert, insert, inspect, Executable
-from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine, create_async_engine, async_sessionmaker
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, InstrumentedAttribute
+from sqlalchemy import BigInteger, DateTime, Executable, Insert, insert, inspect
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import DeclarativeBase, InstrumentedAttribute, Mapped, mapped_column
 
 from pkg import async_context
 from pkg.snowflake import snowflake_id_generator
-
-from pkg.toolkit.json import orjson_dumps, orjson_loads_types, orjson_loads
+from pkg.toolkit.json import orjson_dumps, orjson_loads, orjson_loads_types
 from pkg.toolkit.time import utc_now_naive
 
 SessionProvider = Callable[..., AbstractAsyncContextManager[AsyncSession]]
 
 
 def new_async_engine(
-        *,
-        database_uri: str,
-        echo: bool = True,
-        pool_pre_ping: bool = True,
-        pool_size: int = 10,
-        max_overflow: int = 20,
-        pool_timeout: int = 30,
-        pool_recycle: int = 1800,
-        json_serializer: Callable[[Any], str] = orjson_dumps,
-        json_deserializer: Callable[[orjson_loads_types], Any] = orjson_loads
+    *,
+    database_uri: str,
+    echo: bool = True,
+    pool_pre_ping: bool = True,
+    pool_size: int = 10,
+    max_overflow: int = 20,
+    pool_timeout: int = 30,
+    pool_recycle: int = 1800,
+    json_serializer: Callable[[Any], str] = orjson_dumps,
+    json_deserializer: Callable[[orjson_loads_types], Any] = orjson_loads,
 ) -> AsyncEngine:
     return create_async_engine(
         url=database_uri,
@@ -37,7 +37,7 @@ def new_async_engine(
         pool_timeout=pool_timeout,
         pool_recycle=pool_recycle,
         json_serializer=json_serializer,
-        json_deserializer=json_deserializer
+        json_deserializer=json_deserializer,
     )
 
 
@@ -47,6 +47,7 @@ def new_async_session_maker(engine: AsyncEngine) -> async_sessionmaker[AsyncSess
 
 class Base(DeclarativeBase):
     """SQLAlchemy 2.0 声明式基类"""
+
     pass
 
 
@@ -60,6 +61,7 @@ class ModelMixin(Base):
     """
     通用模型 Mixin
     """
+
     __abstract__ = True
 
     # --- 字段定义 ---
@@ -96,7 +98,7 @@ class ModelMixin(Base):
 
     @classmethod
     async def insert_rows(
-            cls, *, rows: list[dict[str, Any]], session_provider: SessionProvider, execute: bool = True
+        cls, *, rows: list[dict[str, Any]], session_provider: SessionProvider, execute: bool = True
     ) -> Insert | None:
         """[Batch Dict] 高性能批量插入字典。"""
         if not rows:
@@ -116,11 +118,11 @@ class ModelMixin(Base):
 
     @classmethod
     async def insert_instances(
-            cls,
-            *,
-            items: list["ModelMixin"],
-            session_provider: SessionProvider | None = None,
-            execute: bool = True,
+        cls,
+        *,
+        items: list["ModelMixin"],
+        session_provider: SessionProvider | None = None,
+        execute: bool = True,
     ) -> Insert | None:
         """
         [Batch Instance] 高性能批量插入对象实例。
@@ -151,9 +153,7 @@ class ModelMixin(Base):
     # 单例操作 (CRUD)
     # ==========================================================================
 
-    async def save(
-            self, session_provider: SessionProvider | None = None, execute: bool = True
-    ) -> Insert | None:
+    async def save(self, session_provider: SessionProvider | None = None, execute: bool = True) -> Insert | None:
         """[Strict Insert] 仅用于保存新对象。"""
         state = inspect(self)
 
@@ -208,10 +208,7 @@ class ModelMixin(Base):
 
     @staticmethod
     def _get_context_defaults() -> ContextDefaults:
-        return ContextDefaults(
-            now=utc_now_naive(),
-            user_id=async_context.get_user_id()
-        )
+        return ContextDefaults(now=utc_now_naive(), user_id=async_context.get_user_id())
 
     def _fill_ins_insert_fields(self):
         """[Instance Insert] 补全实例插入所需的字段"""
@@ -272,10 +269,7 @@ class ModelMixin(Base):
 
     @staticmethod
     async def _execute_or_return(
-            stmt: Executable,
-            session_provider: SessionProvider | None,
-            execute: bool,
-            error_context: str
+        stmt: Executable, session_provider: SessionProvider | None, execute: bool, error_context: str
     ) -> Executable | None:
         """
         统一处理 SQL 语句的执行逻辑：
