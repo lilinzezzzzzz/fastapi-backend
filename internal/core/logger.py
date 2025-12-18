@@ -1,6 +1,4 @@
-from __future__ import annotations
-
-from datetime import time, timedelta, timezone
+from datetime import UTC, time, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -15,13 +13,13 @@ logger: Logger | None = None
 
 
 def init_logger(
-        *,
-        level: str = "INFO",
-        base_log_dir: Path | None = None,
-        rotation: RotationType = time(0, 0, 0, tzinfo=timezone.utc),
-        retention: RetentionType = timedelta(days=30),
-        use_utc: bool = True,
-        enqueue: bool = True
+    *,
+    level: str = "INFO",
+    base_log_dir: Path | None = None,
+    rotation: RotationType = time(0, 0, 0, tzinfo=UTC),
+    retention: RetentionType = timedelta(days=30),
+    use_utc: bool = True,
+    enqueue: bool = True,
 ):
     global logger_manager, logger
     default_logger.info("Initializing logger...")
