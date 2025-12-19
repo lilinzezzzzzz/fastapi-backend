@@ -221,9 +221,11 @@ def get_settings() -> Settings:
         # 根据 PRINT_CONFIG 决定是否打印配置
         if _settings.PRINT_CONFIG:
             _logger.info("=" * 50)
-            _logger.info("Configuration Details:")
-            # 敏感字段脱敏处理
+            _logger.info("Configuration Details (PRINT_CONFIG=true):")
             for key, value in _settings.model_dump().items():
+                # SecretStr 类型需要获取原始值
+                if isinstance(getattr(_settings, key, None), SecretStr):
+                    value = getattr(_settings, key).get_secret_value()
                 _logger.info(f"  {key}: {value}")
             _logger.info("=" * 50)
 
