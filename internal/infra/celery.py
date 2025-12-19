@@ -134,7 +134,7 @@ def init_celery():
 # =========================================================
 1. 启动任务
 # 开发环境 - 基础启动
-celery -A internal.infra.celery.celery_app worker -l info
+celery -A internal.infra.celery.celery_app worker -l info -c 1
 
 # 开发环境 - 指定并发数（容器资源有限时建议限制）
 celery -A internal.infra.celery.celery_app worker -l info -c 2
