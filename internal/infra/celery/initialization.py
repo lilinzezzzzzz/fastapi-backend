@@ -4,7 +4,7 @@ from pathlib import Path
 from celery import Celery
 from celery.schedules import crontab
 
-from internal.config.load_config import setting
+from internal.config.load_config import settings
 from internal.core.logger import init_logger, logger
 from internal.infra.database import close_db, init_db
 from internal.infra.redis import close_redis, init_redis
@@ -87,8 +87,8 @@ async def _worker_shutdown():
 # 必须在模块层级直接实例化，确保 'celery -A ...' 命令行能找到
 celery_client = CeleryClient(
     app_name="my_fastapi_server",
-    broker_url=setting.redis_url,
-    backend_url=setting.redis_url,
+    broker_url=settings.redis_url,
+    backend_url=settings.redis_url,
     # 注册模块与路由
     include=CELERY_INCLUDE_MODULES,
     task_routes=CELERY_TASK_ROUTES,
@@ -122,7 +122,7 @@ def init_celery():
         # 主动检测 Broker 连接 (Health Check)
         with celery_app.connection_or_acquire() as conn:
             conn.ensure_connection(max_retries=1)
-        logger.info(f"Celery Broker ({setting.redis_url}) connected successfully.")
+        logger.info(f"Celery Broker ({settings.redis_url}) connected successfully.")
     except Exception as e:
         # 即使连不上也不要阻断 API 启动，只是记录错误，因为 Worker 是独立进程
         logger.error(f"Celery Broker connection failed: {e}")

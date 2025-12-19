@@ -4,7 +4,7 @@ from typing import Literal
 
 from dotenv import dotenv_values
 from loguru import logger
-from pydantic import MySQLDsn, PostgresDsn, RedisDsn, SecretStr, computed_field, model_validator
+from pydantic import MySQLDsn, PostgresDsn, RedisDsn, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from internal import BASE_DIR
@@ -55,14 +55,14 @@ class Settings(BaseSettings):
     # --- 密钥配置 ---
     AES_SECRET: SecretStr = SecretStr("")
     JWT_SECRET: SecretStr
-    JWT_ALGORITHM: str = "HS256"
+    JWT_ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
     # --- CORS ---
     BACKEND_CORS_ORIGINS: list[str] = ["*"]
 
     # --- Database ---
-    DB_TYPE: DBType = "mysql"  # 数据库类型: mysql, postgresql, oracle
+    DB_TYPE: DBType  # 数据库类型: mysql, postgresql, oracle (必填)
     DB_HOST: str
     DB_PORT: int = 3306
     DB_USERNAME: str
@@ -81,6 +81,17 @@ class Settings(BaseSettings):
         extra="ignore",
         env_file_encoding="utf-8",
     )
+
+    @field_validator("DB_TYPE", mode="before")
+    @classmethod
+    def validate_db_type(cls, v: str) -> str:
+        """校验数据库类型"""
+        if not v:
+            raise ValueError("DB_TYPE is required and cannot be empty")
+        allowed = list(DB_DRIVER_MAP.keys())
+        if v not in allowed:
+            raise ValueError(f"DB_TYPE must be one of {allowed}, got '{v}'")
+        return v
 
     @model_validator(mode="after")
     def decrypt_sensitive_fields(self) -> "Settings":
@@ -102,7 +113,6 @@ class Settings(BaseSettings):
                     raise ValueError(f"Failed to decrypt field '{field}'") from e
         return self
 
-    @computed_field
     @property
     def sqlalchemy_database_uri(self) -> str:
         """根据数据库类型动态生成连接 URI"""
@@ -138,13 +148,13 @@ class Settings(BaseSettings):
             password = self.DB_PASSWORD
             if password:
                 from urllib.parse import quote_plus
+
                 password = quote_plus(password)
                 return f"{driver}://{self.DB_USERNAME}:{password}@{self.DB_HOST}:{self.DB_PORT}/?service_name={self.DB_SERVICE_NAME}"
             return f"{driver}://{self.DB_USERNAME}@{self.DB_HOST}:{self.DB_PORT}/?service_name={self.DB_SERVICE_NAME}"
         else:
             raise ValueError(f"Unsupported database type: {self.DB_TYPE}")
 
-    @computed_field
     @property
     def redis_url(self) -> str:
         return str(
