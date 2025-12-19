@@ -3,7 +3,7 @@ from pathlib import Path
 from urllib.parse import quote_plus
 
 from dotenv import dotenv_values, load_dotenv
-from loguru import logger as startup_logger  # 启动阶段使用默认 logger
+from loguru import logger as _startup_logger  # 启动阶段使用默认 logger
 from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -12,19 +12,19 @@ from pkg.crypto.aes import aes_decrypt
 
 # 配置加载完成后，为启动日志添加文件 handler
 # 这样后续的启动日志也能被记录到文件
-startup_log_dir = BASE_DIR / "logs"
-startup_log_dir.mkdir(exist_ok=True)
-startup_logger.add(
-    startup_log_dir / "startup.log",
+_startup_log_dir = BASE_DIR / "logs"
+_startup_log_dir.mkdir(exist_ok=True)
+_startup_logger.add(
+    _startup_log_dir / "startup.log",
     rotation="1 day",
     retention="7 days",
     level="INFO",
     enqueue=True,
 )
-startup_logger.info("Startup logger file handler added.")
+_startup_logger.info("Startup logger file handler added.")
 
 # 密钥文件路径（不纳入版本控制，只存放解密密钥等敏感信息）
-SECRETS_FILE_PATH: Path = BASE_DIR / "configs" / ".secrets"
+_SECRETS_FILE_PATH: Path = BASE_DIR / "configs" / ".secrets"
 
 
 def _init_env() -> Path:
@@ -49,18 +49,18 @@ def _init_env() -> Path:
             AES_SECRET=your_aes_secret_key
             APP_ENV=local
         """
-        startup_logger.info("Loading secrets...")
-        if SECRETS_FILE_PATH.exists():
-            load_dotenv(SECRETS_FILE_PATH, override=False)  # 不覆盖已存在的环境变量
-            startup_logger.info(f"Secrets file loaded: {SECRETS_FILE_PATH}")
+        _startup_logger.info("Loading secrets...")
+        if _SECRETS_FILE_PATH.exists():
+            load_dotenv(_SECRETS_FILE_PATH, override=False)  # 不覆盖已存在的环境变量
+            _startup_logger.info(f"Secrets file loaded: {_SECRETS_FILE_PATH}")
 
             # 记录加载的配置项（只记录 key，不记录 value 以避免泄露密钥）
-            secrets = dotenv_values(SECRETS_FILE_PATH)
+            secrets = dotenv_values(_SECRETS_FILE_PATH)
             for key, value in secrets.items():
                 # 记录 key 和 value 是否存在（不记录实际值）
-                startup_logger.info(f"{key}: [{value if value else 'empty'}]")
+                _startup_logger.info(f"{key}: [{value if value else 'empty'}]")
         else:
-            raise FileNotFoundError(f"Secrets file not found: {SECRETS_FILE_PATH}")
+            raise FileNotFoundError(f"Secrets file not found: {_SECRETS_FILE_PATH}")
 
     def _get_app_env() -> str:
         """
@@ -68,18 +68,18 @@ def _init_env() -> Path:
 
         APP_ENV 必须在 .secrets 文件或系统环境变量中设置，不允许默认值。
         """
-        startup_logger.info("Getting APP_ENV...")
+        _startup_logger.info("Getting APP_ENV...")
         app_env = os.getenv("APP_ENV")
         # 检查环境变量
         if app_env not in ["local", "dev", "test", "prod"]:
             raise ValueError("APP_ENV is not set. Please set it in .secrets file or environment variable.")
-        startup_logger.info(f"APP_ENV: {app_env}")
+        _startup_logger.info(f"APP_ENV: {app_env}")
         return app_env.lower()
 
-    startup_logger.info("Initializing environment...")
+    _startup_logger.info("Initializing environment...")
     _load_secrets()
     env_file_path = BASE_DIR / "configs" / f".env.{_get_app_env()}"
-    startup_logger.info(f"Config file path: {env_file_path}")
+    _startup_logger.info(f"Config file path: {env_file_path}")
     return env_file_path
 
 
@@ -153,7 +153,7 @@ class BaseConfig(BaseSettings):
 
         if v.startswith("ENC(") and v.endswith(")"):
             # 记录原始加密字符串（方便排查问题）
-            startup_logger.info(f"Decrypting field '{info.field_name}': {v}")
+            _startup_logger.info(f"Decrypting field '{info.field_name}': {v}")
             # 提取加密内容
             encrypted = v[4:-1]
             # 从环境变量获取解密密钥
@@ -162,10 +162,10 @@ class BaseConfig(BaseSettings):
                 raise ValueError(f"Field '{info.field_name}' is encrypted but AES_SECRET is not set")
             try:
                 decrypted = aes_decrypt(encrypted, aes_secret)
-                startup_logger.info(f"Field '{info.field_name}' decrypted successfully.")
+                _startup_logger.info(f"Field '{info.field_name}' decrypted successfully.")
                 return decrypted
             except Exception as e:
-                startup_logger.error(f"Failed to decrypt field '{info.field_name}': {e}")
+                _startup_logger.error(f"Failed to decrypt field '{info.field_name}': {e}")
                 raise ValueError(f"Failed to decrypt field '{info.field_name}': {e}") from e
 
         return v  # 非加密格式直接返回
@@ -204,7 +204,7 @@ def init_setting() -> Settings:
     加载配置。
     此函数只在模块首次被导入时执行一次。
     """
-    startup_logger.info("Init setting...")
+    _startup_logger.info("Init setting...")
 
     # 检查配置文件是否存在
     if not ENV_FILE_PATH.exists():
@@ -213,11 +213,11 @@ def init_setting() -> Settings:
     # 实例化配置
     s = Settings()
     # 打印关键信息 (注意脱敏)
-    startup_logger.info("Init setting successfully.")
-    startup_logger.info("==========================")
+    _startup_logger.info("Init setting successfully.")
+    _startup_logger.info("==========================")
     for k, v in s.model_dump().items():
-        startup_logger.info(f"{k}: {v}")
-    startup_logger.info("==========================")
+        _startup_logger.info(f"{k}: {v}")
+    _startup_logger.info("==========================")
     return s
 
 
