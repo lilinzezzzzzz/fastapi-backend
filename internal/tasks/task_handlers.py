@@ -3,7 +3,7 @@
 提供可被 Celery 和 APScheduler 复用的任务逻辑
 """
 
-from pkg.async_logger import logger
+from internal.core.logger import logger
 
 
 async def handle_number_sum(x: int, y: int) -> int:
