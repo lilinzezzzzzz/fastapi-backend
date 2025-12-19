@@ -64,7 +64,7 @@ class AnyioTaskHandler:
         logger.info("AsyncTaskManagerAnyIO started.")
 
     async def shutdown(self):
-        logger.info("Shutting down AsyncTaskManagerAnyIO...")
+        logger.warning("Shutting down AsyncTaskManagerAnyIO...")
         # 停止接受新任务
         self._accepting = False
 

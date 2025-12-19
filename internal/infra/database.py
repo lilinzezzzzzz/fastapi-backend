@@ -61,7 +61,7 @@ async def close_db() -> None:
     global _engine, _session_maker
     if _engine:
         await _engine.dispose()
-        logger.info("Database connection disposed.")
+        logger.warning("Database connection disposed.")
     _engine = None
     _session_maker = None
 

@@ -51,7 +51,7 @@ async def close_redis() -> None:
 
     if _redis_client:
         await _redis_client.close()  # 异步关闭客户端
-        logger.info("Redis connection closed.")
+        logger.warning("Redis connection closed.")
 
     # 清理引用
     _redis_client = None

@@ -174,7 +174,7 @@ class CeleryClient:
                         asyncio.run(on_startup())
                     else:
                         on_startup()
-                    logger.info("Worker startup hook executed successfully.")
+                    logger.success("Worker startup hook executed successfully.")
                 except Exception as e:
                     logger.critical(f"Worker startup hook failed: {e}")
                     raise e

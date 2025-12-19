@@ -61,7 +61,7 @@ def _worker_startup():
         # 2. 初始化数据库和 Redis
         init_db()
         init_redis()
-        logger.info("<<< Worker Process Resources Initialized.")
+        logger.success("Worker Process Resources Initialized successfully.")
     except Exception as e:
         logger.critical(f"Worker resource initialization failed: {e}")
         raise e
@@ -71,13 +71,13 @@ async def _worker_shutdown():
     """
     [Shutdown Hook] Worker 进程关闭时执行：释放资源
     """
-    logger.info(">>> Worker Process Stopping: Releasing resources...")
+    logger.warning("Worker Process Stopping: Releasing resources...")
     try:
         # 并发关闭 DB 和 Redis，加快关闭速度
         await asyncio.gather(close_redis(), close_db(), return_exceptions=True)
     except Exception as e:
         logger.error(f"Error during resource shutdown: {e}")
-    logger.info("<<< Worker Process Resources Released.")
+    logger.warning("Worker Process Resources Released.")
 
 
 # =========================================================

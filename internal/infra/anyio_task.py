@@ -14,7 +14,7 @@ async def init_anyio_task_handler():
 
     _anyio_task_manager = AnyioTaskHandler()
     await _anyio_task_manager.start()
-    logger.info("Init anyio task manager completed.")
+    logger.success("Init anyio task manager completed.")
 
 
 async def close_anyio_task_handler():
