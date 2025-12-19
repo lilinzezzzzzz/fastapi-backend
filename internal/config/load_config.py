@@ -67,14 +67,14 @@ class Settings(BaseSettings):
     DB_HOST: str
     DB_PORT: int = 3306
     DB_USERNAME: str
-    DB_PASSWORD: str
+    DB_PASSWORD: SecretStr
     DB_DATABASE: str
     DB_SERVICE_NAME: str = ""  # Oracle 专用: Service Name
 
     # --- Redis ---
     REDIS_HOST: str
     REDIS_PORT: int = 6379
-    REDIS_PASSWORD: str = ""
+    REDIS_PASSWORD: SecretStr = SecretStr("")
     REDIS_DB: int = 0
 
     model_config = SettingsConfigDict(
@@ -104,11 +104,12 @@ class Settings(BaseSettings):
             return self
 
         for field in fields_to_decrypt:
-            original_value = getattr(self, field)
-            if isinstance(original_value, str) and original_value.startswith("ENC(") and original_value.endswith(")"):
+            secret_value: SecretStr = getattr(self, field)
+            original_value = secret_value.get_secret_value()
+            if original_value.startswith("ENC(") and original_value.endswith(")"):
                 try:
                     decrypted_value = aes_decrypt(original_value[4:-1], aes_key)
-                    setattr(self, field, decrypted_value)
+                    object.__setattr__(self, field, SecretStr(decrypted_value))
                 except Exception as e:
                     logger.error(f"Failed to decrypt field '{field}': {str(e)}")
                     raise ValueError(f"Failed to decrypt field '{field}'") from e
@@ -121,12 +122,14 @@ class Settings(BaseSettings):
         if not driver:
             raise ValueError(f"Unsupported database type: {self.DB_TYPE}")
 
+        password = self.DB_PASSWORD.get_secret_value()
+
         if self.DB_TYPE == "mysql":
             return str(
                 MySQLDsn.build(
                     scheme=driver,
                     username=self.DB_USERNAME,
-                    password=self.DB_PASSWORD,
+                    password=password,
                     host=self.DB_HOST,
                     port=self.DB_PORT,
                     path=self.DB_DATABASE,
@@ -138,7 +141,7 @@ class Settings(BaseSettings):
                 PostgresDsn.build(
                     scheme=driver,
                     username=self.DB_USERNAME,
-                    password=self.DB_PASSWORD,
+                    password=password,
                     host=self.DB_HOST,
                     port=self.DB_PORT,
                     path=self.DB_DATABASE,
@@ -146,7 +149,6 @@ class Settings(BaseSettings):
             )
         elif self.DB_TYPE == "oracle":
             # Oracle 连接格式: oracle+oracledb://user:pass@host:port/?service_name=xxx
-            password = self.DB_PASSWORD
             if password:
                 from urllib.parse import quote_plus
 
@@ -158,11 +160,12 @@ class Settings(BaseSettings):
 
     @property
     def redis_url(self) -> str:
+        password = self.REDIS_PASSWORD.get_secret_value()
         return str(
             RedisDsn.build(
                 scheme="redis",
                 username=None,
-                password=self.REDIS_PASSWORD if self.REDIS_PASSWORD else None,
+                password=password if password else None,
                 host=self.REDIS_HOST,
                 port=self.REDIS_PORT,
                 path=f"{self.REDIS_DB}",
@@ -227,6 +230,7 @@ def get_settings() -> Settings:
                 if isinstance(getattr(_settings, key, None), SecretStr):
                     value = getattr(_settings, key).get_secret_value()
                 _logger.info(f"  {key}: {value}")
+
             _logger.info("=" * 50)
 
         return _settings
