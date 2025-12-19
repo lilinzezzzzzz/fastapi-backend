@@ -51,7 +51,7 @@ class TestCeleryTasks:
         """
         task_result: AsyncResult = number_sum.apply_async(
             args=(100, 200),
-            queue="celery_queue",  # 指定队列
+            queue="default",  # 使用默认队列
         )
 
         try:
@@ -129,7 +129,7 @@ class TestCeleryTasks:
         task_result = celery_client.submit(
             task_name="internal.celery.tasks.number_sum",
             args=(100, 100),
-            queue="celery_queue",
+            queue="default",  # 使用默认队列
             priority=5,
         )
 
