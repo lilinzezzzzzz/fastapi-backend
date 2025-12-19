@@ -91,7 +91,7 @@ class TestCeleryTasks:
 
         # 检查配置
         assert celery_app.conf.task_default_queue == "default"
-        assert celery_app.conf.timezone == "Asia/Shanghai"
+        assert celery_app.conf.timezone == "UTC"
 
     def test_celery_task_routes(self):
         """
@@ -212,8 +212,8 @@ class TestCeleryTasks:
         """
         # 创建任务签名
         sig1 = number_sum.s(1, 2)  # 1 + 2 = 3
-        sig2 = number_sum.s(3)     # 3 + 3 = 6 (前一个结果作为第一个参数)
-        sig3 = number_sum.s(4)     # 6 + 4 = 10
+        sig2 = number_sum.s(3)  # 3 + 3 = 6 (前一个结果作为第一个参数)
+        sig3 = number_sum.s(4)  # 6 + 4 = 10
 
         try:
             chain_result = celery_client.chain(sig1, sig2, sig3)
@@ -242,25 +242,34 @@ class TestCeleryTasks:
     def test_celery_client_chord(self):
         """
         测试 celery_client.chord() 回调模式
-        注意：chord 的 body 会接收 header 结果列表作为第一个参数
-        由于 number_sum 不支持列表输入，这里只测试 chord 提交流程
+        修复后：number_sum 现已支持列表输入，可以完整验证结果
+        流程：
+        1. Header: [1+1=2, 2+2=4]
+        2. Body: number_sum([2, 4], 5) -> sum([2,4]) + 5 -> 6 + 5 = 11
         """
         from celery import group as celery_group
 
-        header = celery_group([
-            number_sum.s(1, 1),  # 2
-            number_sum.s(2, 2),  # 4
-        ])
-        # body 会接收 [2, 4] 作为 x，但 number_sum 需要 int
-        # 这会导致 TypeError，所以我们只测试任务能正确提交
-        body = number_sum.s(0)
+        # Header: 并发执行两个任务
+        header = celery_group(
+            [
+                number_sum.s(1, 1),  # 结果 2
+                number_sum.s(2, 2),  # 结果 4
+            ]
+        )
+
+        # Body: 接收 header 的结果 [2, 4] 作为第一个参数 x
+        # 我们传入 5 作为第二个参数 y
+        body = number_sum.s(5)
 
         try:
             chord_result = celery_client.chord(header, body)
-            # 验证任务已提交
-            assert chord_result.id is not None
-            # 由于 body 会报 TypeError，这里不等待结果
-            # 只验证 chord 调用流程正常
+
+            # 等待最终结果
+            result = chord_result.get(timeout=30)
+
+            # 验证逻辑: (2 + 4) + 5 = 11
+            assert result == 11
+
         except Exception as e:
             pytest.skip(f"Celery Worker 未启动或不可用: {e}")
 
@@ -281,6 +290,7 @@ class TestCeleryTasks:
 
             # 验证任务状态
             import time
+
             time.sleep(1)  # 等待撤销生效
 
             status = celery_client.get_status(task_result.id)
@@ -345,7 +355,7 @@ if __name__ == "__main__":
     直接运行测试
     运行前需要：
     1. 启动 Redis: docker-compose up redis
-    2. 启动 Celery Worker: celery -A internal.infra.celery.celery_app worker -l info -c 1
+    2. 启动 Celery Worker: celery -A internal.infra.celery.celery_app worker -l info -c 1 -Q default,celery_queue
     3. 运行测试: pytest tests/test_celery_tasks.py -v
     """
     sys.exit(pytest.main(["-s", "-v", "--log-cli-level=INFO", __file__]))

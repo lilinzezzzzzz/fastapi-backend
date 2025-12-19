@@ -5,13 +5,20 @@ from internal.tasks.task_handlers import handle_number_sum
 from pkg.async_logger import logger
 
 
-# 使用我们封装的 client.app 获取原生 app 装饰器
 @celery_client.app.task(bind=True, name="internal.celery.tasks.number_sum")
-def number_sum(self, x: int, y: int):
+def number_sum(self, x: int | list[int], y: int):
     """
     示例异步任务任务
+    支持处理单个数字加法，或 Chord 回调的列表求和
     """
     try:
+        # --- 新增：兼容 Chord 回调逻辑 ---
+        # 如果 x 是列表（来自 group/chord 的结果集），先进行聚合求和
+        if isinstance(x, list):
+            logger.info(f"Received list input from chord: {x}, aggregating...")
+            x = sum(x)
+        # ----------------------------------
+
         # 调用共享的异步任务处理函数
         result = anyio.run(handle_number_sum, x, y)
         return result
