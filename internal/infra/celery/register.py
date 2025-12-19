@@ -1,6 +1,6 @@
 import anyio
 
-from internal.infra.celery.scheduler import celery_client
+from internal.infra.celery.initialization import celery_client
 from internal.tasks.task_handlers import handle_number_sum
 from pkg.async_logger import logger
 
