@@ -1,11 +1,11 @@
 import anyio
 
 from internal.infra.celery.initialization import celery_client
-from internal.tasks.task_handlers import handle_number_sum
+from internal.tasks.demo_task import handle_number_sum
 from pkg.async_logger import logger
 
 
-@celery_client.app.task(bind=True, name="internal.celery.tasks.number_sum")
+@celery_client.app.task(bind=True, name="internal.infra.celery.register.number_sum")
 def number_sum(self, x: int | list[int], y: int):
     """
     示例异步任务任务

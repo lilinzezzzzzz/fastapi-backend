@@ -1,4 +1,4 @@
-from internal.tasks.task_handlers import handle_number_sum
+from internal.tasks.demo_task import handle_number_sum
 from pkg.async_apscheduler import ApsSchedulerManager
 from pkg.async_logger import logger
 from pkg.toolkit.types import LazyProxy

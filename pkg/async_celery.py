@@ -26,7 +26,6 @@ class CeleryClient:
         task_routes: Mapping[str, Mapping[str, Any]] | None = None,
         task_default_queue: str = "default",
         timezone: str = "UTC",
-        enable_utc: bool = True,
         beat_schedule: dict[str, Any] | None = None,
         **extra_conf: Any,
     ) -> None:
@@ -36,7 +35,7 @@ class CeleryClient:
         # 基础配置
         conf = {
             "timezone": timezone,
-            "enable_utc": enable_utc,
+            "enable_utc": True,
             "task_default_queue": task_default_queue,
             "task_routes": task_routes or {},
             "beat_schedule": beat_schedule or {},

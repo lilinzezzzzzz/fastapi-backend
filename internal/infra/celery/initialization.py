@@ -16,13 +16,13 @@ from pkg.async_celery import CeleryClient
 
 # 需要加载的任务模块 (Python 模块路径)
 CELERY_INCLUDE_MODULES = [
-    "internal.tasks.celery.tasks",
+    "internal.infra.celery.register",
 ]
 
 # 任务路由配置 (决定任务去哪个队列)
 CELERY_TASK_ROUTES = {
     # Celery 任务统一走 celery_queue
-    "internal.celery.tasks.*": {"queue": "celery_queue"},
+    "internal.infra.celery.register.*": {"queue": "celery_queue"},
     # 定时任务统一走 cron_queue
     "task_sum_every_15_min": {"queue": "cron_queue"},
 }
@@ -32,13 +32,13 @@ CELERY_TASK_ROUTES = {
 STATIC_BEAT_SCHEDULE = {
     # 案例 1：Cron 风格 - 每隔 15 分钟执行一次
     "task_sum_every_15_min": {
-        "task": "number_sum",
+        "task": "internal.infra.celery.register.number_sum",
         "schedule": crontab(minute="*/15"),
         "args": (10, 20),
     },
     # 案例 2：Interval 风格 - 每 30 秒执行一次
     "task_heartbeat_30s": {
-        "task": "internal.celery.tasks.number_sum",
+        "task": "internal.infra.celery.register.number_sum",
         "schedule": 30.0,
         "args": (1, 1),
     },
@@ -134,17 +134,18 @@ def init_celery():
 # =========================================================
 1. 启动任务
 # 开发环境 - 基础启动
-celery -A internal.infra.celery.initialization.celery_app worker -l info -c 1
+celery -A internal.infra.celery.initialization.celery_app worker -l info -c 1 -Q default,celery_queue
 
 # 开发环境 - 指定并发数（容器资源有限时建议限制）
-celery -A internal.infra.celery.initialization.celery_app worker -l info -c 2
+celery -A internal.infra.celery.initialization.celery_app worker -l info -c 2 -Q default,celery_queue
 
 # 生产环境 - 推荐配置
 celery -A internal.infra.celery.initialization.celery_app worker \
     -l info \
     -c 4 \
     --max-tasks-per-child 1000 \
-    --max-memory-per-child 120000
+    --max-memory-per-child 120000 \
+    -Q default,celery_queue
 
 # 2. 启动 Beat (派发定时任务):
 # celery -A internal.infra.celery.initialization.celery_app beat -l info
