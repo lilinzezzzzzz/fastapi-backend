@@ -25,8 +25,8 @@ class CeleryClient:
         include: Sequence[str] | None = None,
         task_routes: Mapping[str, Mapping[str, Any]] | None = None,
         task_default_queue: str = "default",
-        timezone: str = "UTC",
         beat_schedule: dict[str, Any] | None = None,
+        timezone: str = "UTC",
         **extra_conf: Any,
     ) -> None:
         self.queue = task_default_queue
