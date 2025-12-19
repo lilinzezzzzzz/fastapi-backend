@@ -126,7 +126,7 @@ class CeleryClient:
         exec_options = self._get_exec_options(options)
         # 修复: 在初始化时传入 app=self.app
         # 修复: 使用 cast 解决类型提示报错
-        return cast(GroupResult, group(*signatures, app=self.app).apply_async(**exec_options))
+        return cast(GroupResult, cast(object, group(*signatures, app=self.app).apply_async(**exec_options)))
 
     def chord(self, header, body, **options) -> AsyncResult:
         """
@@ -144,7 +144,7 @@ class CeleryClient:
         获取任务结果 (阻塞式)
         :param timeout: 等待超时时间(秒)，None 表示一直等待
         :param propagate: True 则任务报错时抛出异常，False 则返回异常对象
-        :task_id: str
+        :param task_id: str 任务ID
         """
         return AsyncResult(task_id, app=self.app).get(timeout=timeout, propagate=propagate)
 
