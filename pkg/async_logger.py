@@ -6,9 +6,10 @@ from typing import Any
 import loguru
 
 from pkg.toolkit.json import orjson_dumps
+from pkg.toolkit.string import uuid6_unique_id
 
-# 当前文件的父级路径
-_DEFAULT_BASE_LOG_DIR = Path(__file__).parent.parent / "logs"
+# 默认日志目录：/tmp/fastapi_{唯一字符}_logs
+_DEFAULT_BASE_LOG_DIR = Path(f"/tmp/fastapi_{uuid6_unique_id()}_logs")
 
 # 类型别名
 RotationType = str | int | time | timedelta

@@ -6,16 +6,15 @@ import uuid
 from string import Template
 from urllib.parse import urlencode, urlunparse
 
+import uuid6
 import xxhash
 
 
-def unique_string_w_timestamp() -> str:
+def uuid6_unique_id() -> str:
     """
-    使用时间戳和随机数生成唯一字符串。
+    使用 Snowflake 算法生成唯一 ID。
     """
-    timestamp = str(int(time.time() * 1e6))  # 精确到微秒的时间戳
-    random_part = ''.join(random.choices(string.ascii_letters + string.digits, k=6))
-    return timestamp + random_part
+    return uuid6.uuid7().hex
 
 
 def hash_to_int(data: str) -> int:
@@ -70,7 +69,7 @@ def build_url(
     netloc: str = "localhost",
     path: str = "/",
     query: dict | None = None,  # 仅支持字典或 None
-    fragment: str = ""
+    fragment: str = "",
 ):
     """
     构建一个 URL，使用默认值填充缺失的部分。
