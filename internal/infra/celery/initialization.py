@@ -134,18 +134,18 @@ def init_celery():
 # =========================================================
 1. 启动任务
 # 开发环境 - 基础启动
-celery -A internal.infra.celery.celery_app worker -l info -c 1
+celery -A internal.infra.celery.initialization.celery_app worker -l info -c 1
 
 # 开发环境 - 指定并发数（容器资源有限时建议限制）
-celery -A internal.infra.celery.celery_app worker -l info -c 2
+celery -A internal.infra.celery.initialization.celery_app worker -l info -c 2
 
 # 生产环境 - 推荐配置
-celery -A internal.infra.celery.celery_app worker \
+celery -A internal.infra.celery.initialization.celery_app worker \
     -l info \
     -c 4 \
     --max-tasks-per-child 1000 \
     --max-memory-per-child 120000
 
 # 2. 启动 Beat (派发定时任务):
-# celery -A internal.infra.celery.celery_app beat -l info
+# celery -A internal.infra.celery.initialization.celery_app beat -l info
 """
