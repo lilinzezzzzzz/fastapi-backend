@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
 
     # --- 密钥配置 ---
-    AES_SECRET: SecretStr = SecretStr("")
+    AES_SECRET: SecretStr
     JWT_SECRET: SecretStr
     JWT_ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
