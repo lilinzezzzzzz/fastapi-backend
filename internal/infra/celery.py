@@ -1,12 +1,13 @@
 import asyncio
+from pathlib import Path
 
 from celery import Celery
 from celery.schedules import crontab
 
 from internal.config.load_config import setting
+from internal.core.logger import init_logger, logger
 from internal.infra.database import close_db, init_db
 from internal.infra.redis import close_redis, init_redis
-from pkg.async_logger import logger
 from pkg.celery_task import CeleryClient
 
 # =========================================================
@@ -51,10 +52,13 @@ STATIC_BEAT_SCHEDULE = {
 
 def _worker_startup():
     """
-    [Startup Hook] Worker 进程启动时执行：初始化 DB 和 Redis 连接池
+    [Startup Hook] Worker 进程启动时执行：初始化 Logger、DB 和 Redis 连接池
     """
+    # 1. 首先初始化 Logger (其他模块依赖它)
+    init_logger(level="INFO", base_log_dir=Path("/temp/celery"))
     logger.info(">>> Worker Process Starting: Initializing resources...")
     try:
+        # 2. 初始化数据库和 Redis
         init_db()
         init_redis()
         logger.info("<<< Worker Process Resources Initialized.")
