@@ -106,8 +106,15 @@ class CeleryClient:
     # ------------------------------
     # 2. 查询与检查
     # ------------------------------
-    def get_result(self, task_id: str) -> Any:
-        return AsyncResult(task_id, app=self.app).result
+    def get_result(self, task_id: str, timeout: int = 10, propagate: bool = True) -> Any:
+        """
+        获取结果，默认等待 10秒。
+        """
+        try:
+            return AsyncResult(task_id, app=self.app).get(timeout=timeout, propagate=propagate)
+        except Exception as e:
+            # 根据需要处理超时或任务异常
+            raise e
 
     def get_status(self, task_id: str) -> str:
         return AsyncResult(task_id, app=self.app).state
@@ -117,49 +124,25 @@ class CeleryClient:
 
     @staticmethod
     def register_worker_hooks(on_startup: LifecycleHook | None = None, on_shutdown: LifecycleHook | None = None):
-        """
-        注册 Worker 进程生命周期钩子（依赖注入）。
-        用户可以将数据库初始化、Redis 连接等逻辑通过参数传入。
+        # 使用 dispatch_uid 防止重复注册
 
-        :param on_startup: Worker 子进程启动时执行 (通常用于 init_db)
-        :param on_shutdown: Worker 子进程关闭时执行 (通常用于 close_db)
-        """
-
-        # --- 1. 定义 Startup Handler ---
         if on_startup:
 
-            @signals.worker_process_init.connect(weak=False)
+            @signals.worker_process_init.connect(weak=False, dispatch_uid="pkg_worker_startup")
             def _wrapper_startup(**kwargs):
-                logger.info("Executing registered worker startup hook...")
-                try:
-                    # 判断是否是异步函数 (虽然 worker_init 通常建议同步，但也兼容一下)
-                    if asyncio.iscoroutinefunction(on_startup):
-                        # 注意：Celery process init 时 loop 可能未准备好，通常运行同步代码更稳
-                        # 这里简单处理，如果真的是 async，尝试 run
-                        asyncio.run(on_startup())
-                    else:
-                        on_startup()
-                    logger.info("Worker startup hook executed successfully.")
-                except Exception as e:
-                    logger.critical(f"Worker startup hook failed: {e}")
-                    raise e
+                logger.info("Executing worker startup hook...")
+                if asyncio.iscoroutinefunction(on_startup):
+                    asyncio.run(on_startup())
+                else:
+                    on_startup()
 
-        # --- 2. 定义 Shutdown Handler ---
         if on_shutdown:
 
-            @signals.worker_process_shutdown.connect(weak=False)
+            @signals.worker_process_shutdown.connect(weak=False, dispatch_uid="pkg_worker_shutdown")
             def _wrapper_shutdown(**kwargs):
-                logger.info("Executing registered worker shutdown hook...")
-                try:
-                    if asyncio.iscoroutinefunction(on_shutdown):
-                        # 处理异步关闭的通用逻辑
-                        loop = asyncio.get_event_loop_policy().get_event_loop()
-                        if loop.is_running():
-                            loop.create_task(on_shutdown())
-                        else:
-                            loop.run_until_complete(on_shutdown())
-                    else:
-                        on_shutdown()
-                    logger.info("Worker shutdown hook executed successfully.")
-                except Exception as e:
-                    logger.warning(f"Worker shutdown hook error: {e}")
+                logger.info("Executing worker shutdown hook...")
+                # 必须同步等待清理完成，严禁使用 create_task
+                if asyncio.iscoroutinefunction(on_shutdown):
+                    asyncio.run(on_shutdown())
+                else:
+                    on_shutdown()
