@@ -128,11 +128,24 @@ def init_celery():
         logger.error(f"Celery Broker connection failed: {e}")
 
 
+"""
 # =========================================================
 # 启动命令说明
 # =========================================================
-# 1. 启动 Worker (执行任务):
-# celery -A internal.infra.celery.celery_app worker -l info
-#
+1. 启动任务
+# 开发环境 - 基础启动
+celery -A internal.infra.celery.celery_app worker -l info
+
+# 开发环境 - 指定并发数（容器资源有限时建议限制）
+celery -A internal.infra.celery.celery_app worker -l info -c 2
+
+# 生产环境 - 推荐配置
+celery -A internal.infra.celery.celery_app worker \
+    -l info \
+    -c 4 \
+    --max-tasks-per-child 1000 \
+    --max-memory-per-child 120000
+
 # 2. 启动 Beat (派发定时任务):
 # celery -A internal.infra.celery.celery_app beat -l info
+"""
