@@ -88,20 +88,54 @@ class CeleryClient:
 
         return self.app.send_task(name=task_name, args=args, kwargs=kwargs, **exec_options)
 
-    @staticmethod
-    def chain(*signatures) -> AsyncResult:
-        """链式调用: task1 -> task2 -> task3"""
-        return chain(*signatures).apply_async()
+    def _inject_defaults(self, options: dict) -> dict:
+        """内部辅助：注入默认队列等配置"""
+        options = options or {}
+        if "queue" not in options and self.queue:
+            options["queue"] = self.queue
+        # 这里可以继续注入其他实例级默认配置
+        return options
 
-    @staticmethod
-    def group(*signatures) -> GroupResult:
-        """并发调用: [task1, task2, task3]"""
-        return cast(GroupResult, cast(object, group(*signatures).apply_async()))
+    def chain(self, *signatures, **options) -> AsyncResult:
+        """
+        链式调用: task1 -> task2 -> task3
+        :param signatures: 任务签名列表
+        :param options: apply_async 的执行参数 (如 queue, countdown, retry 等)
+        """
+        # 1. 创建链式对象
+        workflow = chain(*signatures)
 
-    @staticmethod
-    def chord(header, body) -> AsyncResult:
-        """回调模式: group(header) 完成后 -> body"""
-        return chord(header)(body).apply_async()
+        # 2. 绑定当前 App 实例 (防止多实例环境下的混乱)
+        workflow.app = self.app
+
+        # 3. 注入默认配置 (如默认队列)
+        exec_options = self._inject_defaults(options)
+
+        # 4. 执行
+        return workflow.apply_async(**exec_options)
+
+    def group(self, *signatures, **options) -> GroupResult:
+        """
+        并发调用: [task1, task2, task3]
+        """
+        workflow = group(*signatures)
+        workflow.app = self.app
+        exec_options = self._inject_defaults(options)
+
+        # 使用 cast 解决类型提示报错 (参考之前的修复)
+        return cast(GroupResult, workflow.apply_async(**exec_options))
+
+    def chord(self, header, body, **options) -> AsyncResult:
+        """
+        回调模式: group(header) 完成后 -> body
+        注意：body 任务必须接受 header 的结果列表作为第一个参数。
+        """
+        # Celery 的 chord 初始化通常建议显式绑定 app
+        workflow = chord(header, body=body, app=self.app)
+
+        exec_options = self._inject_defaults(options)
+
+        return workflow.apply_async(**exec_options)
 
     # ------------------------------
     # 2. 查询与检查
