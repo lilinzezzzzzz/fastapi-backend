@@ -141,3 +141,8 @@ line-ending = "auto"
 [tool.ruff.lint.isort]
 # 导入分组设置
 combine-as-imports = true
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: 集成测试，需要完整的 Celery Worker 和 Redis 环境",
+]
