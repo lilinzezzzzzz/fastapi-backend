@@ -35,7 +35,7 @@ class CeleryClient:
         # 基础配置
         conf = {
             "timezone": timezone,
-            "enable_utc": True,
+            "enable_utc": timezone == "UTC",
             "task_default_queue": task_default_queue,
             "task_routes": task_routes or {},
             "beat_schedule": beat_schedule or {},
