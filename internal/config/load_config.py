@@ -57,6 +57,7 @@ class Settings(BaseSettings):
     JWT_SECRET: SecretStr
     JWT_ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    PRINT_CONFIG: bool = False  # 是否打印配置信息 (调试用)
 
     # --- CORS ---
     BACKEND_CORS_ORIGINS: list[str] = ["*"]
@@ -216,6 +217,16 @@ def get_settings() -> Settings:
     try:
         _settings = Settings(_env_file=load_files)  # type: ignore
         _logger.success("Configuration loaded successfully.")
+
+        # 根据 PRINT_CONFIG 决定是否打印配置
+        if _settings.PRINT_CONFIG:
+            _logger.info("=" * 50)
+            _logger.info("Configuration Details:")
+            # 敏感字段脱敏处理
+            for key, value in _settings.model_dump().items():
+                _logger.info(f"  {key}: {value}")
+            _logger.info("=" * 50)
+
         return _settings
     except Exception as e:
         _logger.critical(f"Config load failed: {e}")
