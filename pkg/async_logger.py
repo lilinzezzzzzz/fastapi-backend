@@ -29,6 +29,7 @@ class LoggerManager:
         *,
         level: str = "INFO",
         base_log_dir: Path | None = None,
+        system_log_dir: str | None = None,
         rotation: RotationType = time(0, 0, 0, tzinfo=UTC),
         retention: RetentionType = timedelta(days=30),
         compression: str | None = None,
@@ -40,6 +41,7 @@ class LoggerManager:
 
         :param level: 日志等级 (e.g., "INFO", "DEBUG")
         :param base_log_dir: 日志存放的根目录，默认为当前文件父级路径下的 logs 目录
+        :param system_log_dir: 系统日志文件夹名，传 None 则直接存在 base_log_dir 下
         :param rotation: 轮转策略 (默认: 每天 00:00, UTC时间)
         :param retention: 保留策略 (默认: 30天)
         :param compression: 压缩格式 (e.g., "zip")
@@ -53,7 +55,7 @@ class LoggerManager:
         # --- 配置属性 ---
         self.level = level
         self.base_log_dir = base_log_dir or _DEFAULT_BASE_LOG_DIR
-        self.system_log_dir = self.base_log_dir / self.SYSTEM_LOG_TYPE
+        self.system_log_dir = (self.base_log_dir / system_log_dir) if system_log_dir else self.base_log_dir
         self.retention = retention
         self.compression = compression
         self.use_utc = use_utc
