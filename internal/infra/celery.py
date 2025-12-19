@@ -92,11 +92,7 @@ celery_client = CeleryClient(
     # 注册模块与路由
     include=CELERY_INCLUDE_MODULES,
     task_routes=CELERY_TASK_ROUTES,
-    task_default_queue="default",
-    # 注入静态定时任务配置 (之前漏了这里)
     beat_schedule=STATIC_BEAT_SCHEDULE,
-    # 基础配置
-    timezone="Asia/Shanghai",
 )
 
 # 注册生命周期钩子
