@@ -1,9 +1,9 @@
 import datetime
 import json
 import time
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, AsyncIterable, Callable
 from functools import wraps
-from typing import Any, AsyncIterable, TypeVar
+from typing import Any
 
 import anyio
 from starlette.requests import Request
@@ -119,9 +119,6 @@ def async_generator_timer(slow_threshold: float = 5.0):
         return wrapper
 
     return decorator
-
-
-T = TypeVar("T")
 
 
 async def stream_with_chunk_control[T](
