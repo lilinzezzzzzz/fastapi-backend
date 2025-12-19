@@ -52,7 +52,26 @@ class CeleryClient:
         self.app.conf.update(conf)
 
     # ------------------------------
-    # 1. 提交/编排任务
+    # 内部辅助方法
+    # ------------------------------
+    def _get_exec_options(self, options: dict, queue: str | None = None) -> dict:
+        """
+        合并默认配置与传入配置。
+        优先级: 显式参数 > options字典 > 实例默认值
+        """
+        exec_options = options.copy() if options else {}
+
+        # 如果 explicit queue 有值，强制使用
+        if queue:
+            exec_options["queue"] = queue
+        # 如果 options 里也没 queue，使用实例默认 queue
+        elif "queue" not in exec_options and self.queue:
+            exec_options["queue"] = self.queue
+
+        return exec_options
+
+    # ------------------------------
+    # 1. 提交任务 (Submit)
     # ------------------------------
     def submit(
         self,
@@ -61,10 +80,10 @@ class CeleryClient:
         args: tuple | list | None = None,
         kwargs: dict | None = None,
         task_id: str | None = None,
+        queue: str | None = None,
+        priority: int | None = None,
         countdown: int | float | None = None,
         eta: datetime | None = None,
-        priority: int | None = None,
-        queue: str | None = None,
         **options: Any,
     ) -> AsyncResult:
         """
@@ -74,49 +93,60 @@ class CeleryClient:
         args = tuple(args) if args else ()
         kwargs = kwargs or {}
 
-        # 构造执行选项
-        exec_options = {
-            "task_id": task_id,
-            "countdown": countdown,
-            "eta": eta,
-            "priority": priority,
-            "queue": queue or self.queue,
-            **options,
-        }
+        # 合并参数
+        exec_options = self._get_exec_options(options, queue=queue)
 
-        # 处理 Retry Policy 等特殊头部逻辑可在此处扩展...
+        # 注入其他显式参数
+        exec_options["task_id"] = task_id
+        if priority is not None:
+            exec_options["priority"] = priority
+        if countdown is not None:
+            exec_options["countdown"] = countdown
+        if eta is not None:
+            exec_options["eta"] = eta
 
         return self.app.send_task(name=task_name, args=args, kwargs=kwargs, **exec_options)
 
-    @staticmethod
-    def chain(*signatures) -> AsyncResult:
-        """链式调用: task1 -> task2 -> task3"""
-        return chain(*signatures).apply_async()
+    # ------------------------------
+    # 2. 任务编排 (Canvas) - 改为实例方法
+    # ------------------------------
+    def chain(self, *signatures, **options) -> AsyncResult:
+        """
+        链式调用: task1 -> task2 -> task3
+        :param options: 执行参数 (如 queue, countdown 等)
+        """
+        exec_options = self._get_exec_options(options)
+        # 修复: 在初始化时传入 app=self.app，避免 AttributeError
+        return chain(*signatures, app=self.app).apply_async(**exec_options)
 
-    @staticmethod
-    def group(*signatures) -> GroupResult:
-        """并发调用: [task1, task2, task3]"""
-        return cast(GroupResult, cast(object, group(*signatures).apply_async()))
+    def group(self, *signatures, **options) -> GroupResult:
+        """
+        并发调用: [task1, task2, task3]
+        """
+        exec_options = self._get_exec_options(options)
+        # 修复: 在初始化时传入 app=self.app
+        # 修复: 使用 cast 解决类型提示报错
+        return cast(GroupResult, group(*signatures, app=self.app).apply_async(**exec_options))
 
-    @staticmethod
-    def chord(header, body) -> AsyncResult:
-        """回调模式: group(header) 完成后 -> body"""
-        return chord(header)(body).apply_async()
+    def chord(self, header, body, **options) -> AsyncResult:
+        """
+        回调模式: group(header) 完成后 -> body
+        """
+        exec_options = self._get_exec_options(options)
+        # 修复: 在初始化时传入 app=self.app
+        return chord(header, body=body, app=self.app).apply_async(**exec_options)
 
     # ------------------------------
-    # 2. 查询与检查
+    # 3. 查询与检查
     # ------------------------------
     def get_result(self, task_id: str, timeout: float = None, propagate: bool = True) -> Any:
         """
-        获取任务结果。
-        :param task_id: 任务 ID
-        :param timeout: 等待超时时间（秒）
-        :param propagate: 如果为 True，任务失败会抛出异常；如果为 False，返回异常对象
-        :return: 任务执行结果
+        获取任务结果 (阻塞式)
+        :param timeout: 等待超时时间(秒)，None 表示一直等待
+        :param propagate: True 则任务报错时抛出异常，False 则返回异常对象
+        :task_id: str
         """
-        result_obj = AsyncResult(task_id, app=self.app)
-        # 推荐使用 get，它会处理等待逻辑和异常抛出
-        return result_obj.get(timeout=timeout, propagate=propagate)
+        return AsyncResult(task_id, app=self.app).get(timeout=timeout, propagate=propagate)
 
     def get_status(self, task_id: str) -> str:
         return AsyncResult(task_id, app=self.app).state
@@ -124,27 +154,24 @@ class CeleryClient:
     def revoke(self, task_id: str, terminate: bool = False):
         self.app.control.revoke(task_id, terminate=terminate)
 
+    # ------------------------------
+    # 4. 生命周期管理
+    # ------------------------------
     @staticmethod
     def register_worker_hooks(on_startup: LifecycleHook | None = None, on_shutdown: LifecycleHook | None = None):
         """
-        注册 Worker 进程生命周期钩子（依赖注入）。
-        用户可以将数据库初始化、Redis 连接等逻辑通过参数传入。
-
-        :param on_startup: Worker 子进程启动时执行 (通常用于 init_db)
-        :param on_shutdown: Worker 子进程关闭时执行 (通常用于 close_db)
+        注册 Worker 进程生命周期钩子
+        注意：使用了 dispatch_uid 防止在多实例下重复注册
         """
 
-        # --- 1. 定义 Startup Handler ---
+        # --- Startup Handler ---
         if on_startup:
 
-            @signals.worker_process_init.connect(weak=False)
+            @signals.worker_process_init.connect(weak=False, dispatch_uid="pkg_celery_worker_startup")
             def _wrapper_startup(**kwargs):
                 logger.info("Executing registered worker startup hook...")
                 try:
-                    # 判断是否是异步函数 (虽然 worker_init 通常建议同步，但也兼容一下)
                     if asyncio.iscoroutinefunction(on_startup):
-                        # 注意：Celery process init 时 loop 可能未准备好，通常运行同步代码更稳
-                        # 这里简单处理，如果真的是 async，尝试 run
                         asyncio.run(on_startup())
                     else:
                         on_startup()
@@ -153,15 +180,16 @@ class CeleryClient:
                     logger.critical(f"Worker startup hook failed: {e}")
                     raise e
 
-        # --- 2. 定义 Shutdown Handler ---
+        # --- Shutdown Handler ---
         if on_shutdown:
 
-            @signals.worker_process_shutdown.connect(weak=False)
+            @signals.worker_process_shutdown.connect(weak=False, dispatch_uid="pkg_celery_worker_shutdown")
             def _wrapper_shutdown(**kwargs):
                 logger.info("Executing registered worker shutdown hook...")
                 try:
                     if asyncio.iscoroutinefunction(on_shutdown):
-                        # 强制同步运行，确保清理完成才退出
+                        # 修复: 必须同步运行，确保在进程退出前完成清理
+                        # 严禁在此处使用 loop.create_task，否则进程会立即退出导致清理中断
                         asyncio.run(on_shutdown())
                     else:
                         on_shutdown()
