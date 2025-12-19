@@ -21,46 +21,13 @@ startup_logger.add(
     level="INFO",
     enqueue=True,
 )
+startup_logger.info("Startup logger file handler added.")
 
 # 密钥文件路径（不纳入版本控制，只存放解密密钥等敏感信息）
 SECRETS_FILE_PATH: Path = BASE_DIR / "configs" / ".secrets"
 
 
-def _load_secrets() -> None:
-    """
-    加载密钥文件到环境变量。
-
-    密钥文件 (.secrets) 不纳入版本控制，只存放解密密钥等敏感信息。
-    文件格式示例:
-        AES_SECRET=your_aes_secret_key
-        APP_ENV=local
-    """
-    if SECRETS_FILE_PATH.exists():
-        load_dotenv(SECRETS_FILE_PATH, override=False)  # 不覆盖已存在的环境变量
-        startup_logger.info(f"Secrets file loaded: {SECRETS_FILE_PATH}")
-
-        # 记录加载的配置项（只记录 key，不记录 value 以避免泄露密钥）
-        secrets = dotenv_values(SECRETS_FILE_PATH)
-        for key, value in secrets.items():
-            # 记录 key 和 value 是否存在（不记录实际值）
-            startup_logger.info(f"{key}: [{value if value else 'empty'}]")
-    else:
-        raise FileNotFoundError(f"Secrets file not found: {SECRETS_FILE_PATH}")
-
-
-def _get_app_env() -> str:
-    """
-    从环境变量获取 APP_ENV。
-
-    APP_ENV 必须在 .secrets 文件或系统环境变量中设置，不允许默认值。
-    """
-    app_env = os.getenv("APP_ENV")
-    if not app_env:
-        raise ValueError("APP_ENV is not set. Please set it in .secrets file or environment variable.")
-    return app_env.lower()
-
-
-def _init_env() -> tuple[str, Path]:
+def _init_env() -> Path:
     """
     初始化环境配置。
 
@@ -72,16 +39,52 @@ def _init_env() -> tuple[str, Path]:
     Returns:
         tuple[str, Path]: (APP_ENV, ENV_FILE_PATH)
     """
+
+    def _load_secrets() -> None:
+        """
+        加载密钥文件到环境变量。
+
+        密钥文件 (.secrets) 不纳入版本控制，只存放解密密钥等敏感信息。
+        文件格式示例:
+            AES_SECRET=your_aes_secret_key
+            APP_ENV=local
+        """
+        startup_logger.info("Loading secrets...")
+        if SECRETS_FILE_PATH.exists():
+            load_dotenv(SECRETS_FILE_PATH, override=False)  # 不覆盖已存在的环境变量
+            startup_logger.info(f"Secrets file loaded: {SECRETS_FILE_PATH}")
+
+            # 记录加载的配置项（只记录 key，不记录 value 以避免泄露密钥）
+            secrets = dotenv_values(SECRETS_FILE_PATH)
+            for key, value in secrets.items():
+                # 记录 key 和 value 是否存在（不记录实际值）
+                startup_logger.info(f"{key}: [{value if value else 'empty'}]")
+        else:
+            raise FileNotFoundError(f"Secrets file not found: {SECRETS_FILE_PATH}")
+
+    def _get_app_env() -> str:
+        """
+        从环境变量获取 APP_ENV。
+
+        APP_ENV 必须在 .secrets 文件或系统环境变量中设置，不允许默认值。
+        """
+        startup_logger.info("Getting APP_ENV...")
+        app_env = os.getenv("APP_ENV")
+        # 检查环境变量
+        if app_env not in ["local", "dev", "test", "prod"]:
+            raise ValueError("APP_ENV is not set. Please set it in .secrets file or environment variable.")
+        startup_logger.info(f"APP_ENV: {app_env}")
+        return app_env.lower()
+
+    startup_logger.info("Initializing environment...")
     _load_secrets()
-    app_env = _get_app_env()
-    env_file_path = BASE_DIR / "configs" / f".env.{app_env}"
-    startup_logger.info(f"APP_ENV: {app_env}")
+    env_file_path = BASE_DIR / "configs" / f".env.{_get_app_env()}"
     startup_logger.info(f"Config file path: {env_file_path}")
-    return app_env, env_file_path
+    return env_file_path
 
 
 # 模块加载时初始化环境配置
-APP_ENV, ENV_FILE_PATH = _init_env()
+ENV_FILE_PATH = _init_env()
 
 
 class BaseConfig(BaseSettings):
@@ -215,8 +218,6 @@ def init_setting() -> Settings:
     for k, v in s.model_dump().items():
         startup_logger.info(f"{k}: {v}")
     startup_logger.info("==========================")
-
-    startup_logger.info("Startup logger file handler added.")
     return s
 
 

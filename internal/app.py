@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 
-from internal.config.load_config import APP_ENV, setting
+from internal.config.load_config import setting
 from internal.core.exception import global_errors
 from internal.core.logger import init_logger, logger
 from internal.core.signature import init_signature_auth_handler
@@ -88,9 +88,6 @@ def register_middleware(app: FastAPI):
 # 定义 lifespan 事件处理器
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    # 检查环境变量
-    if APP_ENV not in ["local", "dev", "test", "prod"]:
-        raise Exception(f"Invalid ENV: {APP_ENV}")
     # 初始化日志
     init_logger()
     # 初始化 DB
