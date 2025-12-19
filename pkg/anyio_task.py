@@ -6,8 +6,16 @@ from functools import partial
 from typing import Any, Literal
 
 import anyio
-from anyio import (CancelScope, CapacityLimiter, create_task_group, fail_after, get_cancelled_exc_class, move_on_after,
-                   to_process, to_thread)
+from anyio import (
+    CancelScope,
+    CapacityLimiter,
+    create_task_group,
+    fail_after,
+    get_cancelled_exc_class,
+    move_on_after,
+    to_process,
+    to_thread,
+)
 from anyio.abc import TaskGroup
 
 from pkg.async_logger import logger
@@ -99,12 +107,12 @@ class AnyioTaskHandler:
         return str(func)
 
     async def _run_task_inner(
-            self,
-            info: TaskInfo,
-            coro_func: Callable[..., Awaitable[Any]],
-            args_tuple: tuple,
-            kwargs_dict: dict,
-            timeout: float | None,
+        self,
+        info: TaskInfo,
+        coro_func: Callable[..., Awaitable[Any]],
+        args_tuple: tuple,
+        kwargs_dict: dict,
+        timeout: float | None,
     ):
         coro_name = info.name
         task_id = info.task_id
@@ -145,13 +153,13 @@ class AnyioTaskHandler:
                     self.tasks.pop(task_id, None)
 
     async def _execute_sync(
-            self,
-            sync_func: Callable,
-            args: tuple,
-            kwargs: dict,
-            timeout: float | None,
-            cancellable: bool,
-            backend: Literal["thread", "process"]
+        self,
+        sync_func: Callable,
+        args: tuple,
+        kwargs: dict,
+        timeout: float | None,
+        cancellable: bool,
+        backend: Literal["thread", "process"],
     ) -> Any:
         """内部通用方法：执行单个同步任务"""
         func_name = self.get_coro_func_name(sync_func)
@@ -162,13 +170,9 @@ class AnyioTaskHandler:
         async def _run():
             if backend == "thread":
                 # AnyIO 4.1.0+: thread 使用 abandon_on_cancel
-                return await to_thread.run_sync(
-                    bound, abandon_on_cancel=cancellable, limiter=self._thread_limiter
-                )  # type: ignore
+                return await to_thread.run_sync(bound, abandon_on_cancel=cancellable, limiter=self._thread_limiter)  # type: ignore
             else:
-                return await to_process.run_sync(
-                    bound, cancellable=cancellable, limiter=self._process_limiter
-                )  # type: ignore
+                return await to_process.run_sync(bound, cancellable=cancellable, limiter=self._process_limiter)  # type: ignore
 
         if timeout and timeout > 0:
             with fail_after(timeout):
@@ -177,13 +181,13 @@ class AnyioTaskHandler:
 
     # ---------- public APIs ----------
     async def add_task(
-            self,
-            task_id: str | int,
-            *,
-            coro_func: Callable[..., Awaitable[Any]],
-            args_tuple: tuple = (),
-            kwargs_dict: dict | None = None,
-            timeout: float | None = None,
+        self,
+        task_id: str | int,
+        *,
+        coro_func: Callable[..., Awaitable[Any]],
+        args_tuple: tuple = (),
+        kwargs_dict: dict | None = None,
+        timeout: float | None = None,
     ) -> bool:
         if not self._accepting:
             raise RuntimeError("AsyncTaskManagerAnyIO is shutting down, not accepting new tasks.")
@@ -207,9 +211,7 @@ class AnyioTaskHandler:
             info = TaskInfo(task_id=task_id, name=coro_name, scope=scope)
             self.tasks[task_id] = info
 
-            self._tg.start_soon(
-                self._run_task_inner, info, coro_func, args_tuple, kwargs_dict, timeout
-            )
+            self._tg.start_soon(self._run_task_inner, info, coro_func, args_tuple, kwargs_dict, timeout)
         return True
 
     async def cancel_task(self, task_id: str) -> bool:
@@ -228,12 +230,12 @@ class AnyioTaskHandler:
             return {tid: (ti.status == "running") for tid, ti in self.tasks.items()}
 
     async def run_gather_with_concurrency(
-            self,
-            coro_func: Callable[..., Awaitable[Any]],
-            args_tuple_list: list[tuple],
-            task_timeout: float | None = None,
-            global_timeout: float | None = None,
-            jitter: float | None = 3.0
+        self,
+        coro_func: Callable[..., Awaitable[Any]],
+        args_tuple_list: list[tuple],
+        task_timeout: float | None = None,
+        global_timeout: float | None = None,
+        jitter: float | None = 3.0,
     ) -> list[Any]:
         coro_name = self.get_coro_func_name(coro_func)
         results: list[Any] = [None] * len(args_tuple_list)
@@ -275,65 +277,57 @@ class AnyioTaskHandler:
         return results
 
     async def run_in_thread(
-            self,
-            sync_func: Callable[..., Any],
-            *,
-            args_tuple: tuple | None = None,
-            kwargs_dict: dict | None = None,
-            timeout: float | None = None,
-            cancellable: bool = False
+        self,
+        sync_func: Callable[..., Any],
+        *,
+        args_tuple: tuple | None = None,
+        kwargs_dict: dict | None = None,
+        timeout: float | None = None,
+        cancellable: bool = False,
     ) -> Any:
-        return await self._execute_sync(
-            sync_func, args_tuple or (), kwargs_dict or {}, timeout, cancellable, "thread"
-        )
+        return await self._execute_sync(sync_func, args_tuple or (), kwargs_dict or {}, timeout, cancellable, "thread")
 
     async def run_in_process(
-            self,
-            sync_func: Callable[..., Any],
-            *,
-            args_tuple: tuple | None = None,
-            kwargs_dict: dict | None = None,
-            timeout: float | None = None,
-            cancellable: bool = False
+        self,
+        sync_func: Callable[..., Any],
+        *,
+        args_tuple: tuple | None = None,
+        kwargs_dict: dict | None = None,
+        timeout: float | None = None,
+        cancellable: bool = False,
     ) -> Any:
-        return await self._execute_sync(
-            sync_func, args_tuple or (), kwargs_dict or {}, timeout, cancellable, "process"
-        )
+        return await self._execute_sync(sync_func, args_tuple or (), kwargs_dict or {}, timeout, cancellable, "process")
 
     async def run_in_threads(
-            self,
-            sync_func: Callable[..., Any],
-            *,
-            args_tuple_list: list[tuple] | None = None,
-            kwargs_dict_list: list[dict] | None = None,
-            timeout: float | None = None,
-            cancellable: bool = False
+        self,
+        sync_func: Callable[..., Any],
+        *,
+        args_tuple_list: list[tuple] | None = None,
+        kwargs_dict_list: list[dict] | None = None,
+        timeout: float | None = None,
+        cancellable: bool = False,
     ) -> list[Any]:
-        return await self._run_batch_sync(
-            sync_func, args_tuple_list, kwargs_dict_list, timeout, cancellable, "thread"
-        )
+        return await self._run_batch_sync(sync_func, args_tuple_list, kwargs_dict_list, timeout, cancellable, "thread")
 
     async def run_in_processes(
-            self,
-            sync_func: Callable[..., Any],
-            *,
-            args_tuple_list: list[tuple] | None = None,
-            kwargs_dict_list: list[dict] | None = None,
-            timeout: float | None = None,
-            cancellable: bool = False
+        self,
+        sync_func: Callable[..., Any],
+        *,
+        args_tuple_list: list[tuple] | None = None,
+        kwargs_dict_list: list[dict] | None = None,
+        timeout: float | None = None,
+        cancellable: bool = False,
     ) -> list[Any]:
-        return await self._run_batch_sync(
-            sync_func, args_tuple_list, kwargs_dict_list, timeout, cancellable, "process"
-        )
+        return await self._run_batch_sync(sync_func, args_tuple_list, kwargs_dict_list, timeout, cancellable, "process")
 
     async def _run_batch_sync(
-            self,
-            sync_func: Callable,
-            args_list: list[tuple] | None,
-            kwargs_list: list[dict] | None,
-            timeout: float | None,
-            cancellable: bool,
-            backend: Literal["thread", "process"]
+        self,
+        sync_func: Callable,
+        args_list: list[tuple] | None,
+        kwargs_list: list[dict] | None,
+        timeout: float | None,
+        cancellable: bool,
+        backend: Literal["thread", "process"],
     ) -> list[Any]:
         args_list = args_list or []
         kwargs_list = kwargs_list or [None] * len(args_list)  # type: ignore
@@ -348,6 +342,7 @@ class AnyioTaskHandler:
 
             async with self._global_limiter:
                 try:
+
                     async def _run():
                         if backend == "thread":
                             return await to_thread.run_sync(
