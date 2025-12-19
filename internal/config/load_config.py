@@ -4,7 +4,7 @@ from typing import Literal
 
 from dotenv import dotenv_values
 from loguru import logger
-from pydantic import MySQLDsn, RedisDsn, SecretStr, computed_field, model_validator
+from pydantic import MySQLDsn, PostgresDsn, RedisDsn, SecretStr, computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from internal import BASE_DIR
@@ -32,6 +32,17 @@ def _setup_startup_logger():
 # =========================================================
 # 配置定义
 # =========================================================
+# 支持的数据库类型
+DBType = Literal["mysql", "postgresql", "oracle"]
+
+# 数据库驱动映射
+DB_DRIVER_MAP: dict[str, str] = {
+    "mysql": "mysql+aiomysql",
+    "postgresql": "postgresql+asyncpg",
+    "oracle": "oracle+oracledb",
+}
+
+
 class Settings(BaseSettings):
     """
     应用全局配置。
@@ -51,11 +62,13 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: list[str] = ["*"]
 
     # --- Database ---
-    MYSQL_HOST: str
-    MYSQL_PORT: int = 3306
-    MYSQL_USERNAME: str
-    MYSQL_PASSWORD: str
-    MYSQL_DATABASE: str
+    DB_TYPE: DBType = "mysql"  # 数据库类型: mysql, postgresql, oracle
+    DB_HOST: str
+    DB_PORT: int = 3306
+    DB_USERNAME: str
+    DB_PASSWORD: str
+    DB_DATABASE: str
+    DB_SERVICE_NAME: str = ""  # Oracle 专用: Service Name
 
     # --- Redis ---
     REDIS_HOST: str
@@ -72,7 +85,7 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def decrypt_sensitive_fields(self) -> "Settings":
         """解密敏感字段"""
-        fields_to_decrypt = ["MYSQL_PASSWORD", "REDIS_PASSWORD"]
+        fields_to_decrypt = ["DB_PASSWORD", "REDIS_PASSWORD"]
         aes_key = self.AES_SECRET.get_secret_value()
 
         if not aes_key:
@@ -92,17 +105,44 @@ class Settings(BaseSettings):
     @computed_field
     @property
     def sqlalchemy_database_uri(self) -> str:
-        return str(
-            MySQLDsn.build(
-                scheme="mysql+aiomysql",
-                username=self.MYSQL_USERNAME,
-                password=self.MYSQL_PASSWORD,
-                host=self.MYSQL_HOST,
-                port=self.MYSQL_PORT,
-                path=f"{self.MYSQL_DATABASE}",
-                query="charset=utf8mb4",
+        """根据数据库类型动态生成连接 URI"""
+        driver = DB_DRIVER_MAP.get(self.DB_TYPE)
+        if not driver:
+            raise ValueError(f"Unsupported database type: {self.DB_TYPE}")
+
+        if self.DB_TYPE == "mysql":
+            return str(
+                MySQLDsn.build(
+                    scheme=driver,
+                    username=self.DB_USERNAME,
+                    password=self.DB_PASSWORD,
+                    host=self.DB_HOST,
+                    port=self.DB_PORT,
+                    path=self.DB_DATABASE,
+                    query="charset=utf8mb4",
+                )
             )
-        )
+        elif self.DB_TYPE == "postgresql":
+            return str(
+                PostgresDsn.build(
+                    scheme=driver,
+                    username=self.DB_USERNAME,
+                    password=self.DB_PASSWORD,
+                    host=self.DB_HOST,
+                    port=self.DB_PORT,
+                    path=self.DB_DATABASE,
+                )
+            )
+        elif self.DB_TYPE == "oracle":
+            # Oracle 连接格式: oracle+oracledb://user:pass@host:port/?service_name=xxx
+            password = self.DB_PASSWORD
+            if password:
+                from urllib.parse import quote_plus
+                password = quote_plus(password)
+                return f"{driver}://{self.DB_USERNAME}:{password}@{self.DB_HOST}:{self.DB_PORT}/?service_name={self.DB_SERVICE_NAME}"
+            return f"{driver}://{self.DB_USERNAME}@{self.DB_HOST}:{self.DB_PORT}/?service_name={self.DB_SERVICE_NAME}"
+        else:
+            raise ValueError(f"Unsupported database type: {self.DB_TYPE}")
 
     @computed_field
     @property
