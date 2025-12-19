@@ -281,10 +281,9 @@ class LoggerManager:
 
     @staticmethod
     def _ensure_dir(path: Path):
-        try:
-            path.mkdir(parents=True, exist_ok=True)
-        except OSError:
-            pass
+        if not path.parent.exists():
+            raise FileNotFoundError(f"Parent directory does not exist: {path.parent}")
+        path.mkdir(exist_ok=True)
 
 
 logger = LoggerManager().setup()
