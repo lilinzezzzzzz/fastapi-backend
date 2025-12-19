@@ -52,7 +52,26 @@ class CeleryClient:
         self.app.conf.update(conf)
 
     # ------------------------------
-    # 1. 提交/编排任务
+    # 内部辅助方法
+    # ------------------------------
+    def _get_exec_options(self, options: dict, queue: str | None = None) -> dict:
+        """
+        合并默认配置与传入配置。
+        优先级: 显式参数 > options字典 > 实例默认值
+        """
+        exec_options = options.copy() if options else {}
+
+        # 如果 explicit queue 有值，强制使用
+        if queue:
+            exec_options["queue"] = queue
+        # 如果 options 里也没 queue，使用实例默认 queue
+        elif "queue" not in exec_options and self.queue:
+            exec_options["queue"] = self.queue
+
+        return exec_options
+
+    # ------------------------------
+    # 1. 提交任务 (Submit)
     # ------------------------------
     def submit(
         self,
@@ -69,110 +88,64 @@ class CeleryClient:
     ) -> AsyncResult:
         """
         提交异步任务 (Apply Async Wrapper)
-
-        :param task_name: 任务名称 (例如 "tasks.add")
-        :param args: 位置参数列表
-        :param kwargs: 关键字参数字典
-        :param task_id: 指定任务 ID，不填则自动生成 UUID
-        :param queue: 指定队列，不填则使用 CeleryClient 初始化时的默认队列
-        :param priority: 任务优先级 (0-9)
-        :param countdown: 倒计时执行（秒）
-        :param eta: 指定具体执行时间 (datetime)
-        :param options: 其他 Celery 支持的执行参数 (如 link, link_error, expires 等)
-        :return: AsyncResult
         """
-        # 1. 基础参数处理
         task_id = task_id or uuid()
         args = tuple(args) if args else ()
         kwargs = kwargs or {}
 
-        # 2. 构造执行选项 (Execution Options)
-        # copy 防止修改传入的原始字典
-        exec_options = options.copy()
+        # 合并参数
+        exec_options = self._get_exec_options(options, queue=queue)
 
-        # 3. 注入显式参数 (仅当参数不为 None 时才覆盖 options，确保显式参数优先级最高)
-        # 逻辑：Queue 优先使用传入值，否则使用实例默认值
-        target_queue = queue or self.queue
-        if target_queue:
-            exec_options["queue"] = target_queue
-
+        # 注入其他显式参数
+        exec_options["task_id"] = task_id
         if priority is not None:
             exec_options["priority"] = priority
-
         if countdown is not None:
             exec_options["countdown"] = countdown
-
         if eta is not None:
             exec_options["eta"] = eta
 
-        # 必须传入 task_id
-        exec_options["task_id"] = task_id
-
-        # 4. 发送任务
-        # 使用 self.app.send_task 确保绑定到当前实例配置的 Broker
         return self.app.send_task(name=task_name, args=args, kwargs=kwargs, **exec_options)
 
-    def _inject_defaults(self, options: dict) -> dict:
-        """内部辅助：注入默认队列等配置"""
-        options = options or {}
-        if "queue" not in options and self.queue:
-            options["queue"] = self.queue
-        # 这里可以继续注入其他实例级默认配置
-        return options
-
+    # ------------------------------
+    # 2. 任务编排 (Canvas) - 改为实例方法
+    # ------------------------------
     def chain(self, *signatures, **options) -> AsyncResult:
         """
         链式调用: task1 -> task2 -> task3
-        :param signatures: 任务签名列表
-        :param options: apply_async 的执行参数 (如 queue, countdown, retry 等)
+        :param options: 执行参数 (如 queue, countdown 等)
         """
-        # 1. 创建链式对象
-        workflow = chain(*signatures)
-
-        # 2. 绑定当前 App 实例 (防止多实例环境下的混乱)
-        workflow.app = self.app
-
-        # 3. 注入默认配置 (如默认队列)
-        exec_options = self._inject_defaults(options)
-
-        # 4. 执行
-        return workflow.apply_async(**exec_options)
+        exec_options = self._get_exec_options(options)
+        # 修复: 在初始化时传入 app=self.app，避免 AttributeError
+        return chain(*signatures, app=self.app).apply_async(**exec_options)
 
     def group(self, *signatures, **options) -> GroupResult:
         """
         并发调用: [task1, task2, task3]
         """
-        workflow = group(*signatures)
-        workflow.app = self.app
-        exec_options = self._inject_defaults(options)
-
-        # 使用 cast 解决类型提示报错 (参考之前的修复)
-        return cast(GroupResult, workflow.apply_async(**exec_options))
+        exec_options = self._get_exec_options(options)
+        # 修复: 在初始化时传入 app=self.app
+        # 修复: 使用 cast 解决类型提示报错
+        return cast(GroupResult, group(*signatures, app=self.app).apply_async(**exec_options))
 
     def chord(self, header, body, **options) -> AsyncResult:
         """
         回调模式: group(header) 完成后 -> body
-        注意：body 任务必须接受 header 的结果列表作为第一个参数。
         """
-        # Celery 的 chord 初始化通常建议显式绑定 app
-        workflow = chord(header, body=body, app=self.app)
-
-        exec_options = self._inject_defaults(options)
-
-        return workflow.apply_async(**exec_options)
+        exec_options = self._get_exec_options(options)
+        # 修复: 在初始化时传入 app=self.app
+        return chord(header, body=body, app=self.app).apply_async(**exec_options)
 
     # ------------------------------
-    # 2. 查询与检查
+    # 3. 查询与检查
     # ------------------------------
-    def get_result(self, task_id: str, timeout: int = 10, propagate: bool = True) -> Any:
+    def get_result(self, task_id: str, timeout: float = None, propagate: bool = True) -> Any:
         """
-        获取结果，默认等待 10秒。
+        获取任务结果 (阻塞式)
+        :param timeout: 等待超时时间(秒)，None 表示一直等待
+        :param propagate: True 则任务报错时抛出异常，False 则返回异常对象
         """
-        try:
-            return AsyncResult(task_id, app=self.app).get(timeout=timeout, propagate=propagate)
-        except Exception as e:
-            # 根据需要处理超时或任务异常
-            raise e
+        return AsyncResult(task_id, app=self.app).get(timeout=timeout, propagate=propagate)
 
     def get_status(self, task_id: str) -> str:
         return AsyncResult(task_id, app=self.app).state
@@ -180,27 +153,45 @@ class CeleryClient:
     def revoke(self, task_id: str, terminate: bool = False):
         self.app.control.revoke(task_id, terminate=terminate)
 
+    # ------------------------------
+    # 4. 生命周期管理
+    # ------------------------------
     @staticmethod
     def register_worker_hooks(on_startup: LifecycleHook | None = None, on_shutdown: LifecycleHook | None = None):
-        # 使用 dispatch_uid 防止重复注册
+        """
+        注册 Worker 进程生命周期钩子
+        注意：使用了 dispatch_uid 防止在多实例下重复注册
+        """
 
+        # --- Startup Handler ---
         if on_startup:
 
-            @signals.worker_process_init.connect(weak=False, dispatch_uid="pkg_worker_startup")
+            @signals.worker_process_init.connect(weak=False, dispatch_uid="pkg_celery_worker_startup")
             def _wrapper_startup(**kwargs):
-                logger.info("Executing worker startup hook...")
-                if asyncio.iscoroutinefunction(on_startup):
-                    asyncio.run(on_startup())
-                else:
-                    on_startup()
+                logger.info("Executing registered worker startup hook...")
+                try:
+                    if asyncio.iscoroutinefunction(on_startup):
+                        asyncio.run(on_startup())
+                    else:
+                        on_startup()
+                    logger.info("Worker startup hook executed successfully.")
+                except Exception as e:
+                    logger.critical(f"Worker startup hook failed: {e}")
+                    raise e
 
+        # --- Shutdown Handler ---
         if on_shutdown:
 
-            @signals.worker_process_shutdown.connect(weak=False, dispatch_uid="pkg_worker_shutdown")
+            @signals.worker_process_shutdown.connect(weak=False, dispatch_uid="pkg_celery_worker_shutdown")
             def _wrapper_shutdown(**kwargs):
-                logger.info("Executing worker shutdown hook...")
-                # 必须同步等待清理完成，严禁使用 create_task
-                if asyncio.iscoroutinefunction(on_shutdown):
-                    asyncio.run(on_shutdown())
-                else:
-                    on_shutdown()
+                logger.info("Executing registered worker shutdown hook...")
+                try:
+                    if asyncio.iscoroutinefunction(on_shutdown):
+                        # 修复: 必须同步运行，确保在进程退出前完成清理
+                        # 严禁在此处使用 loop.create_task，否则进程会立即退出导致清理中断
+                        asyncio.run(on_shutdown())
+                    else:
+                        on_shutdown()
+                    logger.info("Worker shutdown hook executed successfully.")
+                except Exception as e:
+                    logger.warning(f"Worker shutdown hook error: {e}")
