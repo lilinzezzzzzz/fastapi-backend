@@ -1,9 +1,13 @@
-from internal.tasks.apscheduler.tasks import number_sum
+from internal.tasks.task_handlers import handle_number_sum
 from pkg.async_apscheduler import ApsSchedulerManager
 from pkg.async_logger import logger
 from pkg.toolkit.types import LazyProxy
 
 _apscheduler_manager: ApsSchedulerManager | None = None
+
+
+def _register_tasks():
+    _apscheduler_manager.register_cron(handle_number_sum, cron_kwargs={"minute": "*/15", "second": 0})
 
 
 def init_apscheduler():
@@ -14,7 +18,7 @@ def init_apscheduler():
     else:
         _apscheduler_manager: ApsSchedulerManager = ApsSchedulerManager(timezone="UTC", max_instances=50)
 
-    _apscheduler_manager.register_cron(number_sum, cron_kwargs={"minute": "*/15", "second": 0})
+    _register_tasks()
     logger.info("APScheduler initialized successfully.")
 
 
