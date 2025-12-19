@@ -1,7 +1,7 @@
 import asyncio
 from collections.abc import Callable, Coroutine, Mapping, Sequence
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from celery import Celery, chain, chord, group, signals
 from celery.result import AsyncResult, GroupResult
@@ -18,17 +18,17 @@ class CeleryClient:
     """
 
     def __init__(
-            self,
-            app_name: str,
-            broker_url: str,
-            backend_url: str | None = None,
-            include: Sequence[str] | None = None,
-            task_routes: Mapping[str, Mapping[str, Any]] | None = None,
-            task_default_queue: str = "default",
-            timezone: str = "UTC",
-            enable_utc: bool = True,
-            beat_schedule: dict[str, Any] | None = None,
-            **extra_conf: Any,
+        self,
+        app_name: str,
+        broker_url: str,
+        backend_url: str | None = None,
+        include: Sequence[str] | None = None,
+        task_routes: Mapping[str, Mapping[str, Any]] | None = None,
+        task_default_queue: str = "default",
+        timezone: str = "UTC",
+        enable_utc: bool = True,
+        beat_schedule: dict[str, Any] | None = None,
+        **extra_conf: Any,
     ) -> None:
         self.queue = task_default_queue
         self.app = Celery(app_name, broker=broker_url, backend=backend_url, include=include)
@@ -45,7 +45,7 @@ class CeleryClient:
             "result_serializer": "json",
             "worker_hijack_root_logger": False,
             "broker_connection_retry_on_startup": True,
-            "result_extended": True
+            "result_extended": True,
         }
 
         conf.update(extra_conf or {})
@@ -55,17 +55,17 @@ class CeleryClient:
     # 1. 提交/编排任务
     # ------------------------------
     def submit(
-            self,
-            *,
-            task_name: str,
-            args: tuple | list | None = None,
-            kwargs: dict | None = None,
-            task_id: str | None = None,
-            countdown: int | float | None = None,
-            eta: datetime | None = None,
-            priority: int | None = None,
-            queue: str | None = None,
-            **options: Any,
+        self,
+        *,
+        task_name: str,
+        args: tuple | list | None = None,
+        kwargs: dict | None = None,
+        task_id: str | None = None,
+        countdown: int | float | None = None,
+        eta: datetime | None = None,
+        priority: int | None = None,
+        queue: str | None = None,
+        **options: Any,
     ) -> AsyncResult:
         """
         提交异步任务 (Apply Async Wrapper)
@@ -81,17 +81,12 @@ class CeleryClient:
             "eta": eta,
             "priority": priority,
             "queue": queue or self.queue,
-            **options
+            **options,
         }
 
         # 处理 Retry Policy 等特殊头部逻辑可在此处扩展...
 
-        return self.app.send_task(
-            name=task_name,
-            args=args,
-            kwargs=kwargs,
-            **exec_options
-        )
+        return self.app.send_task(name=task_name, args=args, kwargs=kwargs, **exec_options)
 
     @staticmethod
     def chain(*signatures) -> AsyncResult:
@@ -101,7 +96,7 @@ class CeleryClient:
     @staticmethod
     def group(*signatures) -> GroupResult:
         """并发调用: [task1, task2, task3]"""
-        return group(*signatures).apply_async()
+        return cast(GroupResult, cast(object, group(*signatures).apply_async()))
 
     @staticmethod
     def chord(header, body) -> AsyncResult:
@@ -121,10 +116,7 @@ class CeleryClient:
         self.app.control.revoke(task_id, terminate=terminate)
 
     @staticmethod
-    def register_worker_hooks(
-            on_startup: LifecycleHook | None = None,
-            on_shutdown: LifecycleHook | None = None
-    ):
+    def register_worker_hooks(on_startup: LifecycleHook | None = None, on_shutdown: LifecycleHook | None = None):
         """
         注册 Worker 进程生命周期钩子（依赖注入）。
         用户可以将数据库初始化、Redis 连接等逻辑通过参数传入。
@@ -135,6 +127,7 @@ class CeleryClient:
 
         # --- 1. 定义 Startup Handler ---
         if on_startup:
+
             @signals.worker_process_init.connect(weak=False)
             def _wrapper_startup(**kwargs):
                 logger.info("Executing registered worker startup hook...")
@@ -153,6 +146,7 @@ class CeleryClient:
 
         # --- 2. 定义 Shutdown Handler ---
         if on_shutdown:
+
             @signals.worker_process_shutdown.connect(weak=False)
             def _wrapper_shutdown(**kwargs):
                 logger.info("Executing registered worker shutdown hook...")
