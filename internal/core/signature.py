@@ -1,4 +1,4 @@
-from internal.config.load_config import setting
+from internal.config.load_config import settings
 from internal.core.logger import logger
 from pkg.signature import SignatureAuthHandler
 from pkg.toolkit.types import LazyProxy
@@ -12,7 +12,7 @@ def init_signature_auth_handler():
     if _signature_auth_handler is not None:
         return
 
-    _signature_auth_handler = SignatureAuthHandler(secret_key=setting.JWT_SECRET.get_secret_value())
+    _signature_auth_handler = SignatureAuthHandler(secret_key=settings.JWT_SECRET.get_secret_value())
 
     logger.info("Signature Auth Handler initialized Successfully.")
 

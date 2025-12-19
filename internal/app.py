@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 
-from internal.config.load_config import setting
+from internal.config.load_config import settings
 from internal.core.exception import global_errors
 from internal.core.logger import init_logger, logger
 from internal.core.signature import init_signature_auth_handler
@@ -16,7 +16,7 @@ from pkg.response import error_response
 
 
 def create_app() -> FastAPI:
-    debug = setting.DEBUG
+    debug = settings.DEBUG
     app = FastAPI(
         debug=debug,
         docs_url="/docs" if debug else None,
@@ -68,13 +68,13 @@ def register_middleware(app: FastAPI):
     app.add_middleware(ASGIAuthMiddleware)
 
     # 2. CORS 中间件：处理跨域请求
-    if setting.BACKEND_CORS_ORIGINS:
+    if settings.BACKEND_CORS_ORIGINS:
         from starlette.middleware.cors import CORSMiddleware
 
         app.add_middleware(
             CORSMiddleware,
             allow_credentials=True,
-            allow_origins=setting.BACKEND_CORS_ORIGINS,
+            allow_origins=settings.BACKEND_CORS_ORIGINS,
             allow_methods=["*"],
             allow_headers=["*"],
         )

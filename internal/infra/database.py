@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
 )
 
-from internal.config.load_config import setting
+from internal.config.load_config import settings
 from internal.core.logger import logger
 from pkg.database.base import new_async_engine, new_async_session_maker
 from pkg.toolkit.json import orjson_dumps, orjson_loads
@@ -37,7 +37,7 @@ def init_db() -> None:
 
     # 1. 创建 Engine
     _engine = new_async_engine(
-        database_uri=setting.sqlalchemy_database_uri,
+        database_uri=settings.sqlalchemy_database_uri,
         echo=False,  # 通常设为 False，由下方的 event listener 接管日志
         pool_pre_ping=True,
         pool_size=10,
@@ -118,8 +118,8 @@ def _after_cursor_execute(conn, cursor, statement, parameters, context, executem
     elapsed = time.perf_counter() - context.query_start_time
 
     # 获取配置 (带有默认值防止报错)
-    slow_threshold = getattr(setting, "SLOW_SQL_THRESHOLD", 0.5)
-    is_debug = getattr(setting, "DEBUG", False)
+    slow_threshold = getattr(settings, "SLOW_SQL_THRESHOLD", 0.5)
+    is_debug = getattr(settings, "DEBUG", False)
 
     if elapsed > slow_threshold:
         sql_str = _get_formatted_sql(context, statement, parameters)

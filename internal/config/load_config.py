@@ -1,227 +1,193 @@
-import os
-from pathlib import Path
-from urllib.parse import quote_plus
+from functools import lru_cache
+from typing import Literal
 
-from dotenv import dotenv_values, load_dotenv
-from loguru import logger as _startup_logger  # 启动阶段使用默认 logger
-from pydantic import SecretStr, field_validator
+from loguru import logger
+from pydantic import MySQLDsn, RedisDsn, SecretStr, computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from internal import BASE_DIR
 from pkg.crypto.aes import aes_decrypt
 
-# 配置加载完成后，为启动日志添加文件 handler
-# 这样后续的启动日志也能被记录到文件
-_startup_log_dir = BASE_DIR / "logs"
-_startup_log_dir.mkdir(exist_ok=True)
-_startup_logger.add(
-    _startup_log_dir / "startup.log",
-    rotation="1 day",
-    retention="7 days",
-    level="INFO",
-    enqueue=True,
-)
-_startup_logger.info("Startup logger file handler added.")
 
-# 密钥文件路径（不纳入版本控制，只存放解密密钥等敏感信息）
-_SECRETS_FILE_PATH: Path = BASE_DIR / "configs" / ".secrets"
-
-
-def _init_env() -> Path:
-    """
-    初始化环境配置。
-
-    执行顺序：
-        1. 加载 .secrets 文件（获取 APP_ENV 和其他密钥）
-        2. 根据 APP_ENV 确定配置文件路径
-        3. 记录日志
-
-    Returns:
-        tuple[str, Path]: (APP_ENV, ENV_FILE_PATH)
-    """
-
-    def _load_secrets() -> None:
-        """
-        加载密钥文件到环境变量。
-
-        密钥文件 (.secrets) 不纳入版本控制，只存放解密密钥等敏感信息。
-        文件格式示例:
-            AES_SECRET=your_aes_secret_key
-            APP_ENV=local
-        """
-        _startup_logger.info("Loading secrets...")
-        if _SECRETS_FILE_PATH.exists():
-            load_dotenv(_SECRETS_FILE_PATH, override=False)  # 不覆盖已存在的环境变量
-            _startup_logger.info(f"Secrets file loaded: {_SECRETS_FILE_PATH}")
-
-            # 记录加载的配置项（只记录 key，不记录 value 以避免泄露密钥）
-            secrets = dotenv_values(_SECRETS_FILE_PATH)
-            for key, value in secrets.items():
-                # 记录 key 和 value 是否存在（不记录实际值）
-                _startup_logger.info(f"{key}: [{value if value else 'empty'}]")
-        else:
-            raise FileNotFoundError(f"Secrets file not found: {_SECRETS_FILE_PATH}")
-
-    def _get_app_env() -> str:
-        """
-        从环境变量获取 APP_ENV。
-
-        APP_ENV 必须在 .secrets 文件或系统环境变量中设置，不允许默认值。
-        """
-        _startup_logger.info("Getting APP_ENV...")
-        app_env = os.getenv("APP_ENV")
-        # 检查环境变量
-        if app_env not in ["local", "dev", "test", "prod"]:
-            raise ValueError("APP_ENV is not set. Please set it in .secrets file or environment variable.")
-        _startup_logger.info(f"APP_ENV: {app_env}")
-        return app_env.lower()
-
-    _startup_logger.info("Initializing environment...")
-    _load_secrets()
-    env_file_path = BASE_DIR / "configs" / f".env.{_get_app_env()}"
-    _startup_logger.info(f"Config file path: {env_file_path}")
-    return env_file_path
-
-
-# 模块加载时初始化环境配置
-ENV_FILE_PATH = _init_env()
-
-
-class BaseConfig(BaseSettings):
-    """
-    基础配置类，定义所有环境共享的配置项。
-
-    配置加载优先级（从高到低）：
-        1. 系统环境变量
-        2. .env 文件
-        3. 代码中定义的默认值
-
-    加载逻辑：
-        - 优先读取系统环境变量
-        - 如果环境变量不存在，则从 .env 文件读取
-        - 如果 .env 文件也没有，则使用默认值
-        - 如果以上都没有且字段无默认值，抛出 ValidationError
-    """
-
-    model_config = SettingsConfigDict(
-        case_sensitive=True,
-        env_file_encoding="utf-8",
-        extra="ignore",  # 忽略未定义的环境变量
+# =========================================================
+# 日志配置 (懒加载)
+# =========================================================
+def _setup_startup_logger():
+    """配置启动日志，仅在首次获取配置时调用"""
+    log_dir = BASE_DIR / "logs"
+    log_dir.mkdir(exist_ok=True)
+    logger.add(
+        log_dir / "startup.log",
+        rotation="1 day",
+        retention="7 days",
+        level="INFO",
+        enqueue=True,
+        encoding="utf-8",
     )
+    return logger
 
-    # 基础配置
-    DEBUG: bool
-    JWT_SECRET: SecretStr  # JWT 签名密钥
 
-    # AES 解密密钥（用于解密配置文件中的加密字段，通过环境变量注入）
-    # 如果不使用加密配置，可设置为空字符串
-    AES_SECRET: SecretStr = SecretStr("")
+# =========================================================
+# 配置定义
+# =========================================================
 
-    # JWT 配置
-    JWT_ALGORITHM: str
 
-    # CORS 配置
+class Settings(BaseSettings):
+    """
+    应用全局配置。
+
+    加载优先级 (从高到低):
+    1. 系统环境变量 (System Environment Variables)
+    2. .secrets 文件 (Secrets File)
+    3. 环境配置文件 (.env.local / .env.prod 等)
+    """
+
+    # --- 核心环境配置 ---
+    # 允许从环境变量覆盖，默认为 local
+    APP_ENV: Literal["local", "dev", "test", "prod"] = "local"
+    DEBUG: bool = False
+
+    # --- 密钥配置 (全部使用 SecretStr 防止日志泄露) ---
+    AES_SECRET: SecretStr = SecretStr("")  # 解密用的根密钥
+    JWT_SECRET: SecretStr
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+
+    # --- CORS ---
     BACKEND_CORS_ORIGINS: list[str] = ["*"]
 
-    # MySQL 配置
-    MYSQL_USERNAME: str
-    MYSQL_PASSWORD: str  # 支持加密格式: ENC(xxx)
+    # --- Database (MySQL) ---
     MYSQL_HOST: str
-    MYSQL_PORT: int
+    MYSQL_PORT: int = 3306
+    MYSQL_USERNAME: str
+    MYSQL_PASSWORD: str  # 原始值，可能是 ENC(...)
     MYSQL_DATABASE: str
 
-    # Redis 配置
+    # --- Cache (Redis) ---
     REDIS_HOST: str
-    REDIS_PASSWORD: str  # 支持加密格式: ENC(xxx)
-    REDIS_DB: int
-    REDIS_PORT: int
+    REDIS_PORT: int = 6379
+    REDIS_PASSWORD: str = ""  # 原始值，可能是 ENC(...)
+    REDIS_DB: int = 0
 
-    # Token 过期时间（分钟）
-    ACCESS_TOKEN_EXPIRE_MINUTES: int
+    # Pydantic 配置
+    model_config = SettingsConfigDict(case_sensitive=True, extra="ignore", env_file_encoding="utf-8")
 
-    @field_validator("MYSQL_PASSWORD", "REDIS_PASSWORD", mode="before")
-    @classmethod
-    def decrypt_password(cls, v: str, info) -> str:
+    @model_validator(mode="after")
+    def decrypt_sensitive_fields(self) -> "Settings":
         """
-        自动解密以 ENC(...) 格式存储的密码。
-
-        配置文件中的加密格式: ENC(base64_encrypted_string)
-        解密密钥通过环境变量 AES_SECRET 注入。
+        全字段解密验证器。
+        在所有字段加载完成后执行，使用加载到的 AES_SECRET 解密特定字段。
         """
-        if not isinstance(v, str):
-            return v
+        # 需要解密的字段列表
+        fields_to_decrypt = ["MYSQL_PASSWORD", "REDIS_PASSWORD"]
 
-        if v.startswith("ENC(") and v.endswith(")"):
-            # 记录原始加密字符串（方便排查问题）
-            _startup_logger.info(f"Decrypting field '{info.field_name}': {v}")
-            # 提取加密内容
-            encrypted = v[4:-1]
-            # 从环境变量获取解密密钥
-            aes_secret = os.getenv("AES_SECRET", "")
-            if not aes_secret:
-                raise ValueError(f"Field '{info.field_name}' is encrypted but AES_SECRET is not set")
-            try:
-                decrypted = aes_decrypt(encrypted, aes_secret)
-                _startup_logger.info(f"Field '{info.field_name}' decrypted successfully.")
-                return decrypted
-            except Exception as e:
-                _startup_logger.error(f"Failed to decrypt field '{info.field_name}': {e}")
-                raise ValueError(f"Failed to decrypt field '{info.field_name}': {e}") from e
+        # 获取 AES 密钥明文
+        aes_key = self.AES_SECRET.get_secret_value()
 
-        return v  # 非加密格式直接返回
+        # 如果没有 AES 密钥，跳过解密（假设都是明文）
+        if not aes_key:
+            return self
 
+        for field in fields_to_decrypt:
+            # 获取当前字段值
+            original_value = getattr(self, field)
+
+            if isinstance(original_value, str) and original_value.startswith("ENC(") and original_value.endswith(")"):
+                encrypted_content = original_value[4:-1]
+                try:
+                    # 使用内部方法解密
+                    decrypted_value = aes_decrypt(encrypted_content, aes_key)
+                    # 将解密后的值回写到实例中
+                    setattr(self, field, decrypted_value)
+                except Exception as e:
+                    error_msg = f"Failed to decrypt field '{field}': {str(e)}"
+                    logger.error(error_msg)
+                    raise ValueError(error_msg) from e
+        return self
+
+    @computed_field
     @property
     def sqlalchemy_database_uri(self) -> str:
-        password = self.MYSQL_PASSWORD
-        return f"mysql+aiomysql://{quote_plus(self.MYSQL_USERNAME)}:{quote_plus(password)}@{self.MYSQL_HOST}:{self.MYSQL_PORT}/{self.MYSQL_DATABASE}?charset=utf8mb4"
+        """生成 SQLAlchemy 连接字符串"""
+        return MySQLDsn.build(
+            scheme="mysql+aiomysql",
+            username=self.MYSQL_USERNAME,
+            password=self.MYSQL_PASSWORD,  # 此时已是解密后的密码
+            host=self.MYSQL_HOST,
+            port=self.MYSQL_PORT,
+            path=f"{self.MYSQL_DATABASE}",
+            query="charset=utf8mb4",
+        ).unicode_string()
 
-    @property
-    def sqlalchemy_echo(self) -> bool:
-        return self.DEBUG  # 开发环境启用 SQLAlchemy 日志
-
+    @computed_field
     @property
     def redis_url(self) -> str:
-        password = self.REDIS_PASSWORD
-        if password == "":
-            return f"redis://{quote_plus(self.REDIS_HOST)}:{self.REDIS_PORT}/{self.REDIS_DB}"
-        else:
-            return f"redis://:{quote_plus(password)}@{quote_plus(self.REDIS_HOST)}:{self.REDIS_PORT}/{self.REDIS_DB}"
-
-
-# 配置文件路径（根据 APP_ENV 动态确定）
-# ENV_FILE_PATH 已在模块顶部加载 .secrets 后确定
-
-
-class Settings(BaseConfig):
-    # 自动根据环境变量 APP_ENV 加载对应的 .env 文件
-    model_config = SettingsConfigDict(
-        case_sensitive=True, env_file=ENV_FILE_PATH.as_posix(), env_file_encoding="utf-8", extra="ignore"
-    )
-
-
-def init_setting() -> Settings:
-    """
-    加载配置。
-    此函数只在模块首次被导入时执行一次。
-    """
-    _startup_logger.info("Init setting...")
-
-    # 检查配置文件是否存在
-    if not ENV_FILE_PATH.exists():
-        raise FileNotFoundError(f"Config file not found: {ENV_FILE_PATH}")
-
-    # 实例化配置
-    s = Settings()
-    # 打印关键信息 (注意脱敏)
-    _startup_logger.info("Init setting successfully.")
-    _startup_logger.info("==========================")
-    for k, v in s.model_dump().items():
-        _startup_logger.info(f"{k}: {v}")
-    _startup_logger.info("==========================")
-    return s
+        """生成 Redis 连接字符串"""
+        return RedisDsn.build(
+            scheme="redis",
+            username=None,
+            password=self.REDIS_PASSWORD if self.REDIS_PASSWORD else None,
+            host=self.REDIS_HOST,
+            port=self.REDIS_PORT,
+            path=f"{self.REDIS_DB}",
+        ).unicode_string()
 
 
 # =========================================================
-# 单例模式：模块加载时立即执行，生成全局唯一的配置对象
+# 工厂函数与单例
 # =========================================================
-setting: Settings = init_setting()
+
+
+@lru_cache
+def get_settings() -> Settings:
+    """
+    获取配置单例。
+
+    逻辑：
+    1. 初始化日志。
+    2. 探测 APP_ENV (优先级: 环境变量 > .secrets文件)。
+    3. 根据 APP_ENV 决定加载哪些 .env 文件。
+    4. 实例化 Settings。
+    """
+    _logger = _setup_startup_logger()
+    _logger.info("Loading configuration...")
+
+    # 1. 确定 APP_ENV
+    # 为了拿到 APP_ENV，我们先临时加载一下 .secrets (如果不通过系统环境变量传参)
+    secrets_path = BASE_DIR / "configs" / ".secrets"
+    temp_env_file = secrets_path if secrets_path.exists() else None
+
+    # 预加载以获取 APP_ENV，不进行完整校验
+    class EnvProber(BaseSettings):
+        APP_ENV: Literal["local", "dev", "test", "prod"] = "local"
+        model_config = SettingsConfigDict(env_file=temp_env_file, extra="ignore")
+
+    app_env = EnvProber().APP_ENV
+    _logger.info(f"Detected Environment: {app_env}")
+
+    # 2. 构建配置文件路径列表
+    # 加载顺序：.env.{env} (基础配置) -> .secrets (密钥覆盖) -> 系统环境变量 (最高优先级，自动处理)
+    env_file_path = BASE_DIR / "configs" / f".env.{app_env}"
+
+    load_files = []
+    if env_file_path.exists():
+        load_files.append(env_file_path)
+    if secrets_path.exists():
+        load_files.append(secrets_path)
+
+    if load_files:
+        _logger.info(f"Loading config files: {[f.name for f in load_files]}")
+
+    # 3. 实例化最终配置
+    try:
+        _settings = Settings(_env_file=load_files)  # type: ignore
+        _logger.success("Configuration loaded successfully.")
+        return _settings
+    except Exception as e:
+        _logger.critical(f"Failed to load configuration: {e}")
+        raise
+
+
+# 全局入口，类似原代码的 settings，但改为调用函数
+# 建议在业务代码中使用 get_settings()，如果非要保持变量名兼容：
+settings = get_settings()

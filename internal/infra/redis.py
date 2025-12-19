@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from redis.asyncio import ConnectionPool, Redis
 
-from internal.config.load_config import setting
+from internal.config.load_config import settings
 from internal.core.logger import logger
 from pkg.async_cache import CacheClient
 from pkg.toolkit.types import LazyProxy
@@ -27,10 +27,10 @@ def init_redis() -> None:
     if _redis_pool is None:
         # 创建连接池
         _redis_pool = ConnectionPool.from_url(
-            setting.redis_url,
+            settings.redis_url,
             encoding="utf-8",
             decode_responses=True,
-            max_connections=getattr(setting, "REDIS_MAX_CONNECTIONS", 20),
+            max_connections=getattr(settings, "REDIS_MAX_CONNECTIONS", 20),
         )
 
     if _cache is None:
