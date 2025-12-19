@@ -1,5 +1,5 @@
 from internal.tasks.apscheduler.tasks import number_sum
-from pkg.apscheduler_task import ApsSchedulerManager
+from pkg.async_apscheduler import ApsSchedulerManager
 from pkg.async_logger import logger
 from pkg.toolkit.types import LazyProxy
 

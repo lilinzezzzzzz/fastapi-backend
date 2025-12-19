@@ -10,11 +10,11 @@ from pkg.async_logger import logger
 T = TypeVar("T")
 
 
-async def stream_with_chunk_control(
-        _: Request,
-        generator: AsyncIterable[T],
-        chunk_timeout: float,
-        is_sse: bool = True
+async def stream_with_chunk_control[T](
+    _: Request,
+    generator: AsyncIterable[T],
+    chunk_timeout: float,
+    is_sse: bool = True,
 ) -> AsyncIterable[T]:
     """
     基于 AnyIO 的单 Chunk 超时控制。
@@ -39,10 +39,7 @@ async def stream_with_chunk_control(
 
             if is_sse:
                 # 构造 SSE 格式的超时错误消息
-                err_data = {
-                    "code": 408,
-                    "message": f"Stream chunk timed out. No data received for {chunk_timeout}s"
-                }
+                err_data = {"code": 408, "message": f"Stream chunk timed out. No data received for {chunk_timeout}s"}
                 yield f"data: {json.dumps(err_data)}\n\n"
 
             # 单个 Chunk 超时通常意味着上游服务卡死，建议中断流

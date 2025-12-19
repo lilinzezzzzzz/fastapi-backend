@@ -10,8 +10,8 @@ from fastapi.responses import StreamingResponse
 from internal.core.exception import AppException, global_errors
 from internal.infra.anyio_task import anyio_task_manager
 from pkg.async_logger import logger
+from pkg.async_stream_time_control import stream_with_chunk_control
 from pkg.response import success_response
-from pkg.stream_control import stream_with_chunk_control
 
 router = APIRouter(prefix="/test", tags=["public v1 test"])
 

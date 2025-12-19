@@ -1,8 +1,7 @@
-import pytest
-from datetime import timedelta, timezone, datetime
-from unittest.mock import patch
+from datetime import UTC, datetime, timedelta
 
 import jwt as pyjwt
+import pytest
 
 from pkg.jwt import JWTHandler
 
@@ -14,16 +13,11 @@ def anyio_backend():
 
 @pytest.fixture
 def jwt_handler():
-    return JWTHandler(
-        secret="test_secret_key",
-        algorithm="HS256",
-        expire_minutes=30
-    )
+    return JWTHandler(secret="test_secret_key", algorithm="HS256", expire_minutes=30)
 
 
 @pytest.mark.anyio
 class TestJWTHandler:
-
     def test_create_token_success(self, jwt_handler):
         token = jwt_handler.create_token(user_id=1, username="test_user")
 
@@ -39,8 +33,8 @@ class TestJWTHandler:
         token = jwt_handler.create_token(user_id=1, username="test", expire_minutes=60)
 
         payload = pyjwt.decode(token, "test_secret_key", algorithms=["HS256"])
-        exp_time = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
-        now = datetime.now(timezone.utc)
+        exp_time = datetime.fromtimestamp(payload["exp"], tz=UTC)
+        now = datetime.now(UTC)
 
         diff = exp_time - now
         assert 59 <= diff.total_seconds() / 60 <= 61
@@ -49,7 +43,7 @@ class TestJWTHandler:
         token = jwt_handler.create_token(user_id=123, username="test_user")
         bearer_token = f"Bearer {token}"
 
-        user_id, is_valid = await jwt_handler.verify_token(bearer_token)
+        user_id, is_valid = jwt_handler.verify_token(bearer_token)
 
         assert is_valid is True
         assert user_id == 123
@@ -57,19 +51,19 @@ class TestJWTHandler:
     async def test_verify_token_no_bearer_prefix(self, jwt_handler):
         token = jwt_handler.create_token(user_id=1, username="test")
 
-        user_id, is_valid = await jwt_handler.verify_token(token)
+        user_id, is_valid = jwt_handler.verify_token(token)
 
         assert is_valid is False
         assert user_id is None
 
     async def test_verify_token_empty(self, jwt_handler):
-        user_id, is_valid = await jwt_handler.verify_token("")
+        user_id, is_valid = jwt_handler.verify_token("")
 
         assert is_valid is False
         assert user_id is None
 
     async def test_verify_token_none(self, jwt_handler):
-        user_id, is_valid = await jwt_handler.verify_token(None)
+        user_id, is_valid = jwt_handler.verify_token(None)
 
         assert is_valid is False
         assert user_id is None
@@ -78,44 +72,41 @@ class TestJWTHandler:
         expired_payload = {
             "user_id": 1,
             "username": "test",
-            "exp": int((datetime.now(timezone.utc) - timedelta(hours=1)).timestamp())
+            "exp": int((datetime.now(UTC) - timedelta(hours=1)).timestamp()),
         }
         expired_token = pyjwt.encode(expired_payload, "test_secret_key", algorithm="HS256")
         bearer_token = f"Bearer {expired_token}"
 
-        user_id, is_valid = await jwt_handler.verify_token(bearer_token)
+        user_id, is_valid = jwt_handler.verify_token(bearer_token)
 
         assert is_valid is False
         assert user_id is None
 
     async def test_verify_token_invalid_secret(self, jwt_handler):
         wrong_token = pyjwt.encode(
-            {"user_id": 1, "username": "test", "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp())},
+            {"user_id": 1, "username": "test", "exp": int((datetime.now(UTC) + timedelta(hours=1)).timestamp())},
             "wrong_secret",
-            algorithm="HS256"
+            algorithm="HS256",
         )
         bearer_token = f"Bearer {wrong_token}"
 
-        user_id, is_valid = await jwt_handler.verify_token(bearer_token)
+        user_id, is_valid = jwt_handler.verify_token(bearer_token)
 
         assert is_valid is False
         assert user_id is None
 
     async def test_verify_token_missing_user_id(self, jwt_handler):
-        payload = {
-            "username": "test",
-            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp())
-        }
+        payload = {"username": "test", "exp": int((datetime.now(UTC) + timedelta(hours=1)).timestamp())}
         token = pyjwt.encode(payload, "test_secret_key", algorithm="HS256")
         bearer_token = f"Bearer {token}"
 
-        user_id, is_valid = await jwt_handler.verify_token(bearer_token)
+        user_id, is_valid = jwt_handler.verify_token(bearer_token)
 
         assert is_valid is False
         assert user_id is None
 
     async def test_verify_token_invalid_format(self, jwt_handler):
-        user_id, is_valid = await jwt_handler.verify_token("Bearer invalid.token.here")
+        user_id, is_valid = jwt_handler.verify_token("Bearer invalid.token.here")
 
         assert is_valid is False
         assert user_id is None

@@ -8,7 +8,7 @@ from internal.config.load_config import setting
 from internal.core.logger import init_logger, logger
 from internal.infra.database import close_db, init_db
 from internal.infra.redis import close_redis, init_redis
-from pkg.celery_task import CeleryClient
+from pkg.async_celery import CeleryClient
 
 # =========================================================
 # 1. 基础配置定义

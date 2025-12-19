@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 import jwt
 from loguru import logger
@@ -10,7 +10,7 @@ class JWTHandler:
         self.algorithm = algorithm
         self.expire_minutes = expire_minutes
 
-    async def verify_token(self, token: str) -> tuple[int | None, bool]:
+    def verify_token(self, token: str) -> tuple[int | None, bool]:
         """
         验证 Token = request.headers.get("Authorization")
         """
@@ -35,7 +35,7 @@ class JWTHandler:
 
     def create_token(self, user_id: int, username: str, expire_minutes: int | None = None) -> str:
         exp_minutes = expire_minutes or self.expire_minutes
-        expiration = datetime.now(timezone.utc) + timedelta(minutes=exp_minutes)
+        expiration = datetime.now(UTC) + timedelta(minutes=exp_minutes)
         payload = {"username": username, "user_id": user_id, "exp": int(expiration.timestamp())}
         return jwt.encode(payload, self.secret, algorithm=self.algorithm)
 
