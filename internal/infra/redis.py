@@ -42,9 +42,7 @@ def init_redis() -> None:
     if _cache is None:
         _cache = CacheClient(session_provider=get_redis)
 
-    logger.info(
-        "Redis initialized successfully.                                                                                    "
-    )
+    logger.success("Redis initialized successfully.")
 
 
 async def close_redis() -> None:

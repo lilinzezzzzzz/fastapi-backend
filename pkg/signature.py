@@ -20,7 +20,7 @@ class SignatureAuthHandler:
             raise ValueError(f"Unsupported hash_algorithm: {hash_algorithm}")
         self.hash_algorithm = hash_algorithm
         self.timestamp_tolerance = timestamp_tolerance
-        logger.info(
+        logger.success(
             f"SignatureAuthHandler Init Successfully, secret_key={secret_key}, hash_algorithm={hash_algorithm}, timestamp_tolerance={timestamp_tolerance}"
         )
 

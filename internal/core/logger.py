@@ -50,7 +50,7 @@ def init_logger(
     )
     _logger = _logger_manager.setup()
 
-    default_logger.info("Logger initialized.")
+    default_logger.success("Logger initialized successfully.")
 
 
 # --- 导出代理对象 ---

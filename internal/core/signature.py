@@ -14,7 +14,7 @@ def init_signature_auth_handler():
 
     _signature_auth_handler = SignatureAuthHandler(secret_key=settings.JWT_SECRET.get_secret_value())
 
-    logger.info("Signature Auth Handler initialized Successfully.")
+    logger.success("Signature Auth Handler initialized Successfully.")
 
 
 def get_signature_auth_handler() -> SignatureAuthHandler:

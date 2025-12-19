@@ -53,7 +53,7 @@ def init_db() -> None:
 
     # 3. 创建 SessionMaker
     _session_maker = new_async_session_maker(engine=_engine)
-    logger.info("Database connection initialized successfully.")
+    logger.success("Database connection initialized successfully.")
 
 
 async def close_db() -> None:
