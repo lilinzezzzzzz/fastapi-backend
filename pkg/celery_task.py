@@ -61,31 +61,55 @@ class CeleryClient:
         args: tuple | list | None = None,
         kwargs: dict | None = None,
         task_id: str | None = None,
+        queue: str | None = None,
+        priority: int | None = None,
         countdown: int | float | None = None,
         eta: datetime | None = None,
-        priority: int | None = None,
-        queue: str | None = None,
         **options: Any,
     ) -> AsyncResult:
         """
         提交异步任务 (Apply Async Wrapper)
+
+        :param task_name: 任务名称 (例如 "tasks.add")
+        :param args: 位置参数列表
+        :param kwargs: 关键字参数字典
+        :param task_id: 指定任务 ID，不填则自动生成 UUID
+        :param queue: 指定队列，不填则使用 CeleryClient 初始化时的默认队列
+        :param priority: 任务优先级 (0-9)
+        :param countdown: 倒计时执行（秒）
+        :param eta: 指定具体执行时间 (datetime)
+        :param options: 其他 Celery 支持的执行参数 (如 link, link_error, expires 等)
+        :return: AsyncResult
         """
+        # 1. 基础参数处理
         task_id = task_id or uuid()
         args = tuple(args) if args else ()
         kwargs = kwargs or {}
 
-        # 构造执行选项
-        exec_options = {
-            "task_id": task_id,
-            "countdown": countdown,
-            "eta": eta,
-            "priority": priority,
-            "queue": queue or self.queue,
-            **options,
-        }
+        # 2. 构造执行选项 (Execution Options)
+        # copy 防止修改传入的原始字典
+        exec_options = options.copy()
 
-        # 处理 Retry Policy 等特殊头部逻辑可在此处扩展...
+        # 3. 注入显式参数 (仅当参数不为 None 时才覆盖 options，确保显式参数优先级最高)
+        # 逻辑：Queue 优先使用传入值，否则使用实例默认值
+        target_queue = queue or self.queue
+        if target_queue:
+            exec_options["queue"] = target_queue
 
+        if priority is not None:
+            exec_options["priority"] = priority
+
+        if countdown is not None:
+            exec_options["countdown"] = countdown
+
+        if eta is not None:
+            exec_options["eta"] = eta
+
+        # 必须传入 task_id
+        exec_options["task_id"] = task_id
+
+        # 4. 发送任务
+        # 使用 self.app.send_task 确保绑定到当前实例配置的 Broker
         return self.app.send_task(name=task_name, args=args, kwargs=kwargs, **exec_options)
 
     def _inject_defaults(self, options: dict) -> dict:
