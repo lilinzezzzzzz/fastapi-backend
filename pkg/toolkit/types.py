@@ -145,13 +145,17 @@ def _parse_smart_datetime(v: Any) -> datetime:
 def _serialize_smart_datetime(v: datetime) -> str | None:
     """
     [输出处理] Python -> JSON (ISO String)
-    将 datetime 对象转为标准的 ISO 8601 字符串格式
-    如果是 naive datetime（无时区），默认作为 UTC 处理
+    将 datetime 对象转为标准的 ISO 8601 字符串格式（UTC 时间）
+    - 如果是 naive datetime（无时区），默认视为 UTC
+    - 如果带有时区信息，先转换为 UTC
     """
     if v is None:
         return None
-    # 如果是 naive datetime，默认作为 UTC 处理
-    if v.tzinfo is None:
+    # 如果带有时区信息，先转换为 UTC
+    if v.tzinfo is not None:
+        v = v.astimezone(UTC)
+    else:
+        # naive datetime 默认视为 UTC
         v = v.replace(tzinfo=UTC)
     # 返回标准 ISO 格式，例如: "2025-05-07T14:30:00+00:00"
     return v.isoformat()
