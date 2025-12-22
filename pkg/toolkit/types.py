@@ -116,12 +116,15 @@ SmartDecimal = Annotated[
 
 def _parse_smart_datetime(v: Any) -> datetime:
     """
-    [输入处理] Input -> Python (Naive datetime)
-    1. 接收 ISO 格式字符串 (如 "2023-01-01T12:00:00Z")
+    [输入处理] Input -> Python (Naive UTC datetime)
+    1. 接收 ISO 格式字符串 (如 "2023-01-01T12:00:00Z" 或 "2023-01-01T20:00:00+08:00")
     2. 接收 datetime 对象
-    3. 统一去除时区信息 (转为 Naive datetime)，方便内部无时区逻辑处理
+    3. 统一转换为 UTC 时间，再去除时区信息 (转为 Naive datetime)
     """
     if isinstance(v, datetime):
+        # 如果有时区信息，先转换到 UTC，再去除时区信息
+        if v.tzinfo is not None:
+            v = v.astimezone(UTC)
         return v.replace(tzinfo=None)
 
     if isinstance(v, str):
@@ -129,6 +132,9 @@ def _parse_smart_datetime(v: Any) -> datetime:
             # 兼容带 Z 或不带 Z 的 ISO 格式
             # (Python 3.11+ 原生支持 Z，这里保留 replace 是为了兼容性更强)
             dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
+            # 如果有时区信息，先转换到 UTC，再去除时区信息
+            if dt.tzinfo is not None:
+                dt = dt.astimezone(UTC)
             return dt.replace(tzinfo=None)
         except ValueError as e:
             raise ValueError(f"Invalid ISO 8601 datetime string: {v}") from e
