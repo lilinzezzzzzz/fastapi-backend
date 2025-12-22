@@ -1,14 +1,11 @@
 from typing import Annotated
 
-from fastapi import Depends
-
-from internal.dao.user import UserDao
+from internal.dao.user import UserDao, user_dao
 from internal.models.user import User
 
 
 class UserService:
-    # FastAPI 会自动处理这里的 Depends
-    def __init__(self, dao: Annotated[UserDao, Depends()]):
+    def __init__(self, dao: UserDao):
         self._user_dao = dao
 
     @staticmethod
@@ -21,4 +18,5 @@ class UserService:
 
 
 def new_user_service() -> UserService:
-    return UserService()
+    """Service 工厂函数，直接使用 dao 单例"""
+    return UserService(user_dao)
