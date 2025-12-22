@@ -202,6 +202,16 @@ class ModelMixin(Base):
             # update 方法会自动调用 _fill_ins_update_fields 处理 updated_at
             await self.update(session_provider, **{self.deleted_at_column_name(): utc_now_naive()})
 
+    async def restore(self, session_provider: SessionProvider) -> None:
+        """
+        [Soft Delete] 恢复已删除的对象
+        """
+        if self.has_deleted_at_column():
+            # 恢复时：
+            # 1. deleted_at 设为 None
+            # 2. update() 会自动将 updated_at 设为当前时间（符合逻辑，因为数据状态变了）
+            await self.update(session_provider, **{self.deleted_at_column_name(): None})
+
     # ==========================================================================
     # 字段补全辅助方法
     # ==========================================================================
