@@ -1,4 +1,4 @@
-import asyncio
+import anyio
 from pathlib import Path
 
 from celery import Celery
@@ -72,11 +72,18 @@ async def _worker_shutdown():
     [Shutdown Hook] Worker 进程关闭时执行：释放资源
     """
     logger.warning("Worker Process Stopping: Releasing resources...")
-    try:
-        # 并发关闭 DB 和 Redis，加快关闭速度
-        await asyncio.gather(close_redis(), close_db(), return_exceptions=True)
-    except Exception as e:
-        logger.error(f"Error during resource shutdown: {e}")
+
+    async def safe_close(close_func):
+        try:
+            await close_func()
+        except Exception as e:
+            logger.error(f"Error during resource shutdown: {e}")
+
+    # 并发关闭 DB 和 Redis，加快关闭速度
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(safe_close, close_redis)
+        tg.start_soon(safe_close, close_db)
+
     logger.warning("Worker Process Resources Released.")
 
 
