@@ -15,5 +15,6 @@ class UserService:
         return await self._user_dao.get_by_phone(phone)
 
 
-# Service 单例
-user_service = UserService(user_dao)
+def new_user_service() -> UserService:
+    """依赖注入函数，返回 Service 单例"""
+    return UserService(user_dao)
