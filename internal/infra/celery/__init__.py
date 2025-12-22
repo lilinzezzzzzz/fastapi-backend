@@ -114,7 +114,7 @@ celery_app: Celery = celery_client.app
 # =========================================================
 
 
-def init_celery():
+def check_celery_health():
     """
     在 FastAPI Lifespan 中调用。
     用于检查配置加载情况，或测试 Broker 连通性。
