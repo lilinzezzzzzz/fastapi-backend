@@ -5,7 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 
 from internal.config.load_config import settings
-from internal.core.exception import global_errors
+from internal.core.exception import errors
 from internal.core.logger import init_logger, logger
 from internal.core.signature import init_signature_auth_handler
 from internal.core.snowflake import init_snowflake_id_generator
@@ -53,7 +53,7 @@ def register_exception(app: FastAPI):
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(_: Request, exc: RequestValidationError):
         _record_log_error("Validation Error", repr(exc))
-        return error_response(error=global_errors.BadRequest, message=f"Validation Error: {exc}")
+        return error_response(error=errors.BadRequest, message=f"Validation Error: {exc}")
 
 
 def register_middleware(app: FastAPI):

@@ -7,7 +7,7 @@ import numpy as np
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
-from internal.core.exception import AppException, global_errors
+from internal.core.exception import AppException, errors
 from internal.infra.anyio_task import anyio_task_manager
 from pkg.async_logger import logger
 from pkg.response import success_response
@@ -25,7 +25,7 @@ async def test_raise_exception(_: Request):
 
 @router.get("/test_raise_app_exception", summary="测试APP异常")
 async def test_raise_app_exception():
-    raise AppException(global_errors.InternalServerError, detail="test_raise_app_exception")
+    raise AppException(errors.InternalServerError, detail="test_raise_app_exception")
 
 
 @router.get("/test_custom_response_class_basic_types", summary="测试自定义响应类-基本类型")

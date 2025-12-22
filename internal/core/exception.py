@@ -21,7 +21,7 @@ class GlobalErrors:
     InternalServerError = AppError(50000, {"zh": "服务器内部错误", "en": "Internal Server Error"})
 
 
-global_errors = GlobalErrors()
+errors = GlobalErrors()
 
 
 class AppException(Exception):
