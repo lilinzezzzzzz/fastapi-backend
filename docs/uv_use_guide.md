@@ -57,7 +57,8 @@ uv remove requests
 升级依赖：
 
 ```bash
-uv lock --upgrade-package pydantic
+uv lock --upgrade-package <包名>
+uv add --upgrade-package <包名>
 ```
 
 uv 会自动进行：
@@ -252,7 +253,6 @@ uv run pytest
 ```
 
 ---
-
 
 ```shell
 # 安装uv
