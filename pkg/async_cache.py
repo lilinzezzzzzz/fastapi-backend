@@ -2,8 +2,9 @@ import asyncio
 import functools
 import time
 import uuid
+from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
-from typing import Any, Callable, List, Optional
+from typing import Any
 
 from loguru import logger
 from redis.asyncio import Redis
@@ -13,6 +14,7 @@ SessionProvider = Callable[[], AbstractAsyncContextManager[Redis]]
 
 class RedisOperationError(Exception):
     """Redis 操作异常"""
+
     pass
 
 
@@ -31,9 +33,7 @@ def handle_redis_exception(func):
         except Exception as e:
             func_name = func.__name__
             logger.error(f"Redis error in '{func_name}': {repr(e)} | args: {args}")
-            raise RedisOperationError(
-                f"Redis error in '{func_name}': {repr(e)} | args: {args}"
-            ) from e
+            raise RedisOperationError(f"Redis error in '{func_name}': {repr(e)} | args: {args}") from e
 
     return wrapper
 
@@ -45,7 +45,7 @@ class CacheClient:
         self.session_provider = session_provider
 
     @handle_redis_exception
-    async def set_value(self, key: str, value: Any, ex: Optional[int] = None) -> bool:
+    async def set_value(self, key: str, value: Any, ex: int | None = None) -> bool:
         """设置键值对，可选过期时间（秒）"""
         async with self.session_provider() as redis:
             result = await redis.set(key, value, ex=ex)
@@ -97,7 +97,7 @@ class CacheClient:
             return await redis.hset(name, key, value)
 
     @handle_redis_exception
-    async def get_hash(self, name: str, key: str) -> Optional[str]:
+    async def get_hash(self, name: str, key: str) -> str | None:
         """获取哈希表中指定字段的值"""
         async with self.session_provider() as redis:
             value = await redis.hget(name, key)
@@ -116,7 +116,7 @@ class CacheClient:
             return await redis.rpush(name, value)
 
     @handle_redis_exception
-    async def get_list(self, name: str) -> List[str]:
+    async def get_list(self, name: str) -> list[str]:
         """
         获取列表所有值，并强制转换为字符串列表。
         """
@@ -128,7 +128,7 @@ class CacheClient:
             return [v.decode() if isinstance(v, bytes) else v for v in values]
 
     @handle_redis_exception
-    async def left_pop_list(self, name: str) -> Optional[str]:
+    async def left_pop_list(self, name: str) -> str | None:
         """从列表左侧弹出元素"""
         async with self.session_provider() as redis:
             value = await redis.lpop(name)
@@ -138,11 +138,11 @@ class CacheClient:
         """
         释放分布式锁。
         只有持有正确 identifier 的调用者才能释放锁。
-        
+
         Args:
             lock_key: 锁的键名
             identifier: 获取锁时返回的唯一标识符
-        
+
         Returns:
             True 表示成功释放，False 表示释放失败（锁不存在或不属于该 identifier）
         """
@@ -162,12 +162,12 @@ class CacheClient:
             return False
 
     async def acquire_lock(
-            self,
-            lock_key: str,
-            expire_ms: int = 10000,
-            timeout_ms: int = 5000,
-            retry_interval_ms: int = 100,
-    ) -> Optional[str]:
+        self,
+        lock_key: str,
+        expire_ms: int = 10000,
+        timeout_ms: int = 5000,
+        retry_interval_ms: int = 100,
+    ) -> str | None:
         """
         获取分布式锁。
 
@@ -189,9 +189,7 @@ class CacheClient:
             while (time.perf_counter() - start_time) < timeout_seconds:
                 async with self.session_provider() as redis:
                     # 使用 Redis 原生 SET NX PX 命令，比 Lua 脚本更简洁高效
-                    acquired = await redis.set(
-                        lock_key, identifier, nx=True, px=expire_ms
-                    )
+                    acquired = await redis.set(lock_key, identifier, nx=True, px=expire_ms)
 
                 if acquired:
                     return identifier
@@ -204,7 +202,7 @@ class CacheClient:
         return None
 
     @handle_redis_exception
-    async def batch_delete_keys(self, keys: List[str]) -> int:
+    async def batch_delete_keys(self, keys: list[str]) -> int:
         """批量删除键，返回成功删除的键数量"""
         if not keys:
             return 0
