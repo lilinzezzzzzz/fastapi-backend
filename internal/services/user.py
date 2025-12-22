@@ -5,7 +5,6 @@ from internal.models.user import User
 
 
 class UserService:
-
     @staticmethod
     async def get_user_by_phone(request: Request) -> User:
         # user_dao.querier(User).filter(User.id == 1).first()
@@ -13,4 +12,5 @@ class UserService:
         return user
 
 
-user_svc = UserService()
+async def new_user_service() -> UserService:
+    return UserService()
