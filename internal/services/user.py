@@ -1,5 +1,3 @@
-from typing import Annotated
-
 from internal.dao.user import UserDao, user_dao
 from internal.models.user import User
 
@@ -17,6 +15,5 @@ class UserService:
         return await self._user_dao.get_by_phone(phone)
 
 
-def new_user_service() -> UserService:
-    """Service 工厂函数，直接使用 dao 单例"""
-    return UserService(user_dao)
+# Service 单例
+user_service = UserService(user_dao)
