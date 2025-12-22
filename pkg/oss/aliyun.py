@@ -3,7 +3,7 @@ from pathlib import Path
 import anyio
 import oss2
 
-from pkg.oss import BaseStorage, StorageType, register_storage
+from pkg.oss.base import BaseStorage, StorageType, register_storage
 
 
 @register_storage(StorageType.ALIYUN)

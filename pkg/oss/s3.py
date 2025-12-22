@@ -5,7 +5,7 @@ import anyio
 import boto3
 from botocore.exceptions import ClientError
 
-from pkg.oss import BaseStorage, StorageType, register_storage
+from pkg.oss.base import BaseStorage, StorageType, register_storage
 
 
 @register_storage(StorageType.S3)
@@ -23,7 +23,7 @@ class S3Backend(BaseStorage):
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
             region_name=region,
-            endpoint_url=endpoint
+            endpoint_url=endpoint,
         )
 
     async def upload(self, file_obj, path: str, content_type: str = None) -> str:
@@ -65,9 +65,7 @@ class S3Backend(BaseStorage):
     async def generate_presigned_url(self, path: str, expiration: int = 3600) -> str:
         def _gen():
             return self.client.generate_presigned_url(
-                "get_object",
-                Params={"Bucket": self.bucket_name, "Key": path},
-                ExpiresIn=expiration
+                "get_object", Params={"Bucket": self.bucket_name, "Key": path}, ExpiresIn=expiration
             )
 
         return await anyio.to_thread.run_sync(_gen)
