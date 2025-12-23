@@ -187,7 +187,11 @@ class CountBuilder[T: ModelMixin](BaseBuilder[T]):
 
 class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
     def __init__(
-        self, *, model_cls: type[T] | None = None, model_ins: T | None = None, session_provider: SessionProvider
+        self,
+        *,
+        model_cls: type[T] | None = None,
+        model_ins: T | None = None,
+        session_provider: SessionProvider,
     ):
         target_cls = model_cls if model_cls is not None else model_ins.__class__
         super().__init__(target_cls, session_provider=session_provider)
@@ -196,7 +200,7 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
         if model_ins is not None:
             self._stmt = self._stmt.where(self._model_cls.id == model_ins.id)
 
-    def update(self, **kwargs) -> Self:
+    async def update(self, *, execute: bool = True, **kwargs) -> Self:
         for k, v in kwargs.items():
             if not self._model_cls.has_column(k):
                 logger.warning(f"{k} is not a {self._model_cls.__name__} column")
@@ -206,7 +210,12 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
                 v = v.replace(tzinfo=None)
 
             self._update_dict[k] = v
-        return self
+
+        if not execute:
+            return self
+
+        await self._execute()
+        return None
 
     def soft_delete(self) -> Self:
         if self._model_cls.has_deleted_at_column():
@@ -227,11 +236,14 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
         self._update_dict.setdefault(updated_col, utc_now_naive())
 
         if self._model_cls.has_updater_id_column():
-            self._update_dict.setdefault(self._model_cls.updater_id_column_name(), async_context.get_user_id())
+            self._update_dict.setdefault(
+                self._model_cls.updater_id_column_name(),
+                async_context.get_user_id(),
+            )
 
         return self._stmt.values(**self._update_dict).execution_options(synchronize_session=False)
 
-    async def execute(self):
+    async def _execute(self):
         if not self._update_dict:
             return
         try:
