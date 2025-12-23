@@ -214,13 +214,16 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
         if not execute:
             return self
 
-        await self._execute()
-        return None
+        return await self._execute()
 
-    def soft_delete(self) -> Self:
+    async def soft_delete(self, *, execute: bool = True) -> Self:
         if self._model_cls.has_deleted_at_column():
             self._update_dict[self._model_cls.deleted_at_column_name()] = utc_now_naive()
-        return self
+
+        if not execute:
+            return self
+
+        return await self._execute()
 
     @property
     def update_stmt(self) -> Update:
