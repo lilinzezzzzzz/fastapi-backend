@@ -249,6 +249,7 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
     async def _execute(self):
         if not self._update_dict:
             return
+
         try:
             async with self._session_provider() as sess:
                 await sess.execute(self.update_stmt)
