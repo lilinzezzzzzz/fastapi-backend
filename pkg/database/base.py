@@ -359,6 +359,3 @@ class ModelMixin(Base):
     @classmethod
     def get_creator_id_column(cls) -> InstrumentedAttribute | None:
         return cls.get_column_or_none(cls.creator_id_column_name())
-
-
-MixinModelType = TypeVar("MixinModelType", bound=ModelMixin)
