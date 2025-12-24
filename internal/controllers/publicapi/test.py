@@ -11,7 +11,7 @@ from internal.core.exception import AppException, errors
 from internal.infra.anyio_task import anyio_task_manager
 from pkg.async_logger import logger
 from pkg.response import success_response
-from pkg.toolkit.time import stream_with_chunk_control
+from pkg.toolkit.timer import stream_with_chunk_control
 
 router = APIRouter(prefix="/test", tags=["public v1 test"])
 

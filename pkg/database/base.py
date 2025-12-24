@@ -9,9 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, InstrumentedAttribute, Mapped, mapped_column
 
 from pkg import async_context
-from pkg.snowflake import snowflake_id_generator
+from pkg.toolkit.inter import snowflake_id_generator
 from pkg.toolkit.json import orjson_dumps, orjson_loads, orjson_loads_types
-from pkg.toolkit.time import utc_now_naive
+from pkg.toolkit.timer import utc_now_naive
 
 SessionProvider = Callable[..., AbstractAsyncContextManager[AsyncSession]]
 
