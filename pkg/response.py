@@ -49,6 +49,21 @@ class AppError(AppStatus):
 # =========================================================
 
 
+@dataclass
+class _ResponseBody:
+    """
+    统一响应体结构
+    """
+
+    code: int = 20000
+    message: str = ""
+    data: Any = None
+
+    def to_dict(self) -> dict:
+        """转换为字典，保留 None 值"""
+        return {"code": self.code, "message": self.message, "data": self.data}
+
+
 class CustomORJSONResponse(ORJSONResponse):
     """
     基于 orjson 的高性能响应类。
@@ -106,13 +121,10 @@ class ResponseFactory:
         *, code: int, data: Any = None, message: str = "", http_status: int = 200
     ) -> CustomORJSONResponse:
         """基础响应构造器"""
+        response_body = _ResponseBody(code=code, message=message, data=data)
         return CustomORJSONResponse(
             status_code=http_status,
-            content={
-                "code": code,
-                "message": message,
-                "data": data,
-            },
+            content=response_body.to_dict(),
         )
 
     @staticmethod
