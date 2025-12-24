@@ -115,7 +115,7 @@ class CustomORJSONResponse(ORJSONResponse):
 # =========================================================
 
 
-class ResponseFactory:
+class _ResponseFactory:
     @staticmethod
     def _make_response(
         *, code: int, data: Any = None, message: str = "", http_status: int = 200
@@ -200,7 +200,7 @@ class ResponseFactory:
 
 
 # 全局单例
-_response_factory = ResponseFactory()
+_response_factory = _ResponseFactory()
 
 
 # =========================================================
