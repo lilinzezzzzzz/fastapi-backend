@@ -26,7 +26,7 @@ class AppStatus:
 
     def get_msg(self, lang: str = "zh") -> str:
         """根据语言获取文案，默认回退到中文"""
-        return self.message.get(lang, None)
+        return self.message.get(lang) or self.message["zh"]
 
     def __repr__(self) -> str:
         return f"AppStatus(code={self.code}, message={self.message})"
