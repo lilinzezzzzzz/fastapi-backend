@@ -63,7 +63,7 @@ def register_middleware(app: FastAPI):
     app.add_middleware(GZipMiddleware)
 
     # 4. 认证中间件：校验 Token，确保只有合法用户访问 API
-    from internal.middleware.auth import ASGIAuthMiddleware
+    from internal.middlewares.auth import ASGIAuthMiddleware
 
     app.add_middleware(ASGIAuthMiddleware)
 
