@@ -1,4 +1,3 @@
-import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -48,7 +47,7 @@ def register_router(app: FastAPI):
 
 def register_exception(app: FastAPI):
     def _record_log_error(tag: str, err_desc: str):
-        logging.error(f"{tag}: {err_desc}")
+        logger.error(f"{tag}: {err_desc}")
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(_: Request, exc: RequestValidationError):
@@ -80,7 +79,7 @@ def register_middleware(app: FastAPI):
         )
 
     # 1. 日志中间件：记录请求和响应的日志，监控 API 性能和请求流
-    from internal.middleware.recorder import ASGIRecordMiddleware
+    from internal.middlewares import ASGIRecordMiddleware
 
     app.add_middleware(ASGIRecordMiddleware)
 
