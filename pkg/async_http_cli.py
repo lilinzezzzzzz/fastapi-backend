@@ -154,7 +154,7 @@ class AsyncHttpClient:
             logger.error(f"RequestError to {url}: {exc}")
             return RequestResult(status_code=0, error=f"Network Error: {exc}")
         except Exception as exc:
-            logger.exception(f"Unexpected Error in _request: {exc}")
+            logger.error(f"Unexpected Error in _request: {exc}")
             return RequestResult(status_code=500, error=f"Internal Error: {exc}")
 
     async def get(self, url: str, **kwargs) -> RequestResult:
@@ -187,10 +187,6 @@ class AsyncHttpClient:
         logger.info(f"Download file: {url} -> {save_path}")
 
         try:
-            # -------------------------------------------------------
-            # 【核心修复】：显式使用 method=... 和 url=...
-            # 解决 "形参 url 未填" 的歧义问题
-            # -------------------------------------------------------
             async with self._stream_context(
                 method="GET", url=url, params=params, headers=headers, timeout=timeout, raise_exception=False
             ) as response:
@@ -218,8 +214,7 @@ class AsyncHttpClient:
                 return True, ""
 
         except Exception as exc:
-            err_msg = f"Download process failed: {exc}"
-            logger.exception(err_msg)  # 建议加上日志记录，方便排查
+            logger.error(err_msg := f"Download process failed: {exc}")
             return False, err_msg
 
     async def stream_request(
