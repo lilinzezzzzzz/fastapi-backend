@@ -140,6 +140,9 @@ class LoggerManager:
         if not self._is_initialized:
             raise RuntimeError("LoggerManager is not initialized! Call setup() first.")
 
+        if not log_type:
+            raise ValueError(f"log_type cannot be empty, value={log_type}")
+
         # 定义该设备专属的过滤器 (闭包)
         # 这保证了即使添加多个 stderr sink，每个 sink 也只处理自己 device_id 的消息
         def _specific_filter(record):
