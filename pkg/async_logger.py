@@ -136,90 +136,75 @@ class LoggerManager:
     ) -> "loguru.Logger":
         """
         获取动态类型的 Logger。
+        使用实例属性 (self.rotation, self.retention 等) 创建新的 Sink。
+
+        :param log_type: 日志类型标识
+        :param write_to_console: 是否输出到控制台（仅针对该日志类型，不会重复输出）
+        :param save_json: 文件是否使用 JSON 格式
         """
         if not self._is_initialized:
             raise RuntimeError("LoggerManager is not initialized! Call setup() first.")
 
         if not log_type:
-            raise ValueError(f"log_type cannot be empty, value={log_type}")
+            raise ValueError(f"log_type cannot be empty, value = {log_type}")
 
         # 定义该设备专属的过滤器 (闭包)
-        # 这保证了即使添加多个 stderr sink，每个 sink 也只处理自己 device_id 的消息
+        # 这保证了即使添加多个 stderr sink，每个 sink 也只处理自己 log_type 的消息
         def _specific_filter(record):
-            return record["extra"].get("type") == log_type
+            return record["extra"].get("log_type") == log_type
 
-        # 1. 检查是否已注册
-        if log_type in self._registered_types:
-            existing_config = self._registered_types[log_type]
+        # 获取或初始化配置
+        if log_type not in self._registered_types:
+            self._registered_types[log_type] = {
+                "formats": set(),  # 已注册的格式: "json", "text"
+                "write_to_console": False,
+            }
 
-            # 检查 save_json 不一致
-            if (existing_save_json := existing_config.get("save_json")) != save_json:
-                self._logger.warning(
-                    f"Log log_type '{log_type}' registered with different save_json: "
-                    f"registered={existing_save_json}, requested={save_json}."
-                )
+        config = self._registered_types[log_type]
+        format_key = "json" if save_json else "text"
 
-            # 检查是否需要补充添加 console sink
-            existing_console = existing_config.get("write_to_console", False)
+        # 1. 检查并添加文件 Sink
+        if format_key not in config["formats"]:
+            try:
+                # 根据格式决定文件名后缀
+                suffix = ".json" if save_json else ".log"
+                self._ensure_dir(log_dir := self.base_log_dir / log_type)
+                sink_path = log_dir / f"{{time:YYYY-MM-DD}}{suffix}"
 
-            # 如果请求写入控制台，且之前未注册控制台，则添加
-            if write_to_console and not existing_console:
+                log_format = self._json_formatter if save_json else self._file_formatter
+
                 self._logger.add(
-                    sink=sys.stderr,
-                    format=self._console_formatter,
+                    sink=sink_path,
                     level=self.level,
+                    rotation=self.rotation,
+                    retention=self.retention,
+                    compression=self.compression,
                     enqueue=self.enqueue,
-                    colorize=True,
-                    diagnose=True,
-                    filter=_specific_filter,  # 独立的过滤器
-                )
-                self._registered_types[log_type]["write_to_console"] = True
-                self._logger.info(f"System: Added console sink for device_id '{log_type}'")
-
-            return self._logger.bind(log_type=log_type)
-
-        # 2. 注册新的 Sink
-        try:
-            # 2.1 注册文件 Sink
-            self._ensure_dir(log_dir := self.base_log_dir / log_type)
-            sink_path = log_dir / "{time:YYYY-MM-DD}.log"
-
-            log_format = self._json_formatter if save_json else self._file_formatter
-
-            self._logger.add(
-                sink=sink_path,
-                level=self.level,
-                rotation=self.rotation,
-                retention=self.retention,
-                compression=self.compression,
-                enqueue=self.enqueue,
-                format=log_format,
-                serialize=False,
-                filter=_specific_filter,
-            )
-
-            # 2.2 注册控制台 Sink
-            # 只要该设备需要控制台输出，就添加一个带有 _specific_filter 的 sink
-            if write_to_console:
-                self._logger.add(
-                    sink=sys.stderr,
-                    format=self._console_formatter,
-                    level=self.level,
-                    enqueue=self.enqueue,
-                    colorize=True,
-                    diagnose=True,
+                    format=log_format,
+                    serialize=False,
                     filter=_specific_filter,
                 )
 
-            self._registered_types[log_type] = {
-                "save_json": save_json,
-                "write_to_console": write_to_console,
-            }
-            self._logger.info(f"System: Registered new log sink for device_id '{log_type}'")
+                config["formats"].add(format_key)
+                self._logger.info(f"System: Registered {format_key} sink for log_type '{log_type}'")
 
-        except Exception as e:
-            self._logger.error(f"System: Failed to register sink for '{log_type}'. Error: {e}")
-            return self._logger.bind(log_type=self.SYSTEM_LOG_TYPE, original_type=log_type)
+            except Exception as e:
+                self._logger.error(f"System: Failed to register {format_key} sink for '{log_type}'. Error: {e}")
+                return self._logger.bind(log_type=self.SYSTEM_LOG_TYPE, original_type=log_type)
+
+        # 2. 检查并添加控制台 Sink
+        if write_to_console and not config["write_to_console"]:
+            self._logger.add(
+                sink=sys.stderr,
+                format=self._console_formatter,
+                level=self.level,
+                enqueue=self.enqueue,
+                colorize=True,
+                diagnose=True,
+                filter=_specific_filter,
+            )
+            config["write_to_console"] = True
+            self._logger.info(f"System: Added console sink for log_type '{log_type}'")
 
         return self._logger.bind(log_type=log_type)
 
