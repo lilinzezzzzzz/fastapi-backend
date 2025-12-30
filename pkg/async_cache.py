@@ -1,13 +1,13 @@
 import asyncio
 import functools
 import time
-import uuid
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 from typing import Any
 
-from loguru import logger
 from redis.asyncio import Redis
+
+from pkg.toolkit.string import uuid6_unique_id
 
 SessionProvider = Callable[[], AbstractAsyncContextManager[Redis]]
 
@@ -31,9 +31,7 @@ def handle_redis_exception(func):
             # 已经是 RedisOperationError，直接抛出避免重复包装
             raise
         except Exception as e:
-            func_name = func.__name__
-            logger.error(f"Redis error in '{func_name}': {repr(e)} | args: {args}")
-            raise RedisOperationError(f"Redis error in '{func_name}': {repr(e)} | args: {args}") from e
+            raise RedisOperationError(f"Redis error in '{func.__name__}': {repr(e)} | args: {args}") from e
 
     return wrapper
 
@@ -144,9 +142,11 @@ class CacheClient:
             identifier: 获取锁时返回的唯一标识符
 
         Returns:
-            True 表示成功释放，False 表示释放失败（锁不存在或不属于该 identifier）
+            True 表示成功释放，False 表示锁不存在或不属于该 identifier
+
+        Raises:
+            RedisOperationError: Redis 操作失败时抛出
         """
-        # 修复 Lua 脚本语法：else 和 return 需要在正确的格式
         unlock_script = """
         if redis.call('GET', KEYS[1]) == ARGV[1] then
             return redis.call('DEL', KEYS[1])
@@ -158,8 +158,7 @@ class CacheClient:
                 result = await redis.eval(unlock_script, 1, lock_key, identifier)
             return bool(result)
         except Exception as e:
-            logger.error(f"Failed to release lock {lock_key}: {repr(e)}")
-            return False
+            raise RedisOperationError(f"Failed to release lock {lock_key}: {e}") from e
 
     async def acquire_lock(
         self,
@@ -167,7 +166,7 @@ class CacheClient:
         expire_ms: int = 10000,
         timeout_ms: int = 5000,
         retry_interval_ms: int = 100,
-    ) -> str | None:
+    ) -> str:
         """
         获取分布式锁。
 
@@ -178,9 +177,13 @@ class CacheClient:
             retry_interval_ms: 重试间隔（毫秒），默认 100ms
 
         Returns:
-            成功返回锁的唯一标识符（用于释放锁），失败返回 None
+            成功返回锁的唯一标识符（用于释放锁）
+
+        Raises:
+            RedisOperationError: 获取锁超时或 Redis 操作失败时抛出
         """
-        identifier = uuid.uuid4().hex
+
+        identifier = uuid6_unique_id()
         start_time = time.perf_counter()
         timeout_seconds = timeout_ms / 1000
         retry_interval_seconds = retry_interval_ms / 1000
@@ -196,10 +199,9 @@ class CacheClient:
 
                 await asyncio.sleep(retry_interval_seconds)
         except Exception as e:
-            logger.error(f"Error acquiring lock {lock_key}: {repr(e)}")
-            return None
+            raise RuntimeError(f"Error acquiring lock {lock_key}: {e}") from e
 
-        return None
+        raise RedisOperationError(f"Timeout acquiring lock {lock_key}")
 
     @handle_redis_exception
     async def batch_delete_keys(self, keys: list[str]) -> int:
