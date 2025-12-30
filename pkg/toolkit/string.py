@@ -10,7 +10,7 @@ import uuid6
 import xxhash
 
 
-def uuid6_unique_id() -> str:
+def uuid6_unique_str_id() -> str:
     """
     使用 Snowflake 算法生成唯一 ID。
     """

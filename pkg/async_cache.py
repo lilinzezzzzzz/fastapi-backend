@@ -7,7 +7,7 @@ from typing import Any
 
 from redis.asyncio import Redis
 
-from pkg.toolkit.string import uuid6_unique_id
+from pkg.toolkit.string import uuid6_unique_str_id
 
 SessionProvider = Callable[[], AbstractAsyncContextManager[Redis]]
 
@@ -183,7 +183,7 @@ class CacheClient:
             RedisOperationError: 获取锁超时或 Redis 操作失败时抛出
         """
 
-        identifier = uuid6_unique_id()
+        identifier = uuid6_unique_str_id()
         start_time = time.perf_counter()
         timeout_seconds = timeout_ms / 1000
         retry_interval_seconds = retry_interval_ms / 1000
