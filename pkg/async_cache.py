@@ -199,9 +199,9 @@ class CacheClient:
 
                 await asyncio.sleep(retry_interval_seconds)
         except Exception as e:
-            raise RuntimeError(f"Error acquiring lock {lock_key}: {e}") from e
+            raise RedisOperationError(f"Error acquiring lock {lock_key}: {e}") from e
 
-        raise RedisOperationError(f"Timeout acquiring lock {lock_key}")
+        raise RedisOperationError(f"Timeout acquiring lock {lock_key}, timeout_ms: {timeout_ms}")
 
     @handle_redis_exception
     async def batch_delete_keys(self, keys: list[str]) -> int:
