@@ -1,6 +1,6 @@
 import datetime
 from decimal import Decimal
-from typing import Any, TypeAlias
+from typing import Any
 
 import orjson
 
