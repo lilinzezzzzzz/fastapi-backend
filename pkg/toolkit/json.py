@@ -1,4 +1,5 @@
 import datetime
+import math
 from decimal import Decimal
 from typing import Any
 
@@ -30,27 +31,38 @@ def _enhanced_default_handler(obj: Any) -> Any:
     增强版 Fallback 处理函数。
     集中处理 orjson 原生不支持的类型，确保系统各处序列化行为一致。
     """
-    # 1. 处理小数：兼顾精度与前端兼容性
+    # 1. 处理 Decimal：需特殊处理 NaN/Infinity 和 精度问题
     if isinstance(obj, Decimal):
+        # [新增] 优先处理非数(NaN)和无穷大(Infinity)
+        # 前端 JSON.parse 无法处理这些值，强制转为 null (Python None)
+        if obj.is_nan() or obj.is_infinite():
+            return None
+
         # 如果是小数且在 JS 安全整数/浮点数范围内(-1e15 ~ 1e15)且精度不过高，转 float
         # 否则转 str 避免前端精度丢失
         if is_safe_float_range(obj):
             return float(obj)
         return str(obj)
 
-    # 2. 处理二进制：尝试解码，避免直接崩溃
+    # 2. 处理标准 float 的特殊值 (通常 orjson 会自动处理 float，但如果 obj 包装在自定义对象中可能进入此逻辑)
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+
+    # 3. 处理二进制：尝试解码，避免直接崩溃
     if isinstance(obj, bytes):
         return obj.decode("utf-8", "ignore")
 
-    # 3. 处理时间间隔
+    # 4. 处理时间间隔
     if isinstance(obj, datetime.timedelta):
         return obj.total_seconds()
 
-    # 4. 处理集合
+    # 5. 处理集合
     if isinstance(obj, (set, frozenset)):
         return list(obj)
 
-    # 5. 必须显式抛出异常
+    # 6. 必须显式抛出异常
     raise TypeError(f"Type {type(obj)} is not JSON serializable")
 
 

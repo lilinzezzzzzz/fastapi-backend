@@ -322,28 +322,22 @@ class TestFastAPIIntegration:
 
     def test_handling_invalid_numbers(self):
         """测试 NaN/Infinity 的处理 (Robustness)"""
-        import math
-
-        # 逻辑修正：
-        # 真正的健壮性意味着系统遇到脏数据(NaN)时应该"降级处理"而不是"直接崩溃(500)"。
-        # orjson 在某些配置下会将 NaN 序列化为 null，或者输出 NaN (非标准JSON但部分解析器支持)。
-        # 既然实际返回了 200，说明序列化成功，这是符合高可用要求的。
+        # 逻辑验证：
+        # 我们在 pkg/toolkit/json.py 中强制将 NaN/Infinity 映射为 None。
+        # 因此，这里必须严格断言结果为 None (JSON null)，
+        # 任何形式的 NaN/Inf 都不应传递给前端。
 
         resp = client.get("/api/nan")
 
-        # 1. 断言服务未崩溃
+        # 1. 确保服务正常响应
         assert resp.status_code == 200
 
         body = resp.json()
         val = body["data"]["val"]
 
-        # 2. 断言数据被安全处理
-        # 最佳实践：前端通常无法处理 NaN，后端应将其转为 None (JSON null)
-        # 或者是 Python 的 float('nan') (如果 TestClient 解析了非标准 JSON)
-        is_none = val is None
-        is_nan = isinstance(val, float) and math.isnan(val)
-
-        assert is_none or is_nan, f"NaN value was not handled safely, got: {val}"
+        # 2. 严格断言：必须被转换为 None
+        # 如果这里变成了 float('nan') 或字符串 "NaN"，说明 handler 逻辑未生效，属于 Bug
+        assert val is None, f"Expected invalid number to be converted to None (JSON null), but got type: {type(val)} value: {val}"
 
 
 if __name__ == "__main__":
