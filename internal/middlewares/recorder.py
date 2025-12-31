@@ -6,8 +6,8 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from internal.core.exception import AppException, errors, get_last_exec_tb
 from internal.core.logger import logger
-from pkg import async_context
 from pkg.response import error_response
+from pkg.toolkit import context
 
 
 class ASGIRecordMiddleware:
@@ -70,6 +70,5 @@ class ASGIRecordMiddleware:
                     # 使用 Starlette Response 对象来帮助我们发送 ASGI 消息 (比手写容易)
                     await error_resp(scope, receive, send)
                 else:
-                    logger.error(
-                        f"Response already started, cannot send 500 error response for trace_id={trace_id}")
+                    logger.error(f"Response already started, cannot send 500 error response for trace_id={trace_id}")
                     pass

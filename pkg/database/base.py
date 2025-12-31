@@ -2,13 +2,13 @@ from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, TypeVar
+from typing import Any
 
 from sqlalchemy import BigInteger, DateTime, Executable, Insert, insert, inspect
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, InstrumentedAttribute, Mapped, mapped_column
 
-from pkg import async_context
+from pkg.toolkit import context
 from pkg.toolkit.inter import snowflake_id_generator
 from pkg.toolkit.json import orjson_dumps, orjson_loads, orjson_loads_types
 from pkg.toolkit.timer import utc_now_naive
