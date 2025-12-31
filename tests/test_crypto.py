@@ -5,10 +5,9 @@ from pkg.async_hasher import PasswordHasher
 from pkg.crypto import (
     AESCipher,
     EncryptionAlgorithm,
-    aes_decrypt,
-    aes_encrypt,
     get_crypto_class,
 )
+from pkg.crypto.aes import aes_decrypt, aes_encrypt
 
 
 @pytest.fixture
