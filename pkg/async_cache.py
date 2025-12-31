@@ -1,5 +1,6 @@
 import asyncio
 import functools
+import json
 import time
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
@@ -7,6 +8,7 @@ from typing import Any
 
 from redis.asyncio import Redis
 
+from pkg.toolkit.json import orjson_dumps, orjson_loads
 from pkg.toolkit.string import uuid6_unique_str_id
 
 SessionProvider = Callable[[], AbstractAsyncContextManager[Redis]]
@@ -60,6 +62,40 @@ class CacheClient:
                 return value.decode("utf-8")
 
             return value
+
+    @handle_redis_exception
+    async def set_dict(self, key: str, value: dict, ex: int | None = None) -> bool:
+        """设置字典类型的值，自动 JSON 序列化"""
+        json_str = orjson_dumps(value)
+        return await self.set_value(key, json_str, ex=ex)
+
+    @handle_redis_exception
+    async def get_dict(self, key: str) -> dict | None:
+        """获取字典类型的值，自动 JSON 反序列化"""
+        value = await self.get_value(key)
+        if value is None:
+            return None
+        try:
+            return orjson_loads(value)
+        except json.JSONDecodeError as e:
+            raise RedisOperationError(f"Failed to decode dict from key '{key}': {e}") from e
+
+    @handle_redis_exception
+    async def set_list(self, key: str, value: list, ex: int | None = None) -> bool:
+        """设置列表类型的值，自动 JSON 序列化"""
+        json_str = orjson_dumps(value)
+        return await self.set_value(key, json_str, ex=ex)
+
+    @handle_redis_exception
+    async def get_list_value(self, key: str) -> list | None:
+        """获取列表类型的值，自动 JSON 反序列化"""
+        value = await self.get_value(key)
+        if value is None:
+            return None
+        try:
+            return orjson_loads(value)
+        except json.JSONDecodeError as e:
+            raise RedisOperationError(f"Failed to decode list from key '{key}': {e}") from e
 
     @handle_redis_exception
     async def delete_key(self, key: str) -> int:
