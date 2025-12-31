@@ -256,6 +256,12 @@ class TestSuccessResponse:
         assert isinstance(response, CustomORJSONResponse)
         assert response.status_code == 200
 
+        # 验证响应体结构
+        body = orjson_loads(response.body)
+        assert body["code"] == 20000
+        assert body["message"] == ""
+        assert body["data"] == {"key": "value"}
+
     def test_success_with_none(self):
         """测试 None 数据响应"""
         response = success_response(data=None)
@@ -263,11 +269,19 @@ class TestSuccessResponse:
         assert isinstance(response, CustomORJSONResponse)
         assert response.status_code == 200
 
+        body = orjson_loads(response.body)
+        assert body["code"] == 20000
+        assert body["data"] is None
+
     def test_success_with_list(self):
         """测试列表数据响应"""
         response = success_response(data=[1, 2, 3])
 
         assert isinstance(response, CustomORJSONResponse)
+
+        body = orjson_loads(response.body)
+        assert body["code"] == 20000
+        assert body["data"] == [1, 2, 3]
 
     def test_success_with_pydantic_model(self):
         """测试 Pydantic 模型响应"""
@@ -276,12 +290,20 @@ class TestSuccessResponse:
 
         assert isinstance(response, CustomORJSONResponse)
 
+        body = orjson_loads(response.body)
+        assert body["code"] == 20000
+        assert body["data"] == {"id": 1, "name": "test"}
+
     def test_success_with_pydantic_list(self):
         """测试 Pydantic 模型列表响应"""
         users = [UserSchema(id=1, name="user1"), UserSchema(id=2, name="user2")]
         response = success_response(data=users)
 
         assert isinstance(response, CustomORJSONResponse)
+
+        body = orjson_loads(response.body)
+        assert body["code"] == 20000
+        assert body["data"] == [{"id": 1, "name": "user1"}, {"id": 2, "name": "user2"}]
 
     def test_success_with_invalid_type(self):
         """测试无效类型抛出异常"""
@@ -298,12 +320,33 @@ class TestSuccessListResponse:
 
         assert isinstance(response, CustomORJSONResponse)
 
+        # 验证分页响应体结构
+        body = orjson_loads(response.body)
+        assert body["code"] == 20000
+        assert body["data"]["items"] == [1, 2, 3]
+        assert body["data"]["page"] == 1
+        assert body["data"]["limit"] == 10
+        assert body["data"]["total"] == 100
+
     def test_list_response_with_pydantic(self):
         """测试 Pydantic 模型列表分页响应"""
         users = [UserSchema(id=1, name="user1")]
         response = success_list_response(data=users, page=1, limit=10, total=1)
 
         assert isinstance(response, CustomORJSONResponse)
+
+        body = orjson_loads(response.body)
+        assert body["code"] == 20000
+        assert body["data"]["items"] == [{"id": 1, "name": "user1"}]
+        assert body["data"]["total"] == 1
+
+    def test_list_response_empty(self):
+        """测试空列表分页响应"""
+        response = success_list_response(data=[], page=1, limit=10, total=0)
+
+        body = orjson_loads(response.body)
+        assert body["data"]["items"] == []
+        assert body["data"]["total"] == 0
 
     def test_list_response_invalid_items(self):
         """测试无效 items 类型抛出异常"""
@@ -322,6 +365,12 @@ class TestErrorResponse:
         assert isinstance(response, CustomORJSONResponse)
         assert response.status_code == 200
 
+        # 验证错误响应体结构
+        body = orjson_loads(response.body)
+        assert body["code"] == 40000
+        assert body["message"] == "请求参数错误"
+        assert body["data"] is None
+
     def test_error_response_with_message(self):
         """测试带自定义消息的错误响应"""
         error = AppError(40000, {"zh": "请求参数错误", "en": "Bad Request"})
@@ -329,12 +378,29 @@ class TestErrorResponse:
 
         assert isinstance(response, CustomORJSONResponse)
 
+        body = orjson_loads(response.body)
+        assert body["code"] == 40000
+        assert body["message"] == "请求参数错误: 字段缺失"
+
     def test_error_response_with_lang(self):
         """测试英文错误响应"""
         error = AppError(40000, {"zh": "请求参数错误", "en": "Bad Request"})
         response = error_response(error, lang="en")
 
         assert isinstance(response, CustomORJSONResponse)
+
+        body = orjson_loads(response.body)
+        assert body["code"] == 40000
+        assert body["message"] == "Bad Request"
+
+    def test_error_response_with_lang_and_message(self):
+        """测试英文错误响应带自定义消息"""
+        error = AppError(40000, {"zh": "请求参数错误", "en": "Bad Request"})
+        response = error_response(error, message="field missing", lang="en")
+
+        body = orjson_loads(response.body)
+        assert body["code"] == 40000
+        assert body["message"] == "Bad Request: field missing"
 
 
 # =========================================================
@@ -443,6 +509,143 @@ class TestCustomORJSONResponse:
         assert "decimal" in parsed
         assert "datetime" in parsed
         assert "uuid" in parsed
+
+
+# =========================================================
+# 6. 前端响应完整性测试
+# =========================================================
+
+
+class TestFrontendResponseIntegrity:
+    """测试响应能够正确返回给前端"""
+
+    def test_response_structure_completeness(self):
+        """测试响应结构完整性 - 必须包含 code, message, data"""
+        response = success_response(data={"test": 1})
+        body = orjson_loads(response.body)
+
+        # 验证必要字段存在
+        assert "code" in body
+        assert "message" in body
+        assert "data" in body
+
+    def test_response_content_type(self):
+        """测试响应 Content-Type"""
+        response = success_response(data={})
+        assert response.media_type == "application/json"
+
+    def test_response_encoding_utf8(self):
+        """测试响应 UTF-8 编码，支持中文"""
+        response = success_response(data={"name": "张三", "msg": "你好世界"})
+        body = orjson_loads(response.body)
+
+        assert body["data"]["name"] == "张三"
+        assert body["data"]["msg"] == "你好世界"
+
+    def test_response_special_characters(self):
+        """测试特殊字符处理"""
+        data = {
+            "quotes": 'He said "Hello"',
+            "backslash": "path\\to\\file",
+            "newline": "line1\nline2",
+            "emoji": "😀🎉",
+        }
+        response = success_response(data=data)
+        body = orjson_loads(response.body)
+
+        assert body["data"]["quotes"] == 'He said "Hello"'
+        assert body["data"]["emoji"] == "😀🎉"
+
+    def test_response_large_integer_precision(self):
+        """测试大整数精度保留"""
+        large_int = 2**53 + 1  # 超过 JS 安全整数
+        response = success_response(data={"id": large_int})
+        body = orjson_loads(response.body)
+
+        # 整数应该保持精度
+        assert body["data"]["id"] == large_int
+
+    def test_response_decimal_conversion(self):
+        """测试 Decimal 转换为前端可用格式"""
+        response = success_response(
+            data={
+                "price": Decimal("99.99"),
+                "high_precision": Decimal("0.12345678901234567890"),
+            }
+        )
+        body = orjson_loads(response.body)
+
+        # 安全范围内转 float
+        assert body["data"]["price"] == 99.99
+        # 高精度转 string
+        assert isinstance(body["data"]["high_precision"], str)
+
+    def test_response_datetime_format(self):
+        """测试日期时间格式化为 ISO 字符串"""
+        dt = datetime(2023, 12, 25, 10, 30, 0)
+        response = success_response(data={"created_at": dt})
+        body = orjson_loads(response.body)
+
+        # 日期应该是字符串格式
+        assert isinstance(body["data"]["created_at"], str)
+        assert "2023-12-25" in body["data"]["created_at"]
+
+    def test_response_nested_pydantic_model(self):
+        """测试嵌套 Pydantic 模型序列化"""
+
+        class Address(BaseModel):
+            city: str
+            street: str
+
+        class Person(BaseModel):
+            name: str
+            address: Address
+
+        person = Person(name="李四", address=Address(city="北京", street="长安街"))
+        response = success_response(data=person)
+        body = orjson_loads(response.body)
+
+        assert body["data"]["name"] == "李四"
+        assert body["data"]["address"]["city"] == "北京"
+        assert body["data"]["address"]["street"] == "长安街"
+
+    def test_response_mixed_list(self):
+        """测试混合类型列表"""
+        data = [
+            {"type": "user", "id": 1},
+            {"type": "order", "id": 2},
+        ]
+        response = success_response(data=data)
+        body = orjson_loads(response.body)
+
+        assert len(body["data"]) == 2
+        assert body["data"][0]["type"] == "user"
+        assert body["data"][1]["type"] == "order"
+
+    def test_error_response_message_format(self):
+        """测试错误响应消息格式"""
+        error = AppError(50000, {"zh": "服务器内部错误", "en": "Internal Server Error"})
+        response = error_response(error, message="数据库连接失败")
+        body = orjson_loads(response.body)
+
+        assert body["code"] == 50000
+        assert "服务器内部错误" in body["message"]
+        assert "数据库连接失败" in body["message"]
+
+    def test_list_response_pagination_structure(self):
+        """测试分页响应结构完整性"""
+        items = [{"id": i, "name": f"item{i}"} for i in range(5)]
+        response = success_list_response(data=items, page=2, limit=5, total=25)
+        body = orjson_loads(response.body)
+
+        assert body["code"] == 20000
+        assert "data" in body
+        assert "items" in body["data"]
+        assert "page" in body["data"]
+        assert "limit" in body["data"]
+        assert "total" in body["data"]
+        assert len(body["data"]["items"]) == 5
+        assert body["data"]["page"] == 2
 
 
 if __name__ == "__main__":
