@@ -1,13 +1,10 @@
-import datetime
 from dataclasses import dataclass
-from decimal import Decimal
 from typing import Any
 
-import orjson
 from fastapi.responses import ORJSONResponse
 from pydantic import BaseModel
 
-from pkg.toolkit.json import orjson_dumps
+from pkg.toolkit.json import orjson_dumps, orjson_dumps_bytes
 
 # =========================================================
 # 1. 定义状态码结构与全局状态码
@@ -67,47 +64,22 @@ class _ResponseBody:
 class CustomORJSONResponse(ORJSONResponse):
     """
     基于 orjson 的高性能响应类。
-    优化点：移除手动递归，仅在 default 回调中处理特殊类型。
+
+    Architecture Note:
+        序列化逻辑已下沉至 `pkg.toolkit.json`，确保 Worker 任务与 Web 接口
+        使用完全一致的序列化标准（如 Decimal 和 Numpy 的处理）。
     """
 
-    SERIALIZER_OPTIONS = (
-        orjson.OPT_SERIALIZE_NUMPY
-        | orjson.OPT_SERIALIZE_UUID
-        | orjson.OPT_NAIVE_UTC
-        | orjson.OPT_UTC_Z
-        | orjson.OPT_OMIT_MICROSECONDS
-        | orjson.OPT_NON_STR_KEYS
-    )
+    media_type = "application/json"
 
     def render(self, content: Any) -> bytes:
-        def default_serializer(obj: Any) -> Any:
-            """
-            仅处理 orjson 原生不支持的类型
-            """
-            if isinstance(obj, Decimal):
-                # 如果是小数且在浮点数安全范围内(-1e15 ~ 1e15)，转 float；否则转 str 避免精度丢失
-                return float(obj) if -1e15 < obj < 1e15 and obj.as_tuple().exponent >= -6 else str(obj)
-
-            if isinstance(obj, bytes):
-                return obj.decode("utf-8", "ignore")
-
-            if isinstance(obj, datetime.timedelta):
-                return obj.total_seconds()
-
-            if isinstance(obj, (set, frozenset)):
-                return list(obj)
-
-            # 注意：orjson 原生支持 int，大整数处理建议在 Pydantic model 层解决
-            raise TypeError(f"Type {type(obj)} not serializable")
-
-        try:
-            return orjson.dumps(
-                content,
-                option=self.SERIALIZER_OPTIONS,
-                default=default_serializer,
-            )
-        except Exception as e:
-            raise ValueError(f"JSON serialization failed: {e}") from e
+        """
+        覆写 render 方法。
+        直接返回 bytes，避免 Starlette 内部再次进行 .encode('utf-8')。
+        """
+        # 无需 try-catch，工具函数内部已处理并抛出清洗后的 ValueError，
+        # 框架的 ExceptionHandler 会捕获它。
+        return orjson_dumps_bytes(content)
 
 
 # =========================================================
