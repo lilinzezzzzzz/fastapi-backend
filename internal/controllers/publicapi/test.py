@@ -1,9 +1,5 @@
 import asyncio
-import uuid
-from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 
-import numpy as np
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
@@ -26,94 +22,6 @@ async def test_raise_exception(_: Request):
 @router.get("/test_raise_app_exception", summary="测试APP异常")
 async def test_raise_app_exception():
     raise AppException(errors.InternalServerError, detail="test_raise_app_exception")
-
-
-@router.get("/test_custom_response_class_basic_types", summary="测试自定义响应类-基本类型")
-async def test_custom_response_class_basic_types(_: Request):
-    return success_response(
-        data={
-            "large_int": 2**53 + 1,  # 超过JS安全整数
-            "normal_int": 42,
-            "float_num": 3.1415926535,
-            "boolean": True,
-            "none_value": None,
-        }
-    )
-
-
-@router.get("/test_custom_response_class_containers", summary="测试自定义响应类-容器类型")
-async def test_custom_response_class_containers(_: Request):
-    return success_response(
-        data=[
-            {"set_data": {1, 2, 3}},  # 集合转列表
-            (4, 5, 6),  # 元组转列表
-            [datetime(2023, 1, 1), datetime(2023, 1, 1, tzinfo=UTC)],
-        ]
-    )
-
-
-@router.get("/test_custom_response_class_nested", summary="测试自定义响应类-嵌套结构")
-async def test_custom_response_class_nested(_: Request):
-    return success_response(
-        data={
-            "level1": {
-                "level2": [
-                    {
-                        "mixed_types": [
-                            Decimal("999.999"),
-                            {uuid.uuid4(): datetime.now()},
-                            [2**60, {"deep": True}],
-                        ]
-                    }
-                ]
-            }
-        }
-    )
-
-
-@router.get("/test_custom_response_class_third_party", summary="测试自定义响应类-第三方库")
-async def test_custom_response_class_third_party(_: Request):
-    return success_response(
-        data={
-            "numpy_array": np.array([1.1, 2.2, 3.3]),  # NumPy数组
-            "numpy_int": np.int64(2**63 - 1),
-        }
-    )
-
-
-@router.get("/test_custom_response_class_edge_cases", summary="测试自定义响应类-边缘情况")
-async def test_custom_response_class_edge_cases(_: Request):
-    return success_response(
-        data={
-            "numpy_array": np.array([1.1, 2.2, 3.3]),  # NumPy数组
-            "numpy_int": np.int64(2**63 - 1),  # int64 最大值
-        }
-    )
-
-
-@router.get("/test_custom_response_class_complex", summary="测试自定义响应类-复杂情况")
-async def test_custom_response_class_complex(_: Request):
-    return success_response(
-        data={
-            "empty_dict": {},
-            "empty_list": [],
-            "zero": Decimal("0.000000"),
-            "max_precision": Decimal("0.12345678901234567890123456789"),
-        }
-    )
-
-
-@router.get("/test_custom_response_class_special_types", summary="测试自定义响应类-特殊类型")
-async def test_custom_response_class_special_types(_: Request):
-    return success_response(
-        data={
-            "decimal": Decimal("123.4567890123456789"),
-            "bytes": b"\x80abc\xff",
-            "datetime_naive": datetime.now(),
-            "big_int": 2**60,
-            "timedelta": timedelta(days=1, seconds=3600),
-        }
-    )
 
 
 async def async_task():
