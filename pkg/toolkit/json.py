@@ -4,6 +4,8 @@ from typing import Any, TypeAlias
 
 import orjson
 
+from pkg.toolkit.float import is_safe_float_range
+
 # === Configuration ===
 # 综合了 AI 场景与 Web 响应的最佳实践选项：
 # 1. OPT_SERIALIZE_NUMPY: 原生支持 numpy (AI 核心)
@@ -32,7 +34,7 @@ def _enhanced_default_handler(obj: Any) -> Any:
     if isinstance(obj, Decimal):
         # 如果是小数且在 JS 安全整数/浮点数范围内(-1e15 ~ 1e15)且精度不过高，转 float
         # 否则转 str 避免前端精度丢失
-        if -1e15 < obj < 1e15 and obj.as_tuple().exponent >= -6:
+        if is_safe_float_range(obj):
             return float(obj)
         return str(obj)
 

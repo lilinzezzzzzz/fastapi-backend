@@ -5,6 +5,8 @@ from typing import Annotated, Any
 
 from pydantic import BeforeValidator, PlainSerializer, WithJsonSchema
 
+from pkg.toolkit.float import is_safe_float_range
+
 # JavaScript 安全整数最大值 (2^53 - 1)
 JS_MAX_SAFE_INTEGER = 9007199254740991
 
@@ -89,7 +91,7 @@ def _serialize_smart_decimal(v: Decimal) -> float | str:
     """
     # 获取指数 (decimal 的 exponent 为负数表示小数位，例如 0.01 是 -2)
     # 注意：Decimal(10).as_tuple().exponent 是 0
-    if -1e15 < v < 1e15 and v.as_tuple().exponent >= -6:
+    if is_safe_float_range(v):
         return float(v)
     return str(v)
 
