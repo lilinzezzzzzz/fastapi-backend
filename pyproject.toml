@@ -84,6 +84,7 @@ dev = [
     "types-redis",
     "types-pytz",
     "pandas-stubs>=2.3.3.251201",
+    "twisted>=25.5.0",
 ]
 
 # CI 构建相关工具（可选，按需添加）

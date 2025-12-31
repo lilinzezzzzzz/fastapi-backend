@@ -648,6 +648,324 @@ class TestFrontendResponseIntegrity:
         assert body["data"]["page"] == 2
 
 
+# =========================================================
+# 7. TestClient 模拟前端请求测试
+# =========================================================
+
+from decimal import Decimal as Dec  # noqa: E402
+
+from fastapi import FastAPI  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+
+from pkg.toolkit.response import CustomORJSONResponse, success_list_response, success_response  # noqa: E402
+
+# 创建测试用 FastAPI 应用（使用下划线前缀避免 pytest 收集）
+_app = FastAPI(default_response_class=CustomORJSONResponse)
+
+
+@_app.get("/test/basic")
+async def test_basic_endpoint():
+    """基本类型测试接口"""
+    return success_response(
+        data={
+            "string": "hello",
+            "int": 42,
+            "float": 3.14,
+            "bool": True,
+            "null": None,
+        }
+    )
+
+
+@_app.get("/test/chinese")
+async def test_chinese_endpoint():
+    """中文内容测试接口"""
+    return success_response(data={"name": "张三", "message": "你好世界", "emoji": "😀🎉"})
+
+
+@_app.get("/test/decimal")
+async def test_decimal_endpoint():
+    """测试 Decimal 序列化"""
+    return success_response(
+        data={
+            "price": Dec("99.99"),
+            "high_precision": Dec("0.12345678901234567890"),
+            "large": Dec("1e16"),
+        }
+    )
+
+
+@_app.get("/test/datetime")
+async def test_datetime_endpoint():
+    """测试日期时间序列化"""
+    from datetime import datetime, timedelta
+
+    return success_response(
+        data={
+            "created_at": datetime(2023, 12, 25, 10, 30, 0),
+            "duration": timedelta(hours=2, minutes=30),
+        }
+    )
+
+
+@_app.get("/test/uuid")
+async def test_uuid_endpoint():
+    """测试 UUID 序列化"""
+    import uuid
+
+    return success_response(data={"id": uuid.UUID("550e8400-e29b-41d4-a716-446655440000")})
+
+
+@_app.get("/test/nested")
+async def test_nested_endpoint():
+    """测试嵌套结构"""
+    return success_response(
+        data={
+            "user": {
+                "profile": {
+                    "name": "李四",
+                    "age": 25,
+                    "tags": ["python", "fastapi"],
+                }
+            }
+        }
+    )
+
+
+@_app.get("/test/list")
+async def test_list_endpoint():
+    """测试列表响应"""
+    return success_response(data=[{"id": 1, "name": "item1"}, {"id": 2, "name": "item2"}])
+
+
+@_app.get("/test/pagination")
+async def test_pagination_endpoint():
+    """测试分页响应"""
+    items = [{"id": i, "title": f"Article {i}"} for i in range(1, 6)]
+    return success_list_response(data=items, page=1, limit=5, total=100)
+
+
+@_app.get("/test/pydantic")
+async def test_pydantic_endpoint():
+    """测试 Pydantic 模型响应"""
+
+    class UserModel(BaseModel):
+        id: int
+        name: str
+        email: str
+
+    user = UserModel(id=1, name="王五", email="wangwu@example.com")
+    return success_response(data=user)
+
+
+@_app.get("/test/error")
+async def test_error_endpoint():
+    """测试错误响应"""
+    from pkg.toolkit.response import AppError, error_response
+
+    error = AppError(40001, {"zh": "未授权，请登录", "en": "Unauthorized"})
+    return error_response(error, message="token 已过期")
+
+
+@_app.get("/test/special_chars")
+async def test_special_chars_endpoint():
+    """测试特殊字符"""
+    return success_response(
+        data={
+            "quotes": 'He said "Hello"',
+            "backslash": "C:\\Users\\test",
+            "newline": "line1\nline2",
+            "tab": "col1\tcol2",
+        }
+    )
+
+
+@_app.get("/test/large_int")
+async def test_large_int_endpoint():
+    """测试大整数"""
+    return success_response(
+        data={
+            "safe_int": 9007199254740991,  # JS MAX_SAFE_INTEGER
+            "large_int": 2**53 + 1,  # 超过 JS 安全范围
+            "snowflake_id": 1234567890123456789,
+        }
+    )
+
+
+# 创建 TestClient
+client = TestClient(_app)
+
+
+class TestClientSimulation:
+    """使用 TestClient 模拟前端请求测试"""
+
+    def test_basic_types_request(self):
+        """测试基本类型请求"""
+        response = client.get("/test/basic")
+
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/json"
+
+        data = response.json()
+        assert data["code"] == 20000
+        assert data["message"] == ""
+        assert data["data"]["string"] == "hello"
+        assert data["data"]["int"] == 42
+        assert data["data"]["float"] == 3.14
+        assert data["data"]["bool"] is True
+        assert data["data"]["null"] is None
+
+    def test_chinese_content_request(self):
+        """测试中文内容请求"""
+        response = client.get("/test/chinese")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["data"]["name"] == "张三"
+        assert data["data"]["message"] == "你好世界"
+        assert data["data"]["emoji"] == "😀🎉"
+
+    def test_decimal_serialization_request(self):
+        """测试 Decimal 序列化请求"""
+        response = client.get("/test/decimal")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # 安全范围内的 Decimal 转为 float
+        assert data["data"]["price"] == 99.99
+        # 高精度 Decimal 转为字符串
+        assert isinstance(data["data"]["high_precision"], str)
+        # 超范围 Decimal 转为字符串
+        assert isinstance(data["data"]["large"], str)
+
+    def test_datetime_serialization_request(self):
+        """测试日期时间序列化请求"""
+        response = client.get("/test/datetime")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # datetime 转为 ISO 格式字符串
+        assert isinstance(data["data"]["created_at"], str)
+        assert "2023-12-25" in data["data"]["created_at"]
+        # timedelta 转为秒数
+        assert data["data"]["duration"] == 9000  # 2.5 小时 = 9000 秒
+
+    def test_uuid_serialization_request(self):
+        """测试 UUID 序列化请求"""
+        response = client.get("/test/uuid")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["data"]["id"] == "550e8400-e29b-41d4-a716-446655440000"
+
+    def test_nested_structure_request(self):
+        """测试嵌套结构请求"""
+        response = client.get("/test/nested")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["data"]["user"]["profile"]["name"] == "李四"
+        assert data["data"]["user"]["profile"]["age"] == 25
+        assert data["data"]["user"]["profile"]["tags"] == ["python", "fastapi"]
+
+    def test_list_response_request(self):
+        """测试列表响应请求"""
+        response = client.get("/test/list")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["code"] == 20000
+        assert len(data["data"]) == 2
+        assert data["data"][0]["id"] == 1
+        assert data["data"][1]["name"] == "item2"
+
+    def test_pagination_response_request(self):
+        """测试分页响应请求"""
+        response = client.get("/test/pagination")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["code"] == 20000
+        assert "items" in data["data"]
+        assert "page" in data["data"]
+        assert "limit" in data["data"]
+        assert "total" in data["data"]
+        assert data["data"]["page"] == 1
+        assert data["data"]["limit"] == 5
+        assert data["data"]["total"] == 100
+        assert len(data["data"]["items"]) == 5
+
+    def test_pydantic_model_request(self):
+        """测试 Pydantic 模型请求"""
+        response = client.get("/test/pydantic")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["code"] == 20000
+        assert data["data"]["id"] == 1
+        assert data["data"]["name"] == "王五"
+        assert data["data"]["email"] == "wangwu@example.com"
+
+    def test_error_response_request(self):
+        """测试错误响应请求"""
+        response = client.get("/test/error")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["code"] == 40001
+        assert "未授权" in data["message"]
+        assert "token 已过期" in data["message"]
+        assert data["data"] is None
+
+    def test_special_chars_request(self):
+        """测试特殊字符请求"""
+        response = client.get("/test/special_chars")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["data"]["quotes"] == 'He said "Hello"'
+        assert data["data"]["backslash"] == "C:\\Users\\test"
+        assert data["data"]["newline"] == "line1\nline2"
+        assert data["data"]["tab"] == "col1\tcol2"
+
+    def test_large_int_request(self):
+        """测试大整数请求"""
+        response = client.get("/test/large_int")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["data"]["safe_int"] == 9007199254740991
+        assert data["data"]["large_int"] == 2**53 + 1
+        assert data["data"]["snowflake_id"] == 1234567890123456789
+
+    def test_response_headers(self):
+        """测试响应头"""
+        response = client.get("/test/basic")
+
+        assert response.headers["content-type"] == "application/json"
+
+    def test_response_body_structure(self):
+        """测试响应体结构完整性"""
+        response = client.get("/test/basic")
+        data = response.json()
+
+        # 验证必须包含的三个字段
+        assert "code" in data
+        assert "message" in data
+        assert "data" in data
+
+
 if __name__ == "__main__":
     # 允许直接运行此文件调试
     sys.exit(pytest.main(["-s", "-v", "--log-cli-level=INFO", __file__]))
