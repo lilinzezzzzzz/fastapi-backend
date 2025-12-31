@@ -11,7 +11,7 @@ from internal.core.snowflake import init_snowflake_id_generator
 from internal.infra.anyio_task import close_anyio_task_handler, init_anyio_task_handler
 from internal.infra.database import close_db, init_db
 from internal.infra.redis import close_redis, init_redis
-from pkg.response import error_response
+from pkg.toolkit.response import error_response
 
 
 def create_app() -> FastAPI:

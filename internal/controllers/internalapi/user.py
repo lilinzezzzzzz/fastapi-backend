@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request
 
-from pkg.response import success_response
+from pkg.toolkit.response import success_response
 
 router = APIRouter(prefix="/user", tags=["internal v1 user"])
 

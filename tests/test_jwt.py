@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 import jwt as pyjwt
 import pytest
 
-from pkg.jwt import JWTHandler
+from pkg.toolkit.jwt import JWTHandler
 
 
 @pytest.fixture

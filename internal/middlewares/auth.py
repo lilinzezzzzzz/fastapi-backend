@@ -5,8 +5,8 @@ from internal.core.auth import verify_token
 from internal.core.exception import errors
 from internal.core.signature import signature_auth_handler
 from pkg.async_logger import logger
-from pkg.response import error_response
 from pkg.toolkit.context import set_user_id
+from pkg.toolkit.response import error_response
 
 # 转换成 set 查询更快
 auth_token_white = {
