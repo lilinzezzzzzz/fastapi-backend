@@ -1,5 +1,3 @@
-import traceback
-
 from pkg.toolkit.response import AppError
 
 
@@ -25,21 +23,15 @@ errors = GlobalErrors()
 
 
 class AppException(Exception):
-    def __init__(self, error: AppError, detail: str = ""):
+    def __init__(self, error: AppError, message: str = ""):
         """
         自定义 HTTP 异常，支持任意状态码，不受 http.HTTPStatus 限制。
 
         :param error: AppError
-        :param detail: 详细信息，可以是字符串或字典
+        :param message: 详细信息，可以是字符串或字典
         """
         self.error = error
-        self.detail = detail
+        self.message = message
 
-    def __str__(self):
-        return f"AppException: error={self.error}, detail={self.detail}"
-
-
-def get_last_exec_tb(exc: Exception, lines: int = 5) -> str:
-    tb_lines = traceback.format_exception(type(exc), exc, exc.__traceback__)
-    last_5_lines = tb_lines[-lines:] if len(tb_lines) >= lines else tb_lines
-    return "\n".join(last_5_lines).strip()
+    def __repr__(self):
+        return f"AppException(error={self.error}, message={self.message})"

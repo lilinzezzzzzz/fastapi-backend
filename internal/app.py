@@ -9,8 +9,8 @@ from internal.core.logger import init_logger, logger
 from internal.core.signature import init_signature_auth_handler
 from internal.core.snowflake import init_snowflake_id_generator
 from internal.infra.anyio_task import close_anyio_task_handler, init_anyio_task_handler
-from internal.infra.database import close_db, init_db
-from internal.infra.redis import close_redis, init_redis
+from internal.infra.database import close_async_db, init_async_db
+from internal.infra.redis import close_async_redis, init_async_redis
 from pkg.toolkit.response import error_response
 
 
@@ -90,9 +90,9 @@ async def lifespan(_app: FastAPI):
     # 初始化日志
     init_logger()
     # 初始化 DB
-    init_db()
+    init_async_db()
     # 初始化 Redis
-    init_redis()
+    init_async_redis()
     # 初始化签名认证
     init_signature_auth_handler()
     # 初始化 Snowflake ID Generator
@@ -105,7 +105,7 @@ async def lifespan(_app: FastAPI):
     yield
 
     # 关闭时的清理逻辑
-    await close_db()
-    await close_redis()
+    await close_async_db()
+    await close_async_redis()
     await close_anyio_task_handler()
     logger.warning("Application is about to close.")

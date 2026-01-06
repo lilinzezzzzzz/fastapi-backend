@@ -6,8 +6,8 @@ from celery.schedules import crontab
 
 from internal.config.load_config import settings
 from internal.core.logger import init_logger, logger
-from internal.infra.database import close_db, init_db
-from internal.infra.redis import close_redis, init_redis
+from internal.infra.database import close_async_db, init_async_db
+from internal.infra.redis import close_async_redis, init_async_redis
 from pkg.async_celery import CeleryClient
 
 # =========================================================
@@ -59,8 +59,8 @@ def _worker_startup():
     logger.info(">>> Worker Process Starting: Initializing resources...")
     try:
         # 2. 初始化数据库和 Redis
-        init_db()
-        init_redis()
+        init_async_db()
+        init_async_redis()
         logger.success("Worker Process Resources Initialized successfully.")
     except Exception as e:
         logger.critical(f"Worker resource initialization failed: {e}")
@@ -81,8 +81,8 @@ async def _worker_shutdown():
 
     # 并发关闭 DB 和 Redis，加快关闭速度
     async with anyio.create_task_group() as tg:
-        tg.start_soon(safe_close, close_redis)
-        tg.start_soon(safe_close, close_db)
+        tg.start_soon(safe_close, close_async_redis)
+        tg.start_soon(safe_close, close_async_db)
 
     logger.warning("Worker Process Resources Released.")
 
@@ -133,6 +133,35 @@ def check_celery_health():
     except Exception as e:
         # 即使连不上也不要阻断 API 启动，只是记录错误，因为 Worker 是独立进程
         logger.error(f"Celery Broker connection failed: {e}")
+
+
+def run_in_async(coro_func: Callable[[], Coroutine[None, None, T]]) -> T:
+    """
+    在 Celery 同步任务中执行异步代码。
+    """
+    # from app.utils.redis import reset_async_redis, init_async_redis, close_async_redis
+
+    # 1. 重置旧的连接池
+    reset_async_db()
+    reset_async_redis()
+
+    # 修改 _wrapper 接收参数
+    async def _wrapper(target_func: Callable[[], Coroutine[None, None, T]]) -> T:
+        # 2. 在新事件循环中初始化
+        init_async_db()
+        init_async_redis()
+
+        try:
+            # 3. 执行业务逻辑 (使用传入的 target_func)
+            return await target_func()
+        finally:
+            # 4. 清理连接
+            await close_async_db()
+            await close_async_redis()
+
+    # 5. 使用 anyio.run 执行，并将 coro_func 作为参数传递
+    # 这样 args 就变成了 (coro_func,)，不再为空
+    return anyio.run(_wrapper, coro_func)
 
 
 """

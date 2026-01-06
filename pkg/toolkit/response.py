@@ -21,15 +21,12 @@ class AppStatus:
     code: int
     message: dict[str, str]
 
-    def get_msg(self, lang: str = "zh") -> str:
+    def get_message(self, lang: str = "zh") -> str:
         """根据语言获取文案，默认回退到中文"""
         return self.message.get(lang) or self.message["zh"]
 
-    def __repr__(self) -> str:
-        return f"AppStatus(code={self.code}, message={self.message})"
 
-
-success_status = AppStatus(20000, {"zh": "", "en": ""})
+success_status = AppStatus(20000, {"zh": "", "en": "success"})
 
 
 @dataclass(frozen=True)
@@ -38,7 +35,8 @@ class AppError(AppStatus):
     专门用于表示应用错误的子类 (继承自 AppStatus)
     """
 
-    pass  # AppError 继承了 AppStatus 的所有属性和方法
+    def __repr__(self) -> str:
+        return f"(code={self.code}, message={self.message})"
 
 
 # =========================================================
@@ -160,7 +158,7 @@ class _ResponseFactory:
             lang: 语言代码 ('zh', 'en')，默认为 'zh'
         """
         # 1. 获取预定义的错误信息 (例如 "请求参数错误")
-        base_msg = error.get_msg(lang)
+        base_msg = error.get_message(lang)
 
         # 2. 拼接逻辑
         if message:

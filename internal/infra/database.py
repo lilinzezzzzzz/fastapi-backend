@@ -23,7 +23,7 @@ _session_maker: async_sessionmaker[AsyncSession] | None = None
 # ---------------------- 1. 生命周期管理 ----------------------
 
 
-def init_db() -> None:
+def init_async_db() -> None:
     """
     初始化数据库连接池。
     应在 FastAPI lifespan 或 Celery worker_process_init 中调用。
@@ -56,12 +56,25 @@ def init_db() -> None:
     logger.success("Database connection initialized successfully.")
 
 
-async def close_db() -> None:
+async def close_async_db() -> None:
     """关闭数据库连接池"""
     global _engine, _session_maker
     if _engine:
         await _engine.dispose()
         logger.warning("Database connection disposed.")
+    _engine = None
+    _session_maker = None
+
+
+def reset_async_db() -> None:
+    """
+    重置数据库连接池（同步版本）。
+    用于 Celery 任务中使用 asyncio.run/anyio.run 创建新事件循环前，
+    先清理旧的连接池，避免事件循环绑定冲突。
+
+    注意：此函数不会异步关闭连接，仅重置全局变量。
+    """
+    global _engine, _session_maker
     _engine = None
     _session_maker = None
 

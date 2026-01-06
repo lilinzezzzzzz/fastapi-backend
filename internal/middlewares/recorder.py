@@ -4,8 +4,9 @@ import uuid
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from internal.core.exception import AppException, errors, get_last_exec_tb
+from internal.core.exception import AppException, errors
 from internal.core.logger import logger
+from pkg.toolkit.exc import get_last_exec_tb
 from pkg.toolkit.response import error_response
 
 
@@ -62,7 +63,7 @@ class ASGIRecordMiddleware:
                 logger.error(f"Unhandled exception, exc={get_last_exec_tb(exc)}")
                 if not response_started:
                     if isinstance(exc, AppException):
-                        error_resp = error_response(error=exc.error, message=exc.detail)
+                        error_resp = error_response(error=exc.error, message=exc.message)
                     else:
                         error_resp = error_response(error=errors.InternalServerError, message=f"{exc}")
 

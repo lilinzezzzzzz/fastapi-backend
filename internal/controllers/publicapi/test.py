@@ -21,7 +21,7 @@ async def test_raise_exception(_: Request):
 
 @router.get("/test_raise_app_exception", summary="测试APP异常")
 async def test_raise_app_exception():
-    raise AppException(errors.InternalServerError, detail="test_raise_app_exception")
+    raise AppException(errors.InternalServerError, message="test_raise_app_exception")
 
 
 async def async_task():

@@ -15,7 +15,7 @@ _redis_client: Redis | None = None
 _cache: CacheClient | None = None
 
 
-def init_redis() -> None:
+def init_async_redis() -> None:
     """
     初始化 Redis 连接池。
     应在 FastAPI lifespan 或 Celery worker_process_init 中调用。
@@ -45,7 +45,7 @@ def init_redis() -> None:
     logger.success("Redis initialized successfully.")
 
 
-async def close_redis() -> None:
+async def close_async_redis() -> None:
     """关闭 Redis 连接"""
     global _redis_client, _redis_pool, _cache
 
