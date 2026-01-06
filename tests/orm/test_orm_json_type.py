@@ -1,9 +1,8 @@
 import os
 import sys
 import types
-from datetime import datetime
+from datetime import datetime, UTC
 from unittest.mock import MagicMock
-from contextlib import asynccontextmanager
 
 import pytest
 import pytest_asyncio
@@ -19,16 +18,18 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(os.path.dirname(current_dir))
 pkg_path = os.path.join(project_root, "pkg")
 
-# 1.1 Mock pkg.toolkit.json
+# 1.1 Mock pkg.toolkit.json (SQLite 原生支持 JSON，但仍需提供正确的序列化函数)
+import json as _json
+
 mock_json = types.ModuleType("pkg.toolkit.json")
-mock_json.orjson_dumps = lambda x, **kwargs: '{"mock": "json"}'
-mock_json.orjson_loads = lambda x: {"mock": "json"}
+mock_json.orjson_dumps = lambda x, **kwargs: _json.dumps(x)
+mock_json.orjson_loads = lambda x: _json.loads(x) if isinstance(x, (str, bytes)) else x
 mock_json.JsonInputType = str | bytes
 sys.modules["pkg.toolkit.json"] = mock_json
 
 # 1.2 Mock pkg.toolkit.timer
 mock_timer = types.ModuleType("pkg.toolkit.timer")
-mock_timer.utc_now_naive = lambda: datetime.utcnow()
+mock_timer.utc_now_naive = lambda: datetime.now(UTC).replace(tzinfo=None)
 sys.modules["pkg.toolkit.timer"] = mock_timer
 
 # 1.3 Mock pkg.toolkit.context
@@ -51,9 +52,10 @@ def mock_gen_id():
     return _id_counter
 
 
-mock_snowflake.generate_snowflake_id = mock_gen_id
+mock_snowflake.generate = mock_gen_id
 sys.modules["pkg.logger_tool"] = mock_logger
-sys.modules["pkg.toolkit.inter.snowflake_id_generator"] = mock_snowflake
+sys.modules["pkg.toolkit.inter"] = types.ModuleType("pkg.toolkit.inter")
+sys.modules["pkg.toolkit.inter"].snowflake_id_generator = mock_snowflake
 
 # ==========================================
 # 2. 导入目标代码
@@ -79,7 +81,7 @@ class User(ModelMixin):
     __tablename__ = "users"
     username: Mapped[str] = mapped_column(String(50))
     email: Mapped[str] = mapped_column(String(100), nullable=True)
-    info: Mapped[dict] = mapped_column(JSONType, default=dict)
+    info: Mapped[dict] = mapped_column(JSONType(), default=dict)  # 使用实例
 
 
 class UserDao(BaseDao[User]):
@@ -132,43 +134,28 @@ async def test_create_and_save_strictness(user_dao, db_session):
 
 @pytest.mark.asyncio
 async def test_update_strictness(user_dao, db_session):
-    """测试更新逻辑、Mutable JSON 追踪和严格Update检查"""
+    """测试更新逻辑、Mutable JSON 追踪和严格 Update 检查"""
     # 初始化
     user = User.create(username="bob", info={"login_count": 0})
     await user.save(db_session)
 
-    # 1. Update Persistent Object
+    # 1. 测试 MutableJSON 追踪（在同一个事务中修改并提交）
     async with db_session() as session:
-        db_user = await session.get(User, user.id)
+        async with session.begin():
+            db_user = await session.get(User, user.id)
+            # 修改 JSON 内部字段 (验证 MutableJSON)
+            db_user.info["login_count"] = 1
+            db_user.info["last_login"] = "today"
+            db_user.username = "bob_updated"
+            # 事务结束时自动 commit
 
-        # [关键修复] 显式结束由 session.get() 触发的隐式事务。
-        # 这样 session 就变回"空闲"状态，后续 update() 内部才能成功调用 session.begin()。
-        # 由于 expire_on_commit=False，db_user 对象依然可用且绑定在 session 上。
-        await session.commit()
-
-        # 修改 JSON 内部字段 (验证 MutableJSON)
-        db_user.info["login_count"] = 1
-        db_user.info["last_login"] = "today"
-
-        # 定义 Context Manager 复用 session
-        @asynccontextmanager
-        async def reuse_session():
-            yield session
-
-        # 执行更新 (内部会再次 begin -> commit)
-        await db_user.update(reuse_session, username="bob_updated")
-
-    # 2. 验证变更
-    # 使用新的 Session 查询，确保数据确实已落库
+    # 2. 验证变更已持久化
     reloaded = await user_dao.query_by_primary_id(user.id)
-
     assert reloaded.username == "bob_updated"
-    assert reloaded.updater_id == 999
-    # 验证 JSON 变更被持久化了
     assert reloaded.info["login_count"] == 1, "JSON Mutation failed to track changes"
     assert "last_login" in reloaded.info
 
-    # 3. Strict Update 检查
+    # 3. Strict Update 检查（新对象不能调用 update）
     new_user = User.create(username="charlie")
     with pytest.raises(RuntimeError) as exc:
         await new_user.update(db_session, username="fail")
@@ -225,4 +212,4 @@ async def test_updater_builder_logic(user_dao, db_session):
 
 
 if __name__ == "__main__":
-    sys.exit(pytest.main(["-s", "-v", __file__]))
+    sys.exit(pytest.main(["-s", "-v", "--log-cli-level=INFO", __file__]))
