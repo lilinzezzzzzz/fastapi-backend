@@ -80,10 +80,6 @@ class JSONType(TypeDecorator):
 
     @property
     def python_type(self):
-        """
-        [关键修复] 显式告诉 SQLAlchemy 这个类型在 Python 侧是 dict/list。
-        否则 impl=Text 会让 SA 误以为它是 str，导致 MutableDict 校验失败。
-        """
         return dict
 
     def load_dialect_impl(self, dialect: Dialect):
@@ -96,7 +92,9 @@ class JSONType(TypeDecorator):
             return dialect.type_descriptor(sqlite.JSON())
         elif dialect.name == "oracle":
             if self.oracle_native_json:
-                return dialect.type_descriptor(oracle.JSON())
+                # 使用 getattr 避免旧版 SA 报错
+                oracle_json_type = getattr(oracle, "JSON", SA_JSON)
+                return dialect.type_descriptor(oracle_json_type())
             else:
                 return dialect.type_descriptor(oracle.CLOB())
         else:
