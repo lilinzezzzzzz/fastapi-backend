@@ -241,7 +241,7 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
         if self._model_cls.has_updater_id_column():
             self._update_dict.setdefault(
                 self._model_cls.updater_id_column_name(),
-                async_context.get_user_id(),
+                context.get_user_id(),
             )
 
         return self._stmt.values(**self._update_dict).execution_options(synchronize_session=False)

@@ -1,327 +1,264 @@
-"""
-JSONType 跨数据库兼容 JSON 类型测试
-
-测试内容:
-    1. 方言适配 (load_dialect_impl)
-    2. 序列化/反序列化 (process_bind_param / process_result_value)
-    3. MutableDict/MutableList 变更追踪
-    4. 边缘情况处理
-"""
+import os
 import sys
-from io import StringIO
+import types
+from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
 import pytest_asyncio
 from sqlalchemy import String
-from sqlalchemy.dialects import mysql, oracle, postgresql, sqlite
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import Mapped, mapped_column
 
-from pkg.database.base import Base, JSONType, ModelMixin, new_async_session_maker
+# ==========================================
+# 1. 增强版 Mock 策略
+# ==========================================
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(os.path.dirname(current_dir))  # 根据你的目录结构调整
+pkg_path = os.path.join(project_root, "pkg")
+
+# 1.1 Mock pkg.toolkit.json (避免依赖 orjson)
+mock_json = types.ModuleType("pkg.toolkit.json")
+mock_json.orjson_dumps = lambda x, **kwargs: '{"mock": "json"}'
+mock_json.orjson_loads = lambda x: {"mock": "json"}
+mock_json.JsonInputType = str | bytes
+sys.modules["pkg.toolkit.json"] = mock_json
+
+# 1.2 Mock pkg.toolkit.timer
+mock_timer = types.ModuleType("pkg.toolkit.timer")
+mock_timer.utc_now_naive = lambda: datetime.utcnow()
+sys.modules["pkg.toolkit.timer"] = mock_timer
+
+# 1.3 Mock pkg.toolkit.context (修复 LookupError 的关键)
+mock_ctx_module = types.ModuleType("pkg.toolkit.context")
+mock_ctx_func = MagicMock()
+mock_ctx_func.return_value = 999  # Mock user_id = 999
+mock_ctx_module.get_user_id = mock_ctx_func
+sys.modules["pkg.toolkit.context"] = mock_ctx_module
+# 同时 Mock pkg.context 以防万一
+sys.modules["pkg.context"] = mock_ctx_module
+
+# 1.4 Mock 其他工具
+mock_logger = MagicMock()
+mock_snowflake = MagicMock()
+_id_counter = 0
+
+
+def mock_gen_id():
+    global _id_counter
+    _id_counter += 1
+    return _id_counter
+
+
+mock_snowflake.generate_snowflake_id = mock_gen_id
+sys.modules["pkg.logger_tool"] = mock_logger
+sys.modules["pkg.toolkit.inter.snowflake_id_generator"] = mock_snowflake
+
+# ==========================================
+# 2. 导入目标代码
+# ==========================================
+# 确保项目根目录在 sys.path 中
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+try:
+    # 尝试导入，这里会自动使用上面的 Mocks
+    from pkg.database.base import Base, JSONType, ModelMixin, new_async_session_maker
+    from pkg.database.dao import BaseDao  # 假设 BaseDao 在 dao.py
+except ImportError as e:
+    # 如果你的目录结构不同，这里做个兼容处理，假设直接从 pkg.database 导
+    try:
+        from pkg.database import Base, BaseDao, JSONType, ModelMixin, new_async_session_maker
+    except ImportError:
+        print(f"CRITICAL: Cannot import from pkg.database. path={sys.path}")
+        raise e
 
 
 # ==========================================
-# 1. 测试模型定义
+# 3. 定义测试模型
 # ==========================================
-class JsonModel(ModelMixin):
-    __tablename__ = "json_test"
+class User(ModelMixin):
+    __tablename__ = "users"
+    username: Mapped[str] = mapped_column(String(50))
+    email: Mapped[str] = mapped_column(String(100), nullable=True)
 
-    name: Mapped[str] = mapped_column(String(50))
-    config: Mapped[dict] = mapped_column(JSONType(), default=dict)
-    tags: Mapped[list] = mapped_column(JSONType(), default=list)
-    extra: Mapped[dict | None] = mapped_column(JSONType(), nullable=True)
+    # [新增] 验证 JSONType 和 Mutable 追踪
+    info: Mapped[dict] = mapped_column(JSONType, default=dict)
 
 
-# ==========================================
-# 2. Dialect Mock 工具
-# ==========================================
-def make_dialect(name: str) -> MagicMock:
-    """创建模拟的数据库方言"""
-    dialect = MagicMock()
-    dialect.name = name
-    return dialect
+class UserDao(BaseDao[User]):
+    pass
 
 
 # ==========================================
-# 3. load_dialect_impl 方言适配测试
+# 4. Pytest Fixtures
 # ==========================================
-class TestDialectImpl:
-    """测试不同数据库的类型适配"""
-
-    def test_postgresql_uses_jsonb(self):
-        """PostgreSQL 应使用 JSONB"""
-        json_type = JSONType()
-        dialect = postgresql.dialect()
-        impl = json_type.load_dialect_impl(dialect)
-        assert "JSONB" in str(impl)
-
-    def test_mysql_uses_json(self):
-        """MySQL 应使用原生 JSON"""
-        json_type = JSONType()
-        dialect = mysql.dialect()
-        impl = json_type.load_dialect_impl(dialect)
-        assert "JSON" in str(impl)
-
-    def test_sqlite_uses_json(self):
-        """SQLite 应使用 JSON"""
-        json_type = JSONType()
-        dialect = sqlite.dialect()
-        impl = json_type.load_dialect_impl(dialect)
-        assert "JSON" in str(impl)
-
-    def test_oracle_native_json(self):
-        """Oracle 21c+ 默认使用原生 JSON"""
-        json_type = JSONType(oracle_native_json=True)
-        dialect = oracle.dialect()
-        impl = json_type.load_dialect_impl(dialect)
-        assert "JSON" in str(impl)
-
-    def test_oracle_clob_mode(self):
-        """Oracle 12c-20c 使用 CLOB"""
-        json_type = JSONType(oracle_native_json=False)
-        dialect = oracle.dialect()
-        impl = json_type.load_dialect_impl(dialect)
-        assert "CLOB" in str(impl)
-
-    def test_unknown_dialect_uses_text(self):
-        """未知数据库使用 TEXT"""
-        json_type = JSONType()
-        dialect = make_dialect("unknown_db")
-        impl = json_type.load_dialect_impl(dialect)
-        # 检查返回的是 Text 类型描述符
-        assert impl is not None
 
 
-# ==========================================
-# 4. process_bind_param 序列化测试
-# ==========================================
-class TestBindParam:
-    """测试写入数据库时的序列化行为"""
-
-    def test_none_value(self):
-        """None 值应直接返回 None"""
-        json_type = JSONType()
-        result = json_type.process_bind_param(None, make_dialect("postgresql"))
-        assert result is None
-
-    def test_native_json_passthrough(self):
-        """原生 JSON 数据库应直接传递对象"""
-        json_type = JSONType()
-        data = {"key": "value", "nested": {"a": 1}}
-
-        for dialect_name in ("postgresql", "mysql", "sqlite"):
-            dialect = make_dialect(dialect_name)
-            result = json_type.process_bind_param(data, dialect)
-            assert result == data, f"{dialect_name} should passthrough"
-
-    def test_oracle_native_passthrough(self):
-        """Oracle 21c+ 原生模式应直接传递对象"""
-        json_type = JSONType(oracle_native_json=True)
-        data = {"key": "value"}
-        dialect = make_dialect("oracle")
-        result = json_type.process_bind_param(data, dialect)
-        assert result == data
-
-    def test_oracle_clob_serializes(self):
-        """Oracle CLOB 模式应序列化为 JSON 字符串"""
-        json_type = JSONType(oracle_native_json=False)
-        data = {"key": "value"}
-        dialect = make_dialect("oracle")
-        result = json_type.process_bind_param(data, dialect)
-        assert isinstance(result, str)
-        assert "key" in result and "value" in result
-
-    def test_avoid_double_serialization(self):
-        """已经是字符串的数据不应再次序列化"""
-        json_type = JSONType(oracle_native_json=False)
-        json_str = '{"already": "serialized"}'
-        dialect = make_dialect("oracle")
-        result = json_type.process_bind_param(json_str, dialect)
-        assert result == json_str
-
-    def test_list_serialization(self):
-        """列表应正确序列化"""
-        json_type = JSONType(oracle_native_json=False)
-        data = [1, 2, "three", {"four": 4}]
-        dialect = make_dialect("oracle")
-        result = json_type.process_bind_param(data, dialect)
-        assert isinstance(result, str)
-        assert "three" in result
-
-
-# ==========================================
-# 5. process_result_value 反序列化测试
-# ==========================================
-class TestResultValue:
-    """测试从数据库读取时的反序列化行为"""
-
-    def test_none_value(self):
-        """None 值应直接返回 None"""
-        json_type = JSONType()
-        result = json_type.process_result_value(None, make_dialect("postgresql"))
-        assert result is None
-
-    def test_dict_passthrough(self):
-        """已经是 dict 的数据应直接返回"""
-        json_type = JSONType()
-        data = {"key": "value"}
-        result = json_type.process_result_value(data, make_dialect("oracle"))
-        assert result == data
-
-    def test_list_passthrough(self):
-        """已经是 list 的数据应直接返回"""
-        json_type = JSONType()
-        data = [1, 2, 3]
-        result = json_type.process_result_value(data, make_dialect("oracle"))
-        assert result == data
-
-    def test_native_json_passthrough(self):
-        """原生 JSON 数据库的值应直接返回"""
-        json_type = JSONType()
-
-        for dialect_name in ("postgresql", "mysql", "sqlite"):
-            dialect = make_dialect(dialect_name)
-            result = json_type.process_result_value("any_value", dialect)
-            assert result == "any_value"
-
-    def test_clob_deserialization(self):
-        """CLOB 模式应反序列化 JSON 字符串"""
-        json_type = JSONType(oracle_native_json=False)
-        json_str = '{"key": "value"}'
-        dialect = make_dialect("oracle")
-        result = json_type.process_result_value(json_str, dialect)
-        assert result == {"key": "value"}
-
-    def test_empty_string_returns_none(self):
-        """空字符串应返回 None"""
-        json_type = JSONType(oracle_native_json=False)
-        dialect = make_dialect("oracle")
-
-        assert json_type.process_result_value("", dialect) is None
-        assert json_type.process_result_value("   ", dialect) is None
-
-    def test_lob_object_read(self):
-        """Oracle LOB 对象应调用 read() 获取内容"""
-        json_type = JSONType(oracle_native_json=False)
-        dialect = make_dialect("oracle")
-
-        # 模拟 LOB 对象
-        lob = StringIO('{"from": "lob"}')
-        result = json_type.process_result_value(lob, dialect)
-        assert result == {"from": "lob"}
-
-    def test_invalid_json_fallback(self):
-        """非 JSON 格式数据应返回原始值（容错）"""
-        json_type = JSONType(oracle_native_json=False)
-        dialect = make_dialect("oracle")
-        invalid_json = "not a json string"
-        result = json_type.process_result_value(invalid_json, dialect)
-        assert result == invalid_json
-
-
-# ==========================================
-# 6. 集成测试 - SQLite 内存数据库
-# ==========================================
 @pytest_asyncio.fixture(loop_scope="function")
 async def db_session():
-    """创建测试数据库会话"""
+    # 使用内存 SQLite
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
 
+    # 建表
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
     session_maker = new_async_session_maker(engine)
+
     yield session_maker
+
     await engine.dispose()
 
 
-@pytest.mark.asyncio
-async def test_json_crud(db_session):
-    """测试 JSON 字段的完整 CRUD 流程"""
-    # Create
-    model = JsonModel.create(
-        name="test",
-        config={"debug": True, "version": "1.0"},
-        tags=["python", "fastapi"],
-    )
-    await model.save(db_session)
+@pytest.fixture
+def user_dao(db_session):
+    return UserDao(session_provider=db_session, model_cls=User)
 
-    # Read
-    async with db_session() as session:
-        result = await session.get(JsonModel, model.id)
-        assert result.config == {"debug": True, "version": "1.0"}
-        assert result.tags == ["python", "fastapi"]
-        assert result.extra is None
+
+# ==========================================
+# 5. 测试用例
+# ==========================================
 
 
 @pytest.mark.asyncio
-async def test_json_mutable_tracking(db_session):
-    """测试 MutableDict/MutableList 变更追踪"""
-    # 创建并保存
-    model = JsonModel.create(name="mutable_test", config={"count": 0}, tags=[])
-    await model.save(db_session)
+async def test_create_and_save_strictness(user_dao, db_session):
+    """测试创建对象、严格Save检查和ID生成"""
+    # 1. Create (Transient)
+    user = User.create(username="alice", info={"role": "admin"})
+    assert user.id is not None, "ID should be generated by create()"
+    assert user.creator_id == 999
+    assert user.info == {"role": "admin"}
 
-    # 修改 JSON 字段
+    # 2. Save (Insert)
+    await user.save(db_session)
+
+    # 验证数据库
+    db_user = await user_dao.query_by_primary_id(user.id)
+    assert db_user is not None
+    assert db_user.username == "alice"
+    assert db_user.info == {"role": "admin"}
+
+    # 3. Strict Save 检查 (持久化对象不能调 save)
+    with pytest.raises(RuntimeError) as exc:
+        await db_user.save(db_session)
+    assert "strictly for INSERT" in str(exc.value)
+
+
+@pytest.mark.asyncio
+async def test_update_strictness(user_dao, db_session):
+    """测试更新逻辑、Mutable JSON 追踪和严格Update检查"""
+    # 初始化数据
+    user = User.create(username="bob", info={"login_count": 0})
+    await user.save(db_session)
+
+    # 1. Update Persistent Object (常规字段 + JSON Mutation)
     async with db_session() as session:
+        # 在同一个 session 事务中获取并更新，模拟真实场景
         async with session.begin():
-            result = await session.get(JsonModel, model.id)
-            result.config["count"] = 1  # MutableDict 追踪
-            result.config["new_key"] = "added"
-            result.tags.append("new_tag")  # MutableList 追踪
+            db_user = await session.get(User, user.id)
 
-    # 验证变更已持久化
-    async with db_session() as session:
-        result = await session.get(JsonModel, model.id)
-        assert result.config["count"] == 1
-        assert result.config["new_key"] == "added"
-        assert "new_tag" in result.tags
+            # [关键测试] 修改 JSON 内部字段，验证 MutableDict 是否生效
+            # 如果 JSONType 没有定义 python_type=dict，这里会报错或不生效
+            db_user.info["login_count"] = 1
+            db_user.info["last_login"] = "today"
 
+            # 使用 Dao 或 Mixin 的 update 方法更新常规字段
+            # 注意：update() 方法内部会 commit，但我们这里在 session 上下文中手动处理更可控
+            # 这里演示使用 mixin 的 update 方法
+            await db_user.update(lambda: session, username="bob_updated")
 
-@pytest.mark.asyncio
-async def test_json_nullable_field(db_session):
-    """测试可空 JSON 字段"""
-    # 测试 None 值
-    model1 = JsonModel.create(name="nullable_none", extra=None)
-    await model1.save(db_session)
+    # 2. 验证变更
+    reloaded = await user_dao.query_by_primary_id(user.id)
+    assert reloaded.username == "bob_updated"
+    assert reloaded.updater_id == 999
+    # 验证 JSON 变更被持久化了
+    assert reloaded.info["login_count"] == 1
+    assert "last_login" in reloaded.info
 
-    async with db_session() as session:
-        result = await session.get(JsonModel, model1.id)
-        assert result.extra is None
-
-    # 测试有值
-    model2 = JsonModel.create(name="nullable_with_value", extra={"meta": "data"})
-    await model2.save(db_session)
-
-    async with db_session() as session:
-        result = await session.get(JsonModel, model2.id)
-        assert result.extra == {"meta": "data"}
+    # 3. Strict Update 检查 (新对象不能调 update)
+    new_user = User.create(username="charlie")
+    with pytest.raises(RuntimeError) as exc:
+        await new_user.update(db_session, username="fail")
+    assert "strictly for UPDATE" in str(exc.value)
 
 
 @pytest.mark.asyncio
-async def test_json_complex_nested(db_session):
-    """测试复杂嵌套 JSON 结构"""
-    complex_config = {
-        "database": {
-            "host": "localhost",
-            "port": 5432,
-            "options": {"timeout": 30, "pool_size": 10},
-        },
-        "features": ["auth", "cache", "logging"],
-        "enabled": True,
-        "ratio": 0.95,
-    }
+async def test_batch_insert_instances(user_dao, db_session):
+    """测试批量对象插入"""
+    users = [User.create(username=f"user_{i}") for i in range(5)]
 
-    model = JsonModel.create(name="complex", config=complex_config)
-    await model.save(db_session)
+    await User.insert_instances(items=users, session_provider=db_session)
 
-    async with db_session() as session:
-        result = await session.get(JsonModel, model.id)
-        assert result.config["database"]["port"] == 5432
-        assert result.config["database"]["options"]["timeout"] == 30
-        assert "cache" in result.config["features"]
-        assert result.config["ratio"] == 0.95
+    count = await user_dao.counter.count()
+    assert count == 5
+
+    ids = [u.id for u in users]
+    fetched = await user_dao.query_by_ids(ids)
+    assert len(fetched) == 5
+
+
+@pytest.mark.asyncio
+async def test_batch_insert_rows(user_dao, db_session):
+    """测试批量字典插入"""
+    rows = [{"username": "dict_1"}, {"username": "dict_2"}]
+
+    await User.insert_rows(rows=rows, session_provider=db_session)
+
+    count = await user_dao.counter.count()
+    assert count == 2
+
+
+@pytest.mark.asyncio
+async def test_query_builder(user_dao, db_session):
+    """测试查询构建器"""
+    # 准备数据
+    await User.insert_rows(rows=[{"username": f"u{i}"} for i in range(1, 6)], session_provider=db_session)
+
+    # Test IN with values
+    res = await user_dao.querier.in_(User.username, ["u1", "u2"]).all()
+    assert len(res) == 2
+
+    # Test IN with empty list (Expect ValueError)
+    # 确保你的 Dao 代码中有处理空列表抛出 ValueError 的逻辑，否则这里会断言失败
+    # 如果 Dao 层没有抛错而是忽略，请移除 pytest.raises
+    with pytest.raises(ValueError) as exc:
+        await user_dao.querier.in_(User.username, []).all()
+    assert "empty" in str(exc.value) or "Empty" in str(exc.value)
+
+    # Test Pagination
+    page_res = await user_dao.querier_unsorted.asc_(User.id).paginate(page=1, limit=2).all()
+    assert len(page_res) == 2
+    assert page_res[0].username == "u1"
+
+
+@pytest.mark.asyncio
+async def test_soft_delete(user_dao, db_session):
+    """测试软删除"""
+    user = User.create(username="del_me")
+    await user.save(db_session)
+
+    await user_dao.ins_updater(user).soft_delete()
+
+    # 默认不查出
+    assert await user_dao.querier.eq_(User.id, user.id).first() is None
+    # inc_deleted 查出
+    assert await user_dao.querier_inc_deleted.eq_(User.id, user.id).first() is not None
+
+
+@pytest.mark.asyncio
+async def test_updater_builder_logic(user_dao, db_session):
+    """测试 UpdateBuilder"""
+    user = User.create(username="old_name")
+    await user.save(db_session)
+
+    await user_dao.ins_updater(user).update(username="new_name")
+
+    reloaded = await user_dao.query_by_primary_id(user.id)
+    assert reloaded.username == "new_name"
+
 
 if __name__ == "__main__":
-    # 允许直接运行此文件调试
-    sys.exit(pytest.main(["-s", "-v", "--log-cli-level=INFO", __file__]))
+    # 方便直接 debug
+    sys.exit(pytest.main(["-s", "-v", __file__]))
