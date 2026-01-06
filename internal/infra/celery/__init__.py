@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Callable, Coroutine, T
 
 import anyio
 from celery import Celery
@@ -6,7 +7,7 @@ from celery.schedules import crontab
 
 from internal.config.load_config import settings
 from internal.core.logger import init_logger, logger
-from internal.infra.database import close_async_db, init_async_db
+from internal.infra.database import close_async_db, init_async_db, reset_async_db
 from internal.infra.redis import close_async_redis, init_async_redis
 from pkg.async_celery import CeleryClient
 
