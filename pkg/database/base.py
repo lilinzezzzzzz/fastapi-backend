@@ -10,7 +10,7 @@ from sqlalchemy.orm import DeclarativeBase, InstrumentedAttribute, Mapped, mappe
 
 from pkg.toolkit import context
 from pkg.toolkit.inter import snowflake_id_generator
-from pkg.toolkit.json import orjson_dumps, orjson_loads, orjson_loads_types
+from pkg.toolkit.json import JsonInputType, orjson_dumps, orjson_loads
 from pkg.toolkit.timer import utc_now_naive
 
 SessionProvider = Callable[..., AbstractAsyncContextManager[AsyncSession]]
@@ -26,7 +26,7 @@ def new_async_engine(
     pool_timeout: int = 30,
     pool_recycle: int = 1800,
     json_serializer: Callable[[Any], str] = orjson_dumps,
-    json_deserializer: Callable[[orjson_loads_types], Any] = orjson_loads,
+    json_deserializer: Callable[[JsonInputType], Any] = orjson_loads,
 ) -> AsyncEngine:
     return create_async_engine(
         url=database_uri,
@@ -218,7 +218,7 @@ class ModelMixin(Base):
 
     @staticmethod
     def _get_context_defaults() -> ContextDefaults:
-        return ContextDefaults(now=utc_now_naive(), user_id=async_context.get_user_id())
+        return ContextDefaults(now=utc_now_naive(), user_id=context.get_user_id())
 
     def _fill_ins_insert_fields(self):
         """[Instance Insert] 补全实例插入所需的字段"""
