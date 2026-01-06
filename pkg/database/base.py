@@ -28,8 +28,8 @@ class JSONType(TypeDecorator):
         - PostgreSQL: JSONB（支持索引、JSON 路径查询）
         - MySQL 5.7+: 原生 JSON
         - SQLite: JSON（SQLAlchemy 方言支持）
-        - Oracle 21c+: 原生 JSON（需设置 oracle_native_json=True）
-        - Oracle 12c-20c: CLOB + 手动序列化（默认模式）
+        - Oracle 21c+: 原生 JSON（默认模式）
+        - Oracle 12c-20c: CLOB + 手动序列化（需设置 oracle_native_json=False）
         - 其他数据库: TEXT + 手动序列化
 
     用法示例:
@@ -42,9 +42,9 @@ class JSONType(TypeDecorator):
             config: Mapped[dict] = mapped_column(JSONType(), default=dict)
             tags: Mapped[list] = mapped_column(JSONType(), default=list)
 
-            # Oracle 21c+ 原生 JSON 模式
+            # Oracle 12c-20c CLOB 模式
             metadata_: Mapped[dict] = mapped_column(
-                "metadata", JSONType(oracle_native_json=True), default=dict
+                "metadata", JSONType(oracle_native_json=False), default=dict
             )
 
             # 可空 JSON 字段
@@ -52,13 +52,13 @@ class JSONType(TypeDecorator):
 
     Args:
         oracle_native_json: Oracle 是否使用原生 JSON 类型
-            - False（默认）: 使用 CLOB 存储，兼容 Oracle 12c+
-            - True: 使用原生 JSON，仅支持 Oracle 21c+，性能更好
+            - True（默认）: 使用原生 JSON，仅支持 Oracle 21c+，性能更好
+            - False: 使用 CLOB 存储，兼容 Oracle 12c+
 
     注意事项:
         1. Oracle 版本兼容性:
-           - 12c-20c 必须使用默认的 CLOB 模式
-           - 21c+ 推荐使用 oracle_native_json=True 以获得更好性能
+           - 21c+ 使用默认的原生 JSON 模式即可
+           - 12c-20c 必须设置 oracle_native_json=False 使用 CLOB 模式
         2. 序列化行为:
            - PostgreSQL/MySQL/SQLite/Oracle原生: 驱动自动处理
            - Oracle CLOB/其他数据库: 使用 orjson 序列化
@@ -74,7 +74,7 @@ class JSONType(TypeDecorator):
     impl = Text
     cache_ok = True
 
-    def __init__(self, oracle_native_json: bool = False) -> None:
+    def __init__(self, oracle_native_json: bool = True) -> None:
         super().__init__()
         self.oracle_native_json = oracle_native_json
 
