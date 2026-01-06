@@ -8,6 +8,7 @@ from sqlalchemy import BigInteger, DateTime, Executable, Insert, Text, insert, i
 from sqlalchemy.dialects import oracle, postgresql, sqlite
 from sqlalchemy.engine import Dialect
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.mutable import MutableDict, MutableList
 from sqlalchemy.orm import DeclarativeBase, InstrumentedAttribute, Mapped, mapped_column
 from sqlalchemy.types import JSON as SA_JSON, TypeDecorator
 
@@ -21,8 +22,52 @@ SessionProvider = Callable[..., AbstractAsyncContextManager[AsyncSession]]
 
 class JSONType(TypeDecorator):
     """
-    跨数据库兼容的 JSON 类型。
-    自动处理 Mutable 追踪，支持 PG JSONB, MySQL JSON, Oracle JSON/CLOB。
+    跨数据库兼容的 JSON 类型，自动适配不同数据库的最优存储方式。
+
+    支持的数据库:
+        - PostgreSQL: JSONB（支持索引、JSON 路径查询）
+        - MySQL 5.7+: 原生 JSON
+        - SQLite: JSON（SQLAlchemy 方言支持）
+        - Oracle 21c+: 原生 JSON（需设置 oracle_native_json=True）
+        - Oracle 12c-20c: CLOB + 手动序列化（默认模式）
+        - 其他数据库: TEXT + 手动序列化
+
+    用法示例:
+        from pkg.database.base import JSONType, ModelMixin, Mapped, mapped_column
+
+        class MyModel(ModelMixin):
+            __tablename__ = "my_table"
+
+            # 基础用法（自动适配数据库）
+            config: Mapped[dict] = mapped_column(JSONType(), default=dict)
+            tags: Mapped[list] = mapped_column(JSONType(), default=list)
+
+            # Oracle 21c+ 原生 JSON 模式
+            metadata_: Mapped[dict] = mapped_column(
+                "metadata", JSONType(oracle_native_json=True), default=dict
+            )
+
+            # 可空 JSON 字段
+            extra: Mapped[dict | None] = mapped_column(JSONType(), nullable=True)
+
+    Args:
+        oracle_native_json: Oracle 是否使用原生 JSON 类型
+            - False（默认）: 使用 CLOB 存储，兼容 Oracle 12c+
+            - True: 使用原生 JSON，仅支持 Oracle 21c+，性能更好
+
+    注意事项:
+        1. Oracle 版本兼容性:
+           - 12c-20c 必须使用默认的 CLOB 模式
+           - 21c+ 推荐使用 oracle_native_json=True 以获得更好性能
+        2. 序列化行为:
+           - PostgreSQL/MySQL/SQLite/Oracle原生: 驱动自动处理
+           - Oracle CLOB/其他数据库: 使用 orjson 序列化
+        3. 空值处理:
+           - None 值正常存储和读取
+           - 空字符串 "" 读取时返回 None
+        4. 容错机制:
+           - 读取非 JSON 格式数据时不会抛异常，返回原始值
+           - Oracle LOB 对象会自动调用 read() 获取内容
     """
 
     # 默认底层使用 Text，但在 PG/MySQL/OracleNative 下会被 load_dialect_impl 覆盖
@@ -94,6 +139,15 @@ class JSONType(TypeDecorator):
             # 容错：如果数据库里存了非 JSON 的纯文本，避免整个查询崩溃
             # 视业务需求，这里也可以记录日志并 raise
             return value
+
+
+# ==========================================================================
+# 重要：为 JSONType 注册变更追踪
+# ==========================================================================
+# 这样操作 model.config['key'] = 'value' 时，SA 才能感知到变化并执行 UPDATE
+# 注意：MutableDict 只能追踪顶层 key 的变化，深层嵌套修改仍需手动 flag_modified
+MutableDict.associate_with(JSONType)
+MutableList.associate_with(JSONType)
 
 
 def new_async_engine(
