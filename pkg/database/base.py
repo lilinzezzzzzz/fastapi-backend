@@ -4,9 +4,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import BigInteger, DateTime, Executable, Insert, insert, inspect
+from sqlalchemy import BigInteger, DateTime, Executable, Insert, Text, insert, inspect
+from sqlalchemy.dialects import oracle, postgresql
+from sqlalchemy.engine import Dialect
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, InstrumentedAttribute, Mapped, mapped_column
+from sqlalchemy.types import JSON as SA_JSON, TypeDecorator
 
 from pkg.toolkit import context
 from pkg.toolkit.inter import snowflake_id_generator
@@ -14,6 +17,84 @@ from pkg.toolkit.json import JsonInputType, orjson_dumps, orjson_loads
 from pkg.toolkit.timer import utc_now_naive
 
 SessionProvider = Callable[..., AbstractAsyncContextManager[AsyncSession]]
+
+
+class JSONType(TypeDecorator):
+    """
+    跨数据库兼容的 JSON 类型。
+
+    - PostgreSQL: 使用原生 JSONB 类型（支持索引）
+    - MySQL 5.7+: 使用原生 JSON 类型
+    - Oracle 21c+: 使用原生 JSON 类型（oracle_native_json=True）
+    - Oracle 12c-20c: 使用 CLOB + 手动序列化/反序列化（oracle_native_json=False）
+    - 其他数据库: 使用 TEXT + 手动序列化/反序列化
+
+    用法示例:
+        # 默认模式（Oracle 使用 CLOB，兼容 12c+）
+        class MyModel(ModelMixin):
+            metadata_: Mapped[dict] = mapped_column("metadata", JSONType, default=dict)
+            config: Mapped[list] = mapped_column(JSONType, default=list)
+
+        # Oracle 21c+ 原生 JSON 模式
+        class MyModel21c(ModelMixin):
+            data: Mapped[dict] = mapped_column(JSONType(oracle_native_json=True), default=dict)
+    """
+
+    impl = Text
+    cache_ok = True
+
+    def __init__(self, oracle_native_json: bool = False) -> None:
+        """
+        Args:
+            oracle_native_json: Oracle 是否使用原生 JSON 类型
+                - True: Oracle 21c+ 原生 JSON（性能更好，支持 JSON 函数）
+                - False: Oracle 12c+ CLOB 存储（兼容性更好）
+        """
+        super().__init__()
+        self.oracle_native_json = oracle_native_json
+
+    def load_dialect_impl(self, dialect: Dialect):
+        """根据数据库类型选择底层实现"""
+        if dialect.name == "postgresql":
+            # PostgreSQL 使用 JSONB（支持索引和 JSON 操作符）
+            return dialect.type_descriptor(postgresql.JSONB())
+        elif dialect.name == "mysql":
+            # MySQL 5.7+ 支持原生 JSON
+            return dialect.type_descriptor(SA_JSON())
+        elif dialect.name == "oracle":
+            if self.oracle_native_json:
+                # Oracle 21c+ 原生 JSON 类型
+                return dialect.type_descriptor(oracle.JSON())
+            else:
+                # Oracle 12c-20c 使用 CLOB 存储
+                return dialect.type_descriptor(oracle.CLOB())
+        else:
+            # 其他数据库使用 TEXT
+            return dialect.type_descriptor(Text())
+
+    def process_bind_param(self, value: Any, dialect: Dialect) -> str | None:
+        """写入数据库时：Python 对象 -> JSON 字符串"""
+        if value is None:
+            return None
+        # 原生 JSON 类型不需要手动序列化
+        if dialect.name in ("postgresql", "mysql"):
+            return value
+        if dialect.name == "oracle" and self.oracle_native_json:
+            return value
+        return orjson_dumps(value)
+
+    def process_result_value(self, value: Any, dialect: Dialect) -> Any:
+        """从数据库读取时：JSON 字符串 -> Python 对象"""
+        if value is None:
+            return None
+        # 原生 JSON 类型已自动反序列化
+        if dialect.name in ("postgresql", "mysql"):
+            return value
+        if dialect.name == "oracle" and self.oracle_native_json:
+            return value
+        if isinstance(value, (dict, list)):
+            return value
+        return orjson_loads(value)
 
 
 def new_async_engine(
