@@ -94,4 +94,4 @@ def _get_cache() -> CacheClient:
     return _cache
 
 
-cache = LazyProxy(_get_cache)
+cache = LazyProxy[CacheClient](_get_cache)

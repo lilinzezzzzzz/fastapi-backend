@@ -35,4 +35,4 @@ def _get_anyio_task_manager() -> AnyioTaskHandler:
     return _anyio_task_manager
 
 
-anyio_task_manager = LazyProxy(_get_anyio_task_manager)
+anyio_task_manager = LazyProxy[AnyioTaskHandler](_get_anyio_task_manager)

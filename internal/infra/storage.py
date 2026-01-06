@@ -17,4 +17,4 @@ def _get_aliyun_oss() -> AliyunOSSBackend:
     return _aliyun_oss
 
 
-aliyun_oss = LazyProxy(_get_aliyun_oss)
+aliyun_oss = LazyProxy[AliyunOSSBackend](_get_aliyun_oss)

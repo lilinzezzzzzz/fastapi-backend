@@ -31,7 +31,7 @@ def _get_grpc_channel():
     return _grpc_channel
 
 
-grpc_channel = LazyProxy(_grpc_channel)
+grpc_channel = LazyProxy[GrpcChannel](_get_grpc_channel)
 """
 class UserGrpcClient:
     def __init__(self):

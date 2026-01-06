@@ -15,4 +15,4 @@ def _get_aes_cipher() -> AESCipher:
     return _aes_cipher
 
 
-aes_cipher = LazyProxy(_get_aes_cipher)
+aes_cipher = LazyProxy[AESCipher](_get_aes_cipher)

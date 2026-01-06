@@ -24,4 +24,4 @@ def _get_apscheduler_manager() -> ApsSchedulerManager:
     return _apscheduler_manager
 
 
-apscheduler_manager = LazyProxy(_get_apscheduler_manager)
+apscheduler_manager = LazyProxy[ApsSchedulerManager](_get_apscheduler_manager)

@@ -202,13 +202,14 @@ IntStr = Annotated[
 # ==========================================
 
 
-class LazyProxy:
+class LazyProxy[T]:
     """
     通用懒加载代理，用于延迟初始化的单例对象。
 
     解决问题：
     - 模块导入时对象还未初始化 (None)
     - 需要在运行时动态获取实际对象
+    - 提供完整的类型提示支持
 
     用法示例:
         _redis_client: Redis | None = None
@@ -222,15 +223,15 @@ class LazyProxy:
                 raise RuntimeError("Redis not initialized")
             return _redis_client
 
-        redis = LazyProxy(_get_redis)  # 导出代理对象
+        redis: LazyProxy[Redis] = LazyProxy(_get_redis)  # 导出代理对象，带类型提示
 
-        # 使用时自动转发到真实对象
+        # 使用时自动转发到真实对象，IDE 会有完整的类型提示
         redis.get("key")  # 等价于 _get_redis().get("key")
     """
 
     __slots__ = ("_getter",)
 
-    def __init__(self, getter: "Callable[[], Any]"):
+    def __init__(self, getter: Callable[[], T]) -> None:
         object.__setattr__(self, "_getter", getter)
 
     def __getattr__(self, name: str) -> Any:

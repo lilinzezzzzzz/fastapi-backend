@@ -23,4 +23,4 @@ def get_signature_auth_handler() -> SignatureAuthHandler:
     return _signature_auth_handler
 
 
-signature_auth_handler = LazyProxy(get_signature_auth_handler)
+signature_auth_handler = LazyProxy[SignatureAuthHandler](get_signature_auth_handler)
