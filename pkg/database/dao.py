@@ -103,11 +103,11 @@ class BaseDao[T: ModelMixin]:
         return await self.querier.in_(self._model_cls.id, ids).all()
 
 
-async def execute_transaction[T](
+async def execute_transaction(
     session_provider: SessionProvider,
-    callback: Callable[[AsyncSession], Awaitable[T]],
+    callback: Callable[[AsyncSession], Awaitable[None]],
     autoflush: bool = True,
-) -> T:
+) -> None:
     """
         [Transaction] 手动事务执行器：通过回调函数在同一个事务中执行复杂逻辑。
 
@@ -116,19 +116,16 @@ async def execute_transaction[T](
 
         Args:
             session_provider: Session 提供者
-            callback: 包含业务逻辑的异步函数。接收当前事务的 `AsyncSession`，返回任意类型 `T`。
+            callback: 包含业务逻辑的异步函数。接收当前事务的 `AsyncSession`。
             autoflush: 是否自动刷新（默认 True）。如果在事务中需要立即获取自增 ID，请保持为 True。
-
-        Returns:
-            返回 callback 函数的执行结果。
 
         Raises:
             RuntimeError: 当事务执行失败时抛出，并包含原始异常信息。
 
         Examples:
-            **场景 1：简单的混合操作 (无返回值)**
+            **场景 1：简单的混合操作**
             ```python
-            async def _do_work(sess: AsyncSession):
+            async def _do_work(sess: AsyncSession) -> None:
                 # 1. ORM 添加
                 sess.add(User(name="Alice"))
                 # 2. SQL 执行
@@ -140,7 +137,7 @@ async def execute_transaction[T](
             **场景 2：有逻辑依赖的操作 (先插后查/后改)**
             *注意：需要调用 await sess.flush() 来获取生成的 ID*
             ```python
-            async def _create_order_flow(sess: AsyncSession) -> int:
+            async def _create_order_flow(sess: AsyncSession) -> None:
                 # 1. 创建主订单
                 order = Order(user_id=1, amount=100)
                 sess.add(order)
@@ -152,26 +149,12 @@ async def execute_transaction[T](
                 item = OrderItem(order_id=order.id, product="Apple")
                 sess.add(item)
 
-                return order.id
-
-            # 拿到返回值
-            new_order_id = await execute_transaction(session_provider, _create_order_flow)
-            ```
-
-            **场景 3：使用 Lambda (极简模式)**
-            ```python
-            # 仅在只有一行代码且不需要返回值时推荐
-            await execute_transaction(
-                session_provider,
-                lambda sess: sess.execute(insert(Log).values(...))
-            )
+            await execute_transaction(session_provider, _create_order_flow)
             ```
         """
     try:
         async with session_provider(autoflush=autoflush) as sess:
             async with sess.begin():
-                # 执行回调，并将结果返回
-                return await callback(sess)
+                await callback(sess)
     except Exception as e:
-        # 这里可以加日志 logging.error(...)
         raise RuntimeError(f"Transaction failed: {e}") from e
