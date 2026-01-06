@@ -88,8 +88,15 @@ class JSONType(TypeDecorator):
             return dialect.type_descriptor(sqlite.JSON())
         elif dialect.name == "oracle":
             if self.oracle_native_json:
-                return dialect.type_descriptor(oracle.JSON())
+                # Oracle 21c+ 原生 JSON 支持
+                # 注意：需要 SQLAlchemy 2.0+ 和 cx_Oracle 8.0+
+                try:
+                    return dialect.type_descriptor(SA_JSON())
+                except Exception:
+                    # 降级到 CLOB
+                    return dialect.type_descriptor(oracle.CLOB())
             else:
+                # Oracle 12c-20c 使用 CLOB 存储
                 return dialect.type_descriptor(oracle.CLOB())
         else:
             return dialect.type_descriptor(Text())
@@ -146,8 +153,40 @@ class JSONType(TypeDecorator):
 # ==========================================================================
 # 这样操作 model.config['key'] = 'value' 时，SA 才能感知到变化并执行 UPDATE
 # 注意：MutableDict 只能追踪顶层 key 的变化，深层嵌套修改仍需手动 flag_modified
-MutableDict.associate_with(JSONType)
-MutableList.associate_with(JSONType)
+
+
+class _MutableDict(MutableDict):
+    """JSONType 专用的 MutableDict，支持 dict 的 coerce"""
+
+    @classmethod
+    def coerce(cls, key: str, value: Any) -> MutableDict | None:
+        """Coerce plain dict to MutableDict"""
+        if value is None:
+            return None
+        if isinstance(value, cls):
+            return value
+        if isinstance(value, dict):
+            return cls(value)
+        return super().coerce(key, value)
+
+
+class _MutableList(MutableList):
+    """JSONType 专用的 MutableList，支持 list 的 coerce"""
+
+    @classmethod
+    def coerce(cls, key: str, value: Any) -> MutableList | None:
+        """Coerce plain list to MutableList"""
+        if value is None:
+            return None
+        if isinstance(value, cls):
+            return value
+        if isinstance(value, list):
+            return cls(value)
+        return super().coerce(key, value)
+
+
+_MutableDict.associate_with(JSONType)
+_MutableList.associate_with(JSONType)
 
 
 def new_async_engine(
