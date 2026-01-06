@@ -80,7 +80,11 @@ class JSONType(TypeDecorator):
 
     @property
     def python_type(self):
-        return dict
+        """
+        告诉 SQLAlchemy 这个类型在 Python 侧对应 dict/list。
+        返回 object 以兼容两种情况，避免类型检查的歧义。
+        """
+        return object
 
     def load_dialect_impl(self, dialect: Dialect):
         if dialect.name == "postgresql":
@@ -158,7 +162,6 @@ class MutableJSON(Mutable):
     """
     智能 JSON 变更追踪器。
     能够自动识别 dict 和 list，并分别委托给 MutableDict 或 MutableList 处理。
-    解决 MutableDict 和 MutableList 全局 associate_with 互相覆盖的问题。
     """
 
     @classmethod

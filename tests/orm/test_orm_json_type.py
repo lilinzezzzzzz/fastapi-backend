@@ -139,27 +139,27 @@ async def test_update_strictness(user_dao, db_session):
 
     # 1. Update Persistent Object
     async with db_session() as session:
-        # [修复点] 移除 async with session.begin():
-        # 因为 update() 方法内部会自己开启事务，重复开启会导致冲突。
-        # session.get 不需要显式事务（Autobegin）
-
         db_user = await session.get(User, user.id)
+
+        # [关键修复] 显式结束由 session.get() 触发的隐式事务。
+        # 这样 session 就变回"空闲"状态，后续 update() 内部才能成功调用 session.begin()。
+        # 由于 expire_on_commit=False，db_user 对象依然可用且绑定在 session 上。
+        await session.commit()
 
         # 修改 JSON 内部字段 (验证 MutableJSON)
         db_user.info["login_count"] = 1
         db_user.info["last_login"] = "today"
 
-        # 定义一个不关闭 Session 的 Provider，防止 update 后 session 被关闭
-        # 虽然在这个测试块末尾 session 本来就要关闭，但这是好习惯
+        # 定义 Context Manager 复用 session
         @asynccontextmanager
         async def reuse_session():
             yield session
 
-        # 执行更新 (内部会 commit)
+        # 执行更新 (内部会再次 begin -> commit)
         await db_user.update(reuse_session, username="bob_updated")
 
     # 2. 验证变更
-    # 使用新的 Session 查询，确保数据已落库
+    # 使用新的 Session 查询，确保数据确实已落库
     reloaded = await user_dao.query_by_primary_id(user.id)
 
     assert reloaded.username == "bob_updated"
@@ -173,7 +173,6 @@ async def test_update_strictness(user_dao, db_session):
     with pytest.raises(RuntimeError) as exc:
         await new_user.update(db_session, username="fail")
     assert "strictly for UPDATE" in str(exc.value)
-
 
 @pytest.mark.asyncio
 async def test_batch_insert_instances(user_dao, db_session):
