@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import BigInteger, DateTime, Executable, Insert, Text, insert, inspect
-from sqlalchemy.dialects import oracle, postgresql
+from sqlalchemy.dialects import oracle, postgresql, sqlite
 from sqlalchemy.engine import Dialect
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, InstrumentedAttribute, Mapped, mapped_column
@@ -22,79 +22,78 @@ SessionProvider = Callable[..., AbstractAsyncContextManager[AsyncSession]]
 class JSONType(TypeDecorator):
     """
     跨数据库兼容的 JSON 类型。
-
-    - PostgreSQL: 使用原生 JSONB 类型（支持索引）
-    - MySQL 5.7+: 使用原生 JSON 类型
-    - Oracle 21c+: 使用原生 JSON 类型（oracle_native_json=True）
-    - Oracle 12c-20c: 使用 CLOB + 手动序列化/反序列化（oracle_native_json=False）
-    - 其他数据库: 使用 TEXT + 手动序列化/反序列化
-
-    用法示例:
-        # 默认模式（Oracle 使用 CLOB，兼容 12c+）
-        class MyModel(ModelMixin):
-            metadata_: Mapped[dict] = mapped_column("metadata", JSONType, default=dict)
-            config: Mapped[list] = mapped_column(JSONType, default=list)
-
-        # Oracle 21c+ 原生 JSON 模式
-        class MyModel21c(ModelMixin):
-            data: Mapped[dict] = mapped_column(JSONType(oracle_native_json=True), default=dict)
+    自动处理 Mutable 追踪，支持 PG JSONB, MySQL JSON, Oracle JSON/CLOB。
     """
 
+    # 默认底层使用 Text，但在 PG/MySQL/OracleNative 下会被 load_dialect_impl 覆盖
     impl = Text
     cache_ok = True
 
     def __init__(self, oracle_native_json: bool = False) -> None:
-        """
-        Args:
-            oracle_native_json: Oracle 是否使用原生 JSON 类型
-                - True: Oracle 21c+ 原生 JSON（性能更好，支持 JSON 函数）
-                - False: Oracle 12c+ CLOB 存储（兼容性更好）
-        """
         super().__init__()
         self.oracle_native_json = oracle_native_json
 
     def load_dialect_impl(self, dialect: Dialect):
-        """根据数据库类型选择底层实现"""
         if dialect.name == "postgresql":
-            # PostgreSQL 使用 JSONB（支持索引和 JSON 操作符）
             return dialect.type_descriptor(postgresql.JSONB())
         elif dialect.name == "mysql":
-            # MySQL 5.7+ 支持原生 JSON
             return dialect.type_descriptor(SA_JSON())
+        elif dialect.name == "sqlite":
+            # SQLite 使用方言特定的 JSON 类型，以便 SA 能够识别
+            return dialect.type_descriptor(sqlite.JSON())
         elif dialect.name == "oracle":
             if self.oracle_native_json:
-                # Oracle 21c+ 原生 JSON 类型
                 return dialect.type_descriptor(oracle.JSON())
             else:
-                # Oracle 12c-20c 使用 CLOB 存储
                 return dialect.type_descriptor(oracle.CLOB())
         else:
-            # 其他数据库使用 TEXT
             return dialect.type_descriptor(Text())
 
-    def process_bind_param(self, value: Any, dialect: Dialect) -> str | None:
-        """写入数据库时：Python 对象 -> JSON 字符串"""
+    def process_bind_param(self, value: Any, dialect: Dialect) -> Any:
         if value is None:
             return None
-        # 原生 JSON 类型不需要手动序列化
-        if dialect.name in ("postgresql", "mysql"):
+
+        # 1. 针对原生支持 JSON 的数据库，直接返回对象
+        if dialect.name in ("postgresql", "mysql", "sqlite"):
             return value
         if dialect.name == "oracle" and self.oracle_native_json:
             return value
+
+        # 2. 避免双重序列化：如果已经是字符串，则不再次 dumps
+        if isinstance(value, (str, bytes)):
+            return value
+
+        # 3. 手动序列化 (Oracle CLOB, MSSQL Text 等)
         return orjson_dumps(value)
 
     def process_result_value(self, value: Any, dialect: Dialect) -> Any:
-        """从数据库读取时：JSON 字符串 -> Python 对象"""
         if value is None:
             return None
-        # 原生 JSON 类型已自动反序列化
-        if dialect.name in ("postgresql", "mysql"):
+
+        # 1. 原生类型或驱动已处理的情况
+        if isinstance(value, (dict, list)):
+            return value
+
+        if dialect.name in ("postgresql", "mysql", "sqlite"):
             return value
         if dialect.name == "oracle" and self.oracle_native_json:
             return value
-        if isinstance(value, (dict, list)):
+
+        # 2. 处理 Oracle LOB 对象等边缘情况 (如果驱动返回的是 LOB 流)
+        if hasattr(value, "read"):
+            value = value.read()
+
+        # 3. 空字符串处理
+        if isinstance(value, str) and not value.strip():
+            return None
+
+        # 4. 反序列化
+        try:
+            return orjson_loads(value)
+        except ValueError:
+            # 容错：如果数据库里存了非 JSON 的纯文本，避免整个查询崩溃
+            # 视业务需求，这里也可以记录日志并 raise
             return value
-        return orjson_loads(value)
 
 
 def new_async_engine(
