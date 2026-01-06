@@ -8,7 +8,7 @@ from sqlalchemy import BigInteger, DateTime, Executable, Insert, Text, insert, i
 from sqlalchemy.dialects import oracle, postgresql, sqlite
 from sqlalchemy.engine import Dialect
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.ext.mutable import MutableDict, MutableList
+from sqlalchemy.ext.mutable import Mutable, MutableDict, MutableList
 from sqlalchemy.orm import DeclarativeBase, InstrumentedAttribute, Mapped, mapped_column
 from sqlalchemy.types import JSON as SA_JSON, TypeDecorator
 
@@ -154,8 +154,35 @@ class JSONType(TypeDecorator):
 # 注意：MutableDict 只能追踪顶层 key 的变化，深层嵌套修改仍需手动 flag_modified
 
 
-MutableDict.associate_with(JSONType)
-MutableList.associate_with(JSONType)
+class MutableJSON(Mutable):
+    """
+    智能 JSON 变更追踪器。
+    能够自动识别 dict 和 list，并分别委托给 MutableDict 或 MutableList 处理。
+    解决 MutableDict 和 MutableList 全局 associate_with 互相覆盖的问题。
+    """
+
+    @classmethod
+    def coerce(cls, key: str, value: Any) -> Any:
+        if value is None:
+            return None
+
+        # 1. 如果已经是具备追踪能力的 Mutable 对象，直接返回
+        if isinstance(value, (MutableDict, MutableList)):
+            return value
+
+        # 2. 如果是字典，委托给 MutableDict
+        if isinstance(value, dict):
+            return MutableDict.coerce(key, value)
+
+        # 3. 如果是列表，委托给 MutableList
+        if isinstance(value, list):
+            return MutableList.coerce(key, value)
+
+        # 4. 其他类型（如 int, str 等），无法追踪内部变更，直接返回
+        return value
+
+
+MutableJSON.associate_with(JSONType)
 
 
 def new_async_engine(
