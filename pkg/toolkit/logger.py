@@ -7,6 +7,7 @@ import loguru
 
 from pkg.toolkit.json import orjson_dumps
 from pkg.toolkit.string import uuid6_unique_str_id
+from pkg.toolkit.timer import format_iso_datetime
 
 # 默认日志目录：/tmp/fastapi_{唯一字符}_logs
 _DEFAULT_BASE_LOG_DIR = Path(f"/tmp/fastapi_{uuid6_unique_str_id()}_logs")
@@ -264,7 +265,7 @@ class LoggerManager:
             raise TypeError(f"json_content must be types or None. Got {type(json_content)}")
 
         log_record = {
-            "time": record["time"].isoformat(timespec="milliseconds"),
+            "time": format_iso_datetime(record["time"]),
             "level": record["level"].name,
             "name": record["name"],
             "function": record["function"],
