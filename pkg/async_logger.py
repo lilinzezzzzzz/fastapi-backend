@@ -197,12 +197,14 @@ class LoggerManager:
 
         # 2. 检查并添加控制台 Sink
         if write_to_console and not config["write_to_console"]:
+            # 控制台格式也根据 save_json 参数决定
+            console_format = self._json_formatter if save_json else self._console_formatter
             self._logger.add(
                 sink=sys.stderr,
-                format=self._console_formatter,
+                format=console_format,
                 level=self.level,
                 enqueue=self.enqueue,
-                colorize=True,
+                colorize=not save_json,  # JSON 格式不需要颜色
                 diagnose=True,
                 filter=_specific_filter,
             )
