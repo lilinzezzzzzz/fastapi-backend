@@ -1,7 +1,7 @@
 from contextvars import ContextVar
 from typing import Any
 
-from pkg.async_logger import logger
+from pkg.toolkit.logger import logger
 
 _request_context_var: ContextVar[dict[str, Any]] = ContextVar("request_context")
 

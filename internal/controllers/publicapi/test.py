@@ -5,7 +5,7 @@ from fastapi.responses import StreamingResponse
 
 from internal.core.exception import AppException, errors
 from internal.infra.anyio_task import anyio_task_manager
-from pkg.async_logger import logger
+from pkg.toolkit.logger import logger
 from pkg.toolkit.response import success_response
 from pkg.toolkit.timer import stream_with_chunk_control
 

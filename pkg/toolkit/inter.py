@@ -4,7 +4,7 @@ import uuid
 
 from snowflake import SnowflakeGenerator
 
-from pkg.async_logger import logger
+from pkg.toolkit.logger import logger
 
 
 def auto_snowflake_node_id() -> int:

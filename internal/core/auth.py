@@ -1,6 +1,6 @@
 from internal.infra.redis import cache
 from internal.utils.cache import token_cache_key, token_list_cache_key
-from pkg.async_logger import logger
+from pkg.toolkit.logger import logger
 from pkg.toolkit.json import orjson_loads
 
 

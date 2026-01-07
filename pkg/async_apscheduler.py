@@ -8,7 +8,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from pkg.async_logger import logger
+from pkg.toolkit.logger import logger
 
 
 class ApsSchedulerManager:
@@ -22,14 +22,14 @@ class ApsSchedulerManager:
     """
 
     def __init__(
-            self,
-            *,
-            timezone: str = "UTC",
-            max_instances: int = 50,
-            default_jitter: int | None = 5,
-            default_coalesce: bool = True,
-            default_misfire_grace_time: int = 60,
-            extra_config: dict[str, Any] | None = None,
+        self,
+        *,
+        timezone: str = "UTC",
+        max_instances: int = 50,
+        default_jitter: int | None = 5,
+        default_coalesce: bool = True,
+        default_misfire_grace_time: int = 60,
+        extra_config: dict[str, Any] | None = None,
     ) -> None:
         """
         :param timezone: 时区，如 "Asia/Shanghai" 或 "UTC"
@@ -136,12 +136,12 @@ class ApsSchedulerManager:
     # ------------------------- 快捷注册方法 -------------------------
 
     def register_cron(
-            self,
-            func: Callable,
-            *,
-            job_id: str | None = None,
-            replace_existing: bool = True,
-            **cron_args: Any
+        self,
+        func: Callable,
+        *,
+        job_id: str | None = None,
+        replace_existing: bool = True,
+        **cron_args: Any
     ) -> str:
         """
         注册 Cron 任务 (类 Linux Crontab)。
@@ -156,16 +156,16 @@ class ApsSchedulerManager:
         )
 
     def register_interval(
-            self,
-            func: Callable,
-            *,
-            job_id: str | None = None,
-            replace_existing: bool = True,
-            seconds: int = 0,
-            minutes: int = 0,
-            hours: int = 0,
-            days: int = 0,
-            **job_options: Any
+        self,
+        func: Callable,
+        *,
+        job_id: str | None = None,
+        replace_existing: bool = True,
+        seconds: int = 0,
+        minutes: int = 0,
+        hours: int = 0,
+        days: int = 0,
+        **job_options: Any
     ) -> str:
         """
         注册间隔任务。
@@ -181,13 +181,13 @@ class ApsSchedulerManager:
         )
 
     def register_date(
-            self,
-            func: Callable,
-            run_date: str | Any,
-            *,
-            job_id: str | None = None,
-            replace_existing: bool = True,
-            **job_options: Any
+        self,
+        func: Callable,
+        run_date: str | Any,
+        *,
+        job_id: str | None = None,
+        replace_existing: bool = True,
+        **job_options: Any
     ) -> str:
         """
         注册一次性任务。
@@ -235,7 +235,6 @@ class ApsSchedulerManager:
         """修改运行中任务的属性"""
         self._scheduler.modify_job(job_id, **changes)
         logger.info(f"Modified job: id={job_id}, changes={changes}")
-
 
 # ------------------------- 用法示例 -------------------------
 # from datetime import datetime, timedelta

@@ -2,7 +2,7 @@ import anyio
 
 from internal.infra.celery import celery_client
 from internal.tasks.demo_task import handle_number_sum
-from pkg.async_logger import logger
+from pkg.toolkit.logger import logger
 
 
 @celery_client.app.task(bind=True, name="internal.infra.celery.register.number_sum")

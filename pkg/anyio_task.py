@@ -18,7 +18,7 @@ from anyio import (
 )
 from anyio.abc import TaskGroup
 
-from pkg.async_logger import logger
+from pkg.toolkit.logger import logger
 
 CPU = max(1, multiprocessing.cpu_count())
 GLOBAL_MAX_DEFAULT = min(max(32, 4 * CPU), 256)
@@ -170,9 +170,11 @@ class AnyioTaskHandler:
         async def _run():
             if backend == "thread":
                 # AnyIO 4.1.0+: thread 使用 abandon_on_cancel
-                return await to_thread.run_sync(bound, abandon_on_cancel=cancellable, limiter=self._thread_limiter)  # type: ignore
+                return await to_thread.run_sync(bound, abandon_on_cancel=cancellable,
+                                                limiter=self._thread_limiter)  # type: ignore
             else:
-                return await to_process.run_sync(bound, cancellable=cancellable, limiter=self._process_limiter)  # type: ignore
+                return await to_process.run_sync(bound, cancellable=cancellable,
+                                                 limiter=self._process_limiter)  # type: ignore
 
         if timeout and timeout > 0:
             with fail_after(timeout):

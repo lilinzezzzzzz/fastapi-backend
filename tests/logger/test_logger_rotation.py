@@ -2,7 +2,7 @@ import os
 import time as time_module
 from datetime import time, timedelta, timezone
 
-from pkg.async_logger import LoggerManager
+from pkg.toolkit.async_logger import LoggerManager
 
 
 class TestLogRotationRetention:

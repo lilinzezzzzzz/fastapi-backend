@@ -6,7 +6,7 @@ import pytest
 from loguru import logger as loguru_logger
 
 # 1. 导入调整：LogConfig 已移除，get_logger 变更为 get_dynamic_logger
-from pkg.async_logger import LoggerManager, get_dynamic_logger, logger as global_logger, logger_manager
+from pkg.toolkit.async_logger import LoggerManager, get_dynamic_logger, logger as global_logger, logger_manager
 
 
 @pytest.fixture

@@ -3,7 +3,7 @@ import sys
 
 import pytest
 
-from pkg.async_logger import LoggerManager
+from pkg.toolkit.async_logger import LoggerManager
 
 
 # ----------------------------------------------------------------------

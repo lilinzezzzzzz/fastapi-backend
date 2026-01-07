@@ -4,7 +4,7 @@ from typing import Any, Self, cast
 from sqlalchemy import ClauseElement, ColumnElement, Delete, Select, Update, distinct, func, or_, select, update
 from sqlalchemy.orm import InstrumentedAttribute, Mapped
 
-from pkg.async_logger import logger
+from pkg.toolkit.logger import logger
 from pkg.database.base import ModelMixin, SessionProvider
 from pkg.toolkit import context
 from pkg.toolkit.list import unique_list

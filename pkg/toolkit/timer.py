@@ -8,7 +8,7 @@ from typing import Any
 import anyio
 from starlette.requests import Request
 
-from pkg.async_logger import logger
+from pkg.toolkit.logger import logger
 
 
 def format_iso_string(val: datetime.datetime, *, use_z: bool = False) -> str:
