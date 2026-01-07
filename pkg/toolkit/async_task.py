@@ -170,11 +170,9 @@ class AnyioTaskHandler:
         async def _run():
             if backend == "thread":
                 # AnyIO 4.1.0+: thread 使用 abandon_on_cancel
-                return await to_thread.run_sync(bound, abandon_on_cancel=cancellable,
-                                                limiter=self._thread_limiter)  # type: ignore
+                return await to_thread.run_sync(bound, abandon_on_cancel=cancellable, limiter=self._thread_limiter)  # type: ignore
             else:
-                return await to_process.run_sync(bound, cancellable=cancellable,
-                                                 limiter=self._process_limiter)  # type: ignore
+                return await to_process.run_sync(bound, cancellable=cancellable, limiter=self._process_limiter)  # type: ignore
 
         if timeout and timeout > 0:
             with fail_after(timeout):
@@ -370,7 +368,7 @@ class AnyioTaskHandler:
                     logger.error(f"{backend}-{idx} ({func_name}) failed: {e}")
 
         async with create_task_group() as tg:
-            for i, (args, kwargs) in enumerate(zip(args_list, kwargs_list)):
+            for i, (args, kwargs) in enumerate(zip(args_list, kwargs_list, strict=False)):
                 tg.start_soon(_worker, i, args, kwargs)
 
         return results
