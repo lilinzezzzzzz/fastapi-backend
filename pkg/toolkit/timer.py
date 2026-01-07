@@ -11,7 +11,7 @@ from starlette.requests import Request
 from pkg.toolkit.logger import logger
 
 
-def format_iso_string(val: datetime.datetime, *, use_z: bool = False) -> str:
+def format_iso_datetime(val: datetime.datetime, *, use_z: bool = True, timespec: str = "milliseconds") -> str:
     """
     将 datetime 对象格式化为 ISO 8601 字符串。
     - 有时区信息：保留时区并输出 ISO 格式
@@ -20,6 +20,7 @@ def format_iso_string(val: datetime.datetime, *, use_z: bool = False) -> str:
     Args:
         val: 要格式化的 datetime 对象。
         use_z: 如果为 True 且时区为 UTC，输出 'Z' 格式；否则输出 '+00:00' 格式。
+        timespec: 时间精度，可选值：'auto', 'hours', 'minutes', 'seconds', 'milliseconds', 'microseconds'。
 
     Returns:
         ISO 8601 格式的字符串。
@@ -27,13 +28,16 @@ def format_iso_string(val: datetime.datetime, *, use_z: bool = False) -> str:
     if val.tzinfo is None:
         val = val.replace(tzinfo=datetime.UTC)
 
+    iso_str = val.isoformat(timespec=timespec)
+
     if use_z and val.utcoffset() == datetime.timedelta(0):
-        return val.strftime("%Y-%m-%dT%H:%M:%SZ")
+        # 将 '+00:00' 替换为 'Z'
+        return iso_str.replace("+00:00", "Z")
 
-    return val.isoformat()
+    return iso_str
 
 
-def parse_iso_datetime(iso_string: str) -> datetime.datetime:
+def parse_iso_string(iso_string: str) -> datetime.datetime:
     """
     将 ISO 8601 格式的时间字符串解析为 datetime 对象。
 
@@ -47,7 +51,11 @@ def parse_iso_datetime(iso_string: str) -> datetime.datetime:
         ValueError: 当字符串格式无效时。
     """
     try:
-        return datetime.datetime.fromisoformat(iso_string.replace("Z", "+00:00"))
+        # 处理 'Z' 结尾（表示 UTC）
+        if iso_string.endswith("Z"):
+            iso_string = iso_string[:-1] + "+00:00"
+
+        return datetime.datetime.fromisoformat(iso_string)
     except ValueError as e:
         raise ValueError(f"Invalid ISO format string: {iso_string}") from e
 
