@@ -81,7 +81,7 @@ class LoggerManager:
         config_params: dict[str, Any] = {
             "extra": {
                 "trace_id": "-",
-                "type": self.SYSTEM_LOG_TYPE,
+                "log_type": self.SYSTEM_LOG_TYPE,
                 "json_content": None,
             },
         }
@@ -223,7 +223,7 @@ class LoggerManager:
             "<level>{level: <8}</level> | "
             "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
             "<magenta>{extra[trace_id]}</magenta> | "
-            "<yellow>{extra[type]}</yellow> - <level>{message}</level>"
+            "<yellow>{extra[log_type]}</yellow> - <level>{message}</level>"
         )
 
         # 检查 json_content 是否存在且不为 None
@@ -243,7 +243,7 @@ class LoggerManager:
             "{level: <8} | "
             "{name}:{function}:{line} | "
             "{extra[trace_id]} | "
-            "{extra[type]} - {message}"
+            "{extra[log_type]} - {message}"
         )
 
         # 检查并追加 json_content
@@ -288,7 +288,7 @@ class LoggerManager:
 
     @staticmethod
     def _filter_system(record: Any) -> bool:
-        return record["extra"].get("type") == LoggerManager.SYSTEM_LOG_TYPE
+        return record["extra"].get("log_type") == LoggerManager.SYSTEM_LOG_TYPE
 
     @staticmethod
     def _ensure_dir(path: Path):
