@@ -1,6 +1,6 @@
 from cryptography.fernet import Fernet, InvalidToken
 
-from pkg.crypto.base import BaseCryptoUtil, EncryptionAlgorithm, register_algorithm
+from pkg.crypter.base import BaseCryptoUtil, EncryptionAlgorithm, register_algorithm
 
 
 @register_algorithm(EncryptionAlgorithm.AES)

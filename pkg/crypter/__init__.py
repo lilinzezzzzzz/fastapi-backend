@@ -1,9 +1,9 @@
 from typing import overload
 
 # 再导入具体实现（会触发 @register_algorithm 装饰器注册）
-from pkg.crypto.aes import AESCipher
+from pkg.crypter.aes import AESCipher
 # 先导入基础类（无循环依赖）
-from pkg.crypto.base import (BaseCryptoUtil, EncryptionAlgorithm, _ALGORITHM_REGISTRY, register_algorithm)
+from pkg.crypter.base import (BaseCryptoUtil, EncryptionAlgorithm, _ALGORITHM_REGISTRY, register_algorithm)
 
 
 @overload

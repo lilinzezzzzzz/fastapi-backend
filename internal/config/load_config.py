@@ -8,7 +8,7 @@ from pydantic import MySQLDsn, PostgresDsn, RedisDsn, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from internal import BASE_DIR
-from pkg.crypto.aes import aes_decrypt
+from pkg.crypter.aes import aes_decrypt
 
 
 # =========================================================

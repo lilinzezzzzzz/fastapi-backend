@@ -1,12 +1,12 @@
 import pytest
 from cryptography.fernet import Fernet
 
-from pkg.crypto import (
+from pkg.crypter import (
     AESCipher,
     EncryptionAlgorithm,
     get_crypto_class,
 )
-from pkg.crypto.aes import aes_decrypt, aes_encrypt
+from pkg.crypter.aes import aes_decrypt, aes_encrypt
 from pkg.toolkit.hasher import Hasher
 
 

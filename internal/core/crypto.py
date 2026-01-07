@@ -1,4 +1,4 @@
-from pkg.crypto import AESCipher
+from pkg.crypter import AESCipher
 from pkg.toolkit.types import LazyProxy
 
 _aes_cipher: AESCipher | None = None
