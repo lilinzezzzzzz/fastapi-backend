@@ -219,7 +219,7 @@ class LoggerManager:
     @staticmethod
     def _console_formatter(record: Any) -> str:
         fmt = (
-            "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+            "<green>{time:YYYY-MM-DD HH:mm:ss.SSSZ}</green> | "
             "<level>{level: <8}</level> | "
             "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
             "<magenta>{extra[trace_id]}</magenta> | "
@@ -239,7 +239,7 @@ class LoggerManager:
         File 文本动态格式化器 (save_json=False 时使用)
         """
         fmt = (
-            "{time:YYYY-MM-DD HH:mm:ss.SSS} | "
+            "{time:YYYY-MM-DD HH:mm:ss.SSSZ} | "
             "{level: <8} | "
             "{name}:{function}:{line} | "
             "{extra[trace_id]} | "
@@ -264,7 +264,7 @@ class LoggerManager:
             raise TypeError(f"json_content must be types or None. Got {type(json_content)}")
 
         log_record = {
-            "time": record["time"].strftime("%Y-%m-%d %H:%M:%S.%f"),
+            "time": record["time"].isoformat(timespec="milliseconds"),
             "level": record["level"].name,
             "name": record["name"],
             "function": record["function"],
