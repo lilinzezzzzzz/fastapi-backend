@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Callable, Coroutine, T
+from typing import Callable, Coroutine
 
 import anyio
 from celery import Celery
@@ -8,7 +8,7 @@ from celery.schedules import crontab
 from internal.config.load_config import settings
 from internal.core.logger import init_logger, logger
 from internal.infra.database import close_async_db, init_async_db, reset_async_db
-from internal.infra.redis import close_async_redis, init_async_redis
+from internal.infra.redis import close_async_redis, init_async_redis, reset_async_redis
 from pkg.async_celery import CeleryClient
 
 # =========================================================
@@ -136,7 +136,7 @@ def check_celery_health():
         logger.error(f"Celery Broker connection failed: {e}")
 
 
-def run_in_async(coro_func: Callable[[], Coroutine[None, None, T]]) -> T:
+def run_in_async[T](coro_func: Callable[[], Coroutine[None, None, T]]) -> T:
     """
     在 Celery 同步任务中执行异步代码。
     """
