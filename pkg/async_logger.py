@@ -148,28 +148,31 @@ class LoggerManager:
         if not log_type:
             raise ValueError(f"log_type cannot be empty, value = {log_type}")
 
-        # 定义该设备专属的过滤器 (闭包)
-        # 这保证了即使添加多个 stderr sink，每个 sink 也只处理自己 log_type 的消息
-        def _specific_filter(record):
-            return record["extra"].get("log_type") == log_type
+        # 为了避免 JSON 和 text sink 互相干扰，使用不同的内部 key
+        # JSON 日志使用 "{log_type}_json"，text 日志使用原始 "{log_type}"
+        internal_key = f"{log_type}_json" if save_json else log_type
 
-        # 获取或初始化配置
-        if log_type not in self._registered_types:
-            self._registered_types[log_type] = {
-                "formats": set(),  # 已注册的格式: "json", "text"
+        # 定义该设备专属的过滤器 (闭包)
+        # 这保证了即使添加多个 stderr sink，每个 sink 也只处理自己 internal_key 的消息
+        def _specific_filter(record):
+            return record["extra"].get("log_type") == internal_key
+
+        # 获取或初始化配置（使用 internal_key 作为注册的 key）
+        if internal_key not in self._registered_types:
+            self._registered_types[internal_key] = {
+                "format": "json" if save_json else "text",
                 "write_to_console": False,
+                "sink_registered": False,
             }
 
-        config = self._registered_types[log_type]
-        format_key = "json" if save_json else "text"
+        config = self._registered_types[internal_key]
 
         # 1. 检查并添加文件 Sink
-        if format_key not in config["formats"]:
+        if not config["sink_registered"]:
             try:
-                # 根据格式决定文件名后缀
-                suffix = ".json" if save_json else ".log"
+                # 文件存储在原始 log_type 目录下（而不是 internal_key）
                 self._ensure_dir(log_dir := self.base_log_dir / log_type)
-                sink_path = log_dir / f"{{time:YYYY-MM-DD}}{suffix}"
+                sink_path = log_dir / "{time:YYYY-MM-DD}.log"
 
                 log_format = self._json_formatter if save_json else self._file_formatter
 
@@ -185,11 +188,11 @@ class LoggerManager:
                     filter=_specific_filter,
                 )
 
-                config["formats"].add(format_key)
-                self._logger.info(f"System: Registered {format_key} sink for log_type '{log_type}'")
+                config["sink_registered"] = True
+                self._logger.info(f"System: Registered {config['format']} sink for log_type '{log_type}'")
 
             except Exception as e:
-                self._logger.error(f"System: Failed to register {format_key} sink for '{log_type}'. Error: {e}")
+                self._logger.error(f"System: Failed to register sink for '{log_type}'. Error: {e}")
                 return self._logger.bind(log_type=self.SYSTEM_LOG_TYPE, original_type=log_type)
 
         # 2. 检查并添加控制台 Sink
@@ -206,7 +209,8 @@ class LoggerManager:
             config["write_to_console"] = True
             self._logger.info(f"System: Added console sink for log_type '{log_type}'")
 
-        return self._logger.bind(log_type=log_type)
+        # 返回绑定 internal_key 的 logger，确保日志只被对应的 sink 处理
+        return self._logger.bind(log_type=internal_key)
 
     # --- 格式化器 ---
 

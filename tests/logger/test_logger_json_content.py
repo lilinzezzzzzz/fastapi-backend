@@ -1,4 +1,5 @@
 import json
+import sys
 
 import pytest
 
@@ -18,22 +19,14 @@ def logger_setup(tmp_path):
     """
     初始化 LoggerManager，并将日志输出重定向到 pytest 的临时目录。
     """
-    # --- 关键修改开始 ---
-    # 1. 修改 Base 路径到临时目录
-    LoggerManager.BASE_LOG_DIR = tmp_path / "logs"
+    base_log_dir = tmp_path / "logs"
+    base_log_dir.mkdir(exist_ok=True)
 
-    # 2. 显式更新 SYSTEM_LOG_DIR
-    # 注意：Python 类属性在定义时已计算，仅修改 BASE_LOG_DIR 不会自动更新 SYSTEM_LOG_DIR
-    # 所以这里必须手动重新拼接，确保系统日志也写入临时目录
-    LoggerManager.SYSTEM_LOG_DIR = LoggerManager.BASE_LOG_DIR / LoggerManager.SYSTEM_LOG_TYPE
-
-    manager = LoggerManager()
+    manager = LoggerManager(base_log_dir=base_log_dir)
     # 初始化：只写文件，不写控制台
     manager.setup(write_to_file=True, write_to_console=False)
 
-    # 返回 manager 和 临时日志根目录 (直接使用 LoggerManager 的属性)
-    return manager, LoggerManager.BASE_LOG_DIR
-    # --- 关键修改结束 ---
+    return manager, base_log_dir
 
 
 # ----------------------------------------------------------------------
@@ -49,6 +42,9 @@ def test_json_content_extraction_logic(logger_setup):
     """
     manager, base_dir = logger_setup
     log_type = "extraction_test"
+
+    print(f"\n>>> [Test] 日志根目录: {base_dir}")
+    print(f">>> [Test] 系统日志目录: {manager.system_log_dir}")
 
     # 获取动态 logger (默认为 save_json=True)
     logger = manager.get_dynamic_logger(log_type)
@@ -107,11 +103,11 @@ def test_json_content_extraction_logic(logger_setup):
         assert log_a["json_content"] == payment_data
         assert log_a["json_content"]["order_id"] == "ORD-2023"
 
-        # 4. 验证 extra 中已移除 json_content，但保留了其他元数据
-        assert "extra" in log_a
-        assert "json_content" not in log_a["extra"]
-        assert "trace_id" in log_a["extra"]
-        assert log_a["extra"]["type"] == log_type
+        # 4. 验证 extra 字段已展开到根层级，且 json_content 已移除
+        assert "trace_id" in log_a
+        assert log_a["type"] == "system"
+        # save_json=True 时，内部使用 {log_type}_json 作为 filter key
+        assert log_a["log_type"] == f"{log_type}_json"
 
         # --- 验证 场景 B (Normal) ---
         log_b = json.loads(lines[1])
@@ -151,3 +147,63 @@ def test_json_serialization_performance(logger_setup):
         log = json.loads(f.readline())
         # 验证列表内容
         assert log["json_content"]["tags"] == ["a", "b"]
+
+
+def test_log_file_extension_always_dot_log(logger_setup):
+    """
+    验证：
+    1. 无论 save_json 是 True 还是 False，日志文件后缀都是 .log
+    2. 同一个 log_type 下，JSON 格式和文本格式日志写入同一个文件，且不会重复
+    """
+    manager, base_dir = logger_setup
+    print(f"\n>>> [Test] 日志根目录: {base_dir}")
+
+    # 使用同一个 log_type
+    log_type = "mixed_format_test"
+
+    # 场景 A: save_json=True
+    logger_json = manager.get_dynamic_logger(log_type, save_json=True)
+    logger_json.info("JSON 格式日志")
+    logger_json.complete()
+
+    # 场景 B: save_json=False（同一个 log_type）
+    logger_text = manager.get_dynamic_logger(log_type, save_json=False)
+    logger_text.info("文本格式日志")
+    logger_text.complete()
+
+    # 验证日志文件
+    log_dir = base_dir / log_type
+    log_files = list(log_dir.glob("*.log"))
+    json_files_should_not_exist = list(log_dir.glob("*.json"))
+
+    assert len(log_files) == 1, f"应只有一个 .log 文件，实际: {log_files}"
+    assert len(json_files_should_not_exist) == 0, "不应生成 .json 文件"
+    print(f"\n>>> [Test] 混合格式日志文件: {log_files[0]}")
+
+    # 验证文件内容 - JSON 和 text 使用不同的 internal_key，不会重复
+    # Line 1: save_json=True 时的 JSON 格式日志
+    # Line 2: save_json=False 时的文本格式日志
+    with open(log_files[0], "r", encoding="utf-8") as f:
+        lines = f.readlines()
+        print(f">>> [Test] 日志行数: {len(lines)}")
+        for i, line in enumerate(lines):
+            print(f">>> [Test] Line {i + 1}: {line.strip()[:100]}...")
+
+        assert len(lines) == 2, f"应有两行日志（JSON + 文本），实际: {len(lines)}"
+
+        # 第一行是 JSON 格式
+        log_json = json.loads(lines[0])
+        assert log_json["message"] == "JSON 格式日志"
+
+        # 第二行是文本格式（不是有效的 JSON）
+        assert "文本格式日志" in lines[1]
+        try:
+            json.loads(lines[1])
+            pytest.fail("文本格式日志不应该是有效的 JSON")
+        except json.JSONDecodeError:
+            pass  # 预期行为
+
+
+if __name__ == "__main__":
+    # 允许直接运行此文件调试
+    sys.exit(pytest.main(["-s", "-v", "--log-cli-level=INFO", __file__]))
