@@ -5,7 +5,7 @@ from redis.asyncio import ConnectionPool, Redis
 
 from internal.config.load_config import settings
 from internal.core.logger import logger
-from pkg.async_cache import CacheClient
+from pkg.toolkit.cache import CacheClient
 from pkg.toolkit.types import LazyProxy
 
 # 1. 定义全局变量，初始为 None
