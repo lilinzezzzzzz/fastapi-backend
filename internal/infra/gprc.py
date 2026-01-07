@@ -1,4 +1,5 @@
-from pkg.async_grpc import GrpcChannel
+from pkg.toolkit.grpc import GrpcChannel
+
 from pkg.toolkit.types import LazyProxy
 
 _grpc_channel: GrpcChannel | None = None

@@ -5,8 +5,7 @@ from typing import Any, Dict, Optional
 import pytest
 from loguru import logger as loguru_logger
 
-# 1. 导入调整：LogConfig 已移除，get_logger 变更为 get_dynamic_logger
-from pkg.toolkit.async_logger import LoggerManager, get_dynamic_logger, logger as global_logger, logger_manager
+from pkg.toolkit.logger import LoggerManager, logger as global_logger
 
 
 @pytest.fixture
@@ -21,7 +20,7 @@ def setup_logging(tmp_path):
     LoggerManager.SYSTEM_LOG_DIR = LoggerManager.BASE_LOG_DIR / LoggerManager.SYSTEM_LOG_TYPE
 
     # 3. 重新初始化 LoggerManager
-    logger_manager.setup(write_to_file=True, write_to_console=False)
+    LoggerManager().setup(write_to_file=True, write_to_console=False)
 
     print(f"\n---> 当前测试日志路径: {LoggerManager.BASE_LOG_DIR}")
 
@@ -89,7 +88,7 @@ def test_dynamic_logger_creation(setup_logging):
 
     # 使用新导出的 get_dynamic_logger 方法
     # 默认 save_json=True
-    dev_logger = get_dynamic_logger(dev_id)
+    dev_logger = global_logger.get_dynamic_logger(dev_id)
     dev_logger.info(msg)
     loguru_logger.complete()
 
@@ -125,7 +124,7 @@ def test_create_failure_fallback(setup_logging, monkeypatch):
     monkeypatch.setattr(LoggerManager, "_ensure_dir", mock_ensure_dir)
 
     # 触发日志
-    dev_logger = get_dynamic_logger(dev_id)
+    dev_logger = global_logger.get_dynamic_logger(dev_id)
     dev_logger.info(msg)
     loguru_logger.complete()
 

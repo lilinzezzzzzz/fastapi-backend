@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from internal import BASE_DIR
-from pkg.toolkit.async_logger import LoggerManager, RetentionType, RotationType, logger as default_logger
+from pkg.toolkit.logger import LoggerManager, RetentionType, RotationType, logger as default_logger
 from pkg.toolkit.types import LazyProxy
 
 if TYPE_CHECKING:
