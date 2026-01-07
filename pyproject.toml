@@ -65,6 +65,8 @@ dependencies = [
     "boto3>=1.42.6",
     "boto3-stubs>=1.42.6",
     "uuid6>=2025.0.1",
+    "pyyaml>=6.0.3",
+    "aiosqlite>=0.22.1",
 ]
 
 # 分组依赖 —— 开发环境才需要
