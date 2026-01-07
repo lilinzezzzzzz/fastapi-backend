@@ -2,7 +2,7 @@ from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Self
 
 from sqlalchemy import BigInteger, DateTime, Executable, Insert, insert, inspect
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
@@ -81,7 +81,7 @@ class ModelMixin(Base):
     # ==========================================================================
 
     @classmethod
-    def create(cls, **kwargs) -> "ModelMixin":
+    def create(cls, **kwargs) -> Self:
         """
         创建一个新的、填充好默认值的实例（Transient 状态）。
         """
@@ -173,7 +173,7 @@ class ModelMixin(Base):
             stmt, session_provider, execute, error_context=f"{self.__class__.__name__} save(insert)"
         )
 
-    async def update(self, session_provider: SessionProvider | None = None, **kwargs) -> None:
+    async def update(self, session_provider: SessionProvider | None = None, **kwargs) -> Self:
         """[Strict Update] 仅用于更新已存在的对象。"""
         state = inspect(self)
 
@@ -196,6 +196,8 @@ class ModelMixin(Base):
                     sess.add(self)
         except Exception as e:
             raise RuntimeError(f"{self.__class__.__name__} update error: {e}") from e
+
+        return self
 
     async def soft_delete(self, session_provider: SessionProvider) -> None:
         if self.has_deleted_at_column():
