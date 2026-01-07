@@ -15,7 +15,10 @@ import tomllib  # Python 3.11+
 from pathlib import Path
 from typing import Any
 
-import yaml
+try:
+    import yaml
+except ImportError:
+    yaml = None  # type: ignore
 
 
 class ConfigLoader:
