@@ -2,7 +2,7 @@ import anyio
 import bcrypt
 
 
-class PasswordHasher:
+class Hasher:
     def __init__(self, rounds: int = 12):
         self.rounds = rounds
 
@@ -28,7 +28,7 @@ class PasswordHasher:
         return await anyio.to_thread.run_sync(self._verify_sync, plain_password, hashed_password)
 
 
-password_hasher = PasswordHasher()
+hasher = Hasher()
 
 
 # =========================================================
@@ -37,8 +37,8 @@ password_hasher = PasswordHasher()
 
 
 async def hash_password(password: str) -> str:
-    return await password_hasher.hash(password)
+    return await hasher.hash(password)
 
 
 async def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return await password_hasher.verify(plain_password, hashed_password)
+    return await hasher.verify(plain_password, hashed_password)

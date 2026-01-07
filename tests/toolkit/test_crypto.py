@@ -1,13 +1,13 @@
 import pytest
 from cryptography.fernet import Fernet
 
-from pkg.async_hasher import PasswordHasher
 from pkg.crypto import (
     AESCipher,
     EncryptionAlgorithm,
     get_crypto_class,
 )
 from pkg.crypto.aes import aes_decrypt, aes_encrypt
+from pkg.toolkit.hasher import Hasher
 
 
 @pytest.fixture
@@ -22,7 +22,7 @@ def anyio_backend():
 
 @pytest.fixture
 def hasher():
-    return PasswordHasher(rounds=4)
+    return Hasher(rounds=4)
 
 
 @pytest.mark.anyio
@@ -69,8 +69,8 @@ class TestPasswordHasher:
         assert is_valid is False
 
     async def test_custom_rounds(self):
-        hasher_4 = PasswordHasher(rounds=4)
-        hasher_6 = PasswordHasher(rounds=6)
+        hasher_4 = Hasher(rounds=4)
+        hasher_6 = Hasher(rounds=6)
 
         assert hasher_4.rounds == 4
         assert hasher_6.rounds == 6
