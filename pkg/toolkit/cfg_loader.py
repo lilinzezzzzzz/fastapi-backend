@@ -43,7 +43,7 @@ class ConfigLoader:
         path = Path(file_path)
 
         if not path.exists():
-            raise FileNotFoundError(f"配置文件不存在: {path}")
+            raise FileNotFoundError(f"Configuration file not found: {path}")
 
         suffix = path.suffix.lower()
 
@@ -58,7 +58,7 @@ class ConfigLoader:
         elif suffix == ".env":
             return ConfigLoader.load_env(path, encoding)
         else:
-            raise ValueError(f"不支持的配置文件格式: {suffix}")
+            raise ValueError(f"Unsupported configuration file format: {suffix}")
 
     @staticmethod
     def load_json(file_path: str | Path, encoding: str = "utf-8") -> dict[str, Any]:
@@ -71,7 +71,7 @@ class ConfigLoader:
     def load_yaml(file_path: str | Path, encoding: str = "utf-8") -> dict[str, Any]:
         """加载 YAML 配置文件"""
         if yaml is None:
-            raise ImportError("PyYAML not found, pip install pyyaml")
+            raise ImportError("PyYAML not found. Install it with: uv add pyyaml")
 
         path = Path(file_path)
         content = path.read_text(encoding=encoding)
