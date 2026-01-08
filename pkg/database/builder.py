@@ -4,10 +4,10 @@ from typing import Any, Self, cast
 from sqlalchemy import ClauseElement, ColumnElement, Delete, Select, Update, distinct, func, or_, select, update
 from sqlalchemy.orm import InstrumentedAttribute, Mapped
 
-from pkg.toolkit.logger import logger
 from pkg.database.base import ModelMixin, SessionProvider
 from pkg.toolkit import context
 from pkg.toolkit.list import unique_list
+from pkg.toolkit.logger import logger
 from pkg.toolkit.timer import utc_now_naive
 
 """
@@ -146,6 +146,7 @@ class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
         try:
             async with self._session_provider() as sess:
                 result = await sess.execute(self._stmt)
+                await sess.commit()
                 return cast(list[T], result.scalars().all())
         except Exception as e:
             raise RuntimeError(f"Error when querying all data, {self._model_cls.__name__}: {e}") from e
@@ -154,6 +155,7 @@ class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
         try:
             async with self._session_provider() as sess:
                 result = await sess.execute(self._stmt)
+                await sess.commit()
                 return result.scalars().first()
         except Exception as e:
             raise RuntimeError(f"Error when querying first data, {self._model_cls.__name__}: {e}") from e
@@ -180,7 +182,9 @@ class CountBuilder[T: ModelMixin](BaseBuilder[T]):
     async def count(self) -> int:
         try:
             async with self._session_provider() as sess:
-                return (await sess.execute(self._stmt)).scalar()
+                total = (await sess.execute(self._stmt)).scalar()
+                await sess.commit()
+                return total
         except Exception as e:
             raise RuntimeError(f"Error when querying count data, {self._model_cls.__name__}: {e}") from e
 
