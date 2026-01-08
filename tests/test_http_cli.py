@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
+import pytest_asyncio
 
 from pkg.toolkit.http_cli import AsyncHttpClient, RequestResult
 
@@ -69,7 +70,7 @@ class TestRequestResult:
 class TestAsyncHttpClient:
     """测试 AsyncHttpClient 类"""
 
-    @pytest.fixture
+    @pytest_asyncio.fixture
     async def client(self):
         """创建测试客户端"""
         client = AsyncHttpClient(base_url="https://api.example.com", timeout=30)
@@ -109,8 +110,9 @@ class TestAsyncHttpClient:
     async def test_get_error_message_failure(self):
         """测试获取错误消息（失败场景）"""
         mock_response = MagicMock()
-        mock_response.text = property(lambda self: (_ for _ in ()).throw(Exception("Text error")))
         mock_response.status_code = 500
+        # 设置 text 属性访问时抛出异常
+        type(mock_response).text = property(lambda self: (_ for _ in ()).throw(Exception("Text error")))
 
         msg = AsyncHttpClient._get_error_message(mock_response)
         assert "Failed to get response.text" in msg
@@ -122,6 +124,7 @@ class TestAsyncHttpClient:
         ("put", "PUT"),
         ("delete", "DELETE"),
     ])
+    @pytest.mark.asyncio
     async def test_http_methods(self, client, method, expected_method):
         """测试 HTTP 方法调用"""
         with patch.object(client.client, "request", new_callable=AsyncMock) as mock_request:
@@ -139,6 +142,7 @@ class TestAsyncHttpClient:
             call_kwargs = mock_request.call_args.kwargs
             assert call_kwargs["method"] == expected_method
 
+    @pytest.mark.asyncio
     async def test_request_with_error_response(self, client):
         """测试请求返回错误响应"""
         with patch.object(client.client, "request", new_callable=AsyncMock) as mock_request:
@@ -154,6 +158,7 @@ class TestAsyncHttpClient:
             assert result.success is False
             assert result.error == "Not Found"
 
+    @pytest.mark.asyncio
     async def test_request_with_http_status_error(self, client):
         """测试请求抛出 HTTPStatusError"""
         with patch.object(client.client, "request", new_callable=AsyncMock) as mock_request:
@@ -167,6 +172,7 @@ class TestAsyncHttpClient:
             assert result.status_code == 500
             assert "HTTPStatusError" in result.error
 
+    @pytest.mark.asyncio
     async def test_request_with_request_error(self, client):
         """测试请求抛出 RequestError（网络错误）"""
         with patch.object(client.client, "request", new_callable=AsyncMock) as mock_request:
@@ -177,6 +183,7 @@ class TestAsyncHttpClient:
             assert result.status_code == 0
             assert "RequestError" in result.error
 
+    @pytest.mark.asyncio
     async def test_download_file_success(self, client, tmp_path):
         """测试文件下载成功"""
         save_path = tmp_path / "subdir" / "test.txt"
@@ -214,17 +221,16 @@ class TestAsyncHttpClient:
             assert len(progress_calls) > 0
             assert progress_calls[-1][0] == len(file_content)
 
+    @pytest.mark.asyncio
     async def test_download_file_with_error_response(self, client, tmp_path):
         """测试文件下载遇到错误响应"""
         save_path = tmp_path / "test.txt"
 
         with patch.object(client, "_stream_context") as mock_stream:
-            mock_response = MagicMock()
-            mock_response.is_error = True
-            mock_response.status_code = 404
-            mock_response.text = "Not Found"
-
-            mock_stream.return_value.__aenter__.return_value = mock_response
+            # 模拟 _stream_context 抛出 RuntimeError（因为 raise_for_status 会导致 HTTPStatusError，然后被转换为 RuntimeError）
+            mock_stream.return_value.__aenter__.side_effect = RuntimeError(
+                "Stream HTTPStatusError, status_code=404, error=404 Not Found"
+            )
 
             success, error = await client.download_file(
                 url="/not-found.txt",
@@ -235,6 +241,7 @@ class TestAsyncHttpClient:
             assert "404" in error
             assert not save_path.exists()
 
+    @pytest.mark.asyncio
     async def test_stream_request(self, client):
         """测试流式请求"""
         with patch.object(client, "_stream_context") as mock_stream:

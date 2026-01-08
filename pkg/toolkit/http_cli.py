@@ -81,7 +81,6 @@ class AsyncHttpClient:
         params: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
         timeout: int | None = None,
-        # raise_exception: bool = True,
     ):
         req_timeout = timeout or self.timeout
         method = method.upper()
