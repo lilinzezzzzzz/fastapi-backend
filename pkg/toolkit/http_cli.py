@@ -25,8 +25,10 @@ class RequestResult:
     def json(self) -> Any:
         if self._json is not None:
             return self._json
+
         if not self.response:
             return {}
+
         try:
             self._json = self.response.json()
             return self._json
@@ -98,9 +100,9 @@ class AsyncHttpClient:
                     yield response
 
             except httpx.HTTPStatusError as exc:
-                raise Exception(f"Stream HTTPStatusError: {exc.response.status_code} - {exc}") from exc
+                raise RuntimeError(f"Stream HTTPStatusError: {exc.response.status_code} - {exc}") from exc
             except Exception as exc:
-                raise Exception(f"Stream Connection Error: {exc}") from exc
+                raise RuntimeError(f"Stream Connection Error: {exc}") from exc
 
         # 调用内部函数并返回
         return inner()
@@ -138,24 +140,20 @@ class AsyncHttpClient:
                 try:
                     err_msg = response.text
                 except Exception as e:
-                    logger.warning(f"Failed to get error message: {e}")
-                    err_msg = f"HTTP {response.status_code}"
+                    err_msg = f"Failed to get error, status_code={response.status_code}, error={e}"
 
             return RequestResult(status_code=response.status_code, response=response, error=err_msg)
 
         except httpx.HTTPStatusError as exc:
-            logger.error(f"HTTPStatusError: {exc}")
             return RequestResult(
                 status_code=exc.response.status_code,
                 response=exc.response,
-                error=str(exc),
+                error=f"HTTPStatusError: {exc}",
             )
         except httpx.RequestError as exc:
-            logger.error(f"RequestError to {url}: {exc}")
-            return RequestResult(status_code=0, error=f"Network Error: {exc}")
+            return RequestResult(status_code=0, error=f"RequestError to {url}: {exc}")
         except Exception as exc:
-            logger.error(f"Unexpected Error in _request: {exc}")
-            return RequestResult(status_code=500, error=f"Internal Error: {exc}")
+            return RequestResult(status_code=500, error=f"Unexpected Error in _request: {exc}")
 
     async def get(self, url: str, **kwargs) -> RequestResult:
         return await self._request("GET", url, **kwargs)
@@ -214,8 +212,7 @@ class AsyncHttpClient:
                 return True, ""
 
         except Exception as exc:
-            logger.error(err_msg := f"Download process failed: {exc}")
-            return False, err_msg
+            return False, f"Download process failed: {exc}"
 
     async def stream_request(
         self,
