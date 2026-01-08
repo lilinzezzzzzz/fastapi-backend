@@ -57,6 +57,14 @@ class AsyncHttpClient:
             verify=verify,
         )
 
+    @staticmethod
+    def _get_error_message(response: httpx.Response) -> str:
+        """统一获取错误响应的消息"""
+        try:
+            return response.text
+        except Exception as e:
+            return f"Failed to get response.text, status_code={response.status_code}, error={e}"
+
     async def __aenter__(self):
         return self
 
@@ -74,7 +82,7 @@ class AsyncHttpClient:
         params: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
         timeout: int | None = None,
-        raise_exception: bool = True,
+        # raise_exception: bool = True,
     ):
         req_timeout = timeout or self.timeout
         method = method.upper()
@@ -92,11 +100,7 @@ class AsyncHttpClient:
                     headers=headers,
                     timeout=req_timeout,
                 ) as response:
-                    if raise_exception:
-                        response.raise_for_status()
-                    elif response.is_error:
-                        logger.warning(f"Stream responded with error: {response.status_code}")
-
+                    response.raise_for_status()
                     yield response
 
             except httpx.HTTPStatusError as exc:
@@ -137,12 +141,7 @@ class AsyncHttpClient:
                 timeout=timeout or self.timeout,
             )
 
-            err_msg = None
-            if response.is_error:
-                try:
-                    err_msg = response.text
-                except Exception as e:
-                    err_msg = f"Failed to get response.text, status_code={response.status_code}, error={e}"
+            err_msg = self._get_error_message(response) if response.is_error else None
 
             return RequestResult(status_code=response.status_code, response=response, error=err_msg)
 
@@ -188,11 +187,8 @@ class AsyncHttpClient:
 
         try:
             async with self._stream_context(
-                method="GET", url=url, params=params, headers=headers, timeout=timeout, raise_exception=False
+                method="GET", url=url, params=params, headers=headers, timeout=timeout
             ) as response:
-                if response.is_error:
-                    return False, f"HTTP {response.status_code}"
-
                 total_size = response.headers.get("Content-Length")
                 total_size = int(total_size) if total_size else None
 
@@ -214,7 +210,7 @@ class AsyncHttpClient:
                 return True, ""
 
         except Exception as exc:
-            return False, f"Download File Unexpected Error, error={exc}"
+            return False, f"Download File, error={exc}"
 
     async def stream_request(
         self,
@@ -229,7 +225,7 @@ class AsyncHttpClient:
         通用流式请求
         """
         async with self._stream_context(
-            method=method, url=url, params=params, headers=headers, timeout=timeout, raise_exception=True
+            method=method, url=url, params=params, headers=headers, timeout=timeout
         ) as response:
             async for chunk in response.aiter_bytes(chunk_size):
                 yield chunk
