@@ -100,9 +100,11 @@ class AsyncHttpClient:
                     yield response
 
             except httpx.HTTPStatusError as exc:
-                raise RuntimeError(f"Stream HTTPStatusError: {exc.response.status_code} - {exc}") from exc
+                raise RuntimeError(
+                    f"Stream HTTPStatusError, status_code={exc.response.status_code}, error={exc}"
+                ) from exc
             except Exception as exc:
-                raise RuntimeError(f"Stream Connection Error: {exc}") from exc
+                raise RuntimeError(f"Stream Unexpected Error, error={exc}") from exc
 
         # 调用内部函数并返回
         return inner()
@@ -140,7 +142,7 @@ class AsyncHttpClient:
                 try:
                     err_msg = response.text
                 except Exception as e:
-                    err_msg = f"Failed to get error, status_code={response.status_code}, error={e}"
+                    err_msg = f"Failed to get response.text, status_code={response.status_code}, error={e}"
 
             return RequestResult(status_code=response.status_code, response=response, error=err_msg)
 
@@ -148,12 +150,12 @@ class AsyncHttpClient:
             return RequestResult(
                 status_code=exc.response.status_code,
                 response=exc.response,
-                error=f"HTTPStatusError: {exc}",
+                error=f"HTTPStatusError: error={exc}",
             )
         except httpx.RequestError as exc:
-            return RequestResult(status_code=0, error=f"RequestError to {url}: {exc}")
+            return RequestResult(status_code=0, error=f"RequestError, error={exc}")
         except Exception as exc:
-            return RequestResult(status_code=500, error=f"Unexpected Error in _request: {exc}")
+            return RequestResult(status_code=500, error=f"Unexpected Error, error={exc}")
 
     async def get(self, url: str, **kwargs) -> RequestResult:
         return await self._request("GET", url, **kwargs)
@@ -212,7 +214,7 @@ class AsyncHttpClient:
                 return True, ""
 
         except Exception as exc:
-            return False, f"Download process failed: {exc}"
+            return False, f"Download File Unexpected Error, error={exc}"
 
     async def stream_request(
         self,
