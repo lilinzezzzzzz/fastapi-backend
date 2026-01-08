@@ -1,4 +1,3 @@
-import os
 import time
 from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
@@ -192,12 +191,14 @@ class AsyncHttpClient:
                 total_size = response.headers.get("Content-Length")
                 total_size = int(total_size) if total_size else None
 
-                parent_dir = os.path.dirname(save_path)
+                # 使用 anyio.Path 创建父目录
+                save_path_obj = anyio.Path(save_path)
+                parent_dir = save_path_obj.parent
                 if parent_dir:
-                    os.makedirs(parent_dir, exist_ok=True)
+                    await parent_dir.mkdir(parents=True, exist_ok=True)
 
                 downloaded = 0
-                async with await anyio.Path(save_path).open("wb") as f:
+                async with await save_path_obj.open("wb") as f:
                     async for chunk in response.aiter_bytes(chunk_size):
                         await f.write(chunk)
                         downloaded += len(chunk)
