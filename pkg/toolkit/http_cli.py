@@ -228,9 +228,6 @@ class AsyncHttpClient:
         """
         通用流式请求
         """
-        # -------------------------------------------------------
-        # 【核心修复】：同样显式指定 method=... 和 url=...
-        # -------------------------------------------------------
         async with self._stream_context(
             method=method, url=url, params=params, headers=headers, timeout=timeout, raise_exception=True
         ) as response:
