@@ -4,20 +4,22 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from internal.core.auth import verify_token
 from internal.core.exception import errors
 from internal.core.signature import signature_auth_handler
-from pkg.toolkit.logger import logger
 from pkg.toolkit.context import set_user_id
+from pkg.toolkit.logger import logger
 from pkg.toolkit.response import error_response
 
 # 转换成 set 查询更快
-auth_token_white = {
-    "/auth/login",
-    "/auth/register",
-    "/docs",
-    "/openapi.json",
-    "/v1/auth/login_by_account",
-    "/v1/auth/login_by_phone",
-    "/v1/auth/verify_token",
-}
+auth_token_white = frozenset(
+    {
+        "/auth/login",
+        "/auth/register",
+        "/docs",
+        "/openapi.json",
+        "/v1/auth/login_by_account",
+        "/v1/auth/login_by_phone",
+        "/v1/auth/verify_token",
+    }
+)
 
 
 class ASGIAuthMiddleware:
