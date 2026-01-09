@@ -46,12 +46,9 @@ def register_router(app: FastAPI):
 
 
 def register_exception(app: FastAPI):
-    def _record_log_error(tag: str, err_desc: str):
-        logger.error(f"{tag}: {err_desc}")
-
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(_: Request, exc: RequestValidationError):
-        _record_log_error("Validation Error", repr(exc))
+        logger.warning(f"Validation Error: {exc}")
         return error_response(error=errors.BadRequest, message=f"Validation Error: {exc}")
 
 
