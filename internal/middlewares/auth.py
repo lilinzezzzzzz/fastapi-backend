@@ -4,11 +4,10 @@ from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from internal.core.auth import verify_token
-from internal.core.exception import errors
+from internal.core.exception import AppException, errors
 from internal.core.signature import signature_auth_handler
 from pkg.toolkit import context
 from pkg.toolkit.logger import logger
-from pkg.toolkit.response import error_response
 
 
 @dataclass
@@ -54,7 +53,6 @@ class _AuthContext:
     path: str
     method: str
     headers: MutableHeaders
-    response_started: bool = False
 
     def is_whitelist(self) -> bool:
         """判断是否在白名单中"""
@@ -123,17 +121,10 @@ class ASGIAuthMiddleware:
         x_signature, x_timestamp, x_nonce = auth_ctx.get_signature_headers()
 
         if not signature_auth_handler.verify(x_signature=x_signature, x_timestamp=x_timestamp, x_nonce=x_nonce):
-            logger.warning(
-                f"Signature authentication failed, "
-                f"x_signature={x_signature}, x_timestamp={x_timestamp}, x_nonce={x_nonce}"
-            )
-            resp = error_response(
+            raise AppException(
                 errors.InvalidSignature,
-                message="signature authentication failed",
+                message=f"Signature authentication failed, x_signature={x_signature}, x_timestamp={x_timestamp}, x_nonce={x_nonce}",
             )
-            auth_ctx.response_started = True
-            await resp(scope, receive, send)
-            return
 
         logger.debug(f"Internal API signature verified: {auth_ctx.path}")
         await self.app(scope, receive, send)
@@ -143,20 +134,12 @@ class ASGIAuthMiddleware:
         token = auth_ctx.get_token()
 
         if not token:
-            logger.warning(f"Empty token from {_AUTH_CONST.HEADER_AUTHORIZATION}")
-            resp = error_response(error=errors.Unauthorized, message="invalid or missing token")
-            auth_ctx.response_started = True
-            await resp(scope, receive, send)
-            return
+            raise AppException(errors.Unauthorized, message="invalid or missing token")
 
         logger.debug(f"Verifying token: {token[:10]}...")
         result, ok = await verify_token(token)
         if not ok:
-            logger.warning(f"Token verification failed: {result}")
-            resp = error_response(error=errors.Unauthorized, message="invalid or missing token")
-            auth_ctx.response_started = True
-            await resp(scope, receive, send)
-            return
+            raise AppException(errors.Unauthorized, message=f"invalid or missing token, {result}")
 
         user_id = result.get("id")
         # 设置用户上下文
