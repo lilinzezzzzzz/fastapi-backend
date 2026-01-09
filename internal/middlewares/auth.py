@@ -1,25 +1,90 @@
+from dataclasses import dataclass
+
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from internal.core.auth import verify_token
 from internal.core.exception import errors
 from internal.core.signature import signature_auth_handler
-from pkg.toolkit.context import set_user_id
+from pkg.toolkit import context
 from pkg.toolkit.logger import logger
 from pkg.toolkit.response import error_response
 
-# 转换成 set 查询更快
-auth_token_white = frozenset(
-    {
-        "/auth/login",
-        "/auth/register",
-        "/docs",
-        "/openapi.json",
-        "/v1/auth/login_by_account",
-        "/v1/auth/login_by_phone",
-        "/v1/auth/verify_token",
-    }
-)
+
+@dataclass
+class _AuthConstants:
+    """认证相关常量配置"""
+
+    # HTTP 头字段名
+    HEADER_AUTHORIZATION: str = "Authorization"
+    HEADER_SIGNATURE: str = "X-Signature"
+    HEADER_TIMESTAMP: str = "X-Timestamp"
+    HEADER_NONCE: str = "X-Nonce"
+
+    # Token 前缀
+    BEARER_PREFIX: str = "Bearer "
+
+    # 路径前缀
+    PATH_PUBLIC: str = "/v1/public"
+    PATH_INTERNAL: str = "/v1/internal"
+    PATH_TEST: str = "/test"
+
+    # 白名单路径(精确匹配)
+    WHITELIST_PATHS: frozenset[str] = frozenset(
+        {
+            "/auth/login",
+            "/auth/register",
+            "/docs",
+            "/openapi.json",
+            "/v1/auth/login_by_account",
+            "/v1/auth/login_by_phone",
+            "/v1/auth/verify_token",
+        }
+    )
+
+
+# 全局常量实例
+_AUTH_CONST = _AuthConstants()
+
+
+@dataclass
+class _AuthContext:
+    """认证上下文,封装认证过程中的状态变量"""
+
+    path: str
+    method: str
+    headers: MutableHeaders
+    response_started: bool = False
+
+    def is_whitelist(self) -> bool:
+        """判断是否在白名单中"""
+        return (
+            self.path.startswith(_AUTH_CONST.PATH_PUBLIC)
+            or self.path.startswith(_AUTH_CONST.PATH_TEST)
+            or self.path in _AUTH_CONST.WHITELIST_PATHS
+        )
+
+    def is_internal_api(self) -> bool:
+        """判断是否为内部接口"""
+        return self.path.startswith(_AUTH_CONST.PATH_INTERNAL)
+
+    def get_signature_headers(self) -> tuple[str | None, str | None, str | None]:
+        """获取签名相关头信息"""
+        return (
+            self.headers.get(_AUTH_CONST.HEADER_SIGNATURE),
+            self.headers.get(_AUTH_CONST.HEADER_TIMESTAMP),
+            self.headers.get(_AUTH_CONST.HEADER_NONCE),
+        )
+
+    def get_token(self) -> str | None:
+        """从请求头中提取 token"""
+        auth_header = self.headers.get(_AUTH_CONST.HEADER_AUTHORIZATION, "")
+
+        # 兼容 Bearer Token
+        if auth_header.startswith(_AUTH_CONST.BEARER_PREFIX):
+            return auth_header[len(_AUTH_CONST.BEARER_PREFIX) :]
+
+        return auth_header if auth_header else None
 
 
 class ASGIAuthMiddleware:
@@ -31,66 +96,78 @@ class ASGIAuthMiddleware:
             await self.app(scope, receive, send)
             return
 
-        path = scope["path"]
+        # 初始化认证上下文
+        auth_ctx = _AuthContext(
+            path=scope["path"],
+            method=scope["method"],
+            headers=MutableHeaders(scope=scope),
+        )
 
         # 1. 白名单放行
-        if path.startswith("/v1/public") or path in auth_token_white or path.startswith("/test"):
-            # 某些白名单也可能需要记录日志，可视情况添加
-            set_user_id(0)
+        if auth_ctx.is_whitelist():
+            logger.debug(f"Whitelist path: {auth_ctx.path}")
+            context.set_user_id(0)
             await self.app(scope, receive, send)
             return
 
-        # 使用 MutableHeaders 方便获取头部信息 (类似 dict)
-        headers = MutableHeaders(scope=scope)
-
-        # 2. 内部接口签名校验 /v1/internal
-        if path.startswith("/v1/internal"):
-            x_signature = headers.get("X-Signature")
-            x_timestamp = headers.get("X-Timestamp")
-            x_nonce = headers.get("X-Nonce")
-
-            if not signature_auth_handler.verify(x_signature=x_signature, x_timestamp=x_timestamp, x_nonce=x_nonce):
-                resp = error_response(
-                    errors.InvalidSignature,
-                    message=f"signature_auth failed, x_signature={x_signature}, x_timestamp={x_timestamp}, x_nonce={x_nonce}",
-                )
-                # 直接调用 response 对象的 ASGI 接口发送
-                await resp(scope, receive, send)
-                return
-
-            await self.app(scope, receive, send)
+        # 2. 内部接口签名校验
+        if auth_ctx.is_internal_api():
+            await self._handle_internal_auth(auth_ctx, scope, receive, send)
             return
 
         # 3. Token 校验
-        auth_header = headers.get("Authorization", "")
+        await self._handle_token_auth(auth_ctx, scope, receive, send)
 
-        # 兼容 Bearer Token
-        if auth_header.startswith("Bearer "):
-            token = auth_header.split(" ")[1]
-        else:
-            token = auth_header
+    async def _handle_internal_auth(self, auth_ctx: _AuthContext, scope: Scope, receive: Receive, send: Send) -> None:
+        """处理内部接口签名认证"""
+        x_signature, x_timestamp, x_nonce = auth_ctx.get_signature_headers()
 
-        if not token:
-            logger.warning("get empty token from Authorization")
-            resp = error_response(error=errors.Unauthorized, message="invalid or missing token")
+        if not signature_auth_handler.verify(x_signature=x_signature, x_timestamp=x_timestamp, x_nonce=x_nonce):
+            logger.warning(
+                f"Signature authentication failed, "
+                f"x_signature={x_signature}, x_timestamp={x_timestamp}, x_nonce={x_nonce}"
+            )
+            resp = error_response(
+                errors.InvalidSignature,
+                message="signature authentication failed",
+            )
+            auth_ctx.response_started = True
             await resp(scope, receive, send)
             return
 
-        logger.info(f"verify token: {token}")
+        logger.debug(f"Internal API signature verified: {auth_ctx.path}")
+        await self.app(scope, receive, send)
+
+    async def _handle_token_auth(self, auth_ctx: _AuthContext, scope: Scope, receive: Receive, send: Send) -> None:
+        """处理 Token 认证"""
+        token = auth_ctx.get_token()
+
+        if not token:
+            logger.warning(f"Empty token from {_AUTH_CONST.HEADER_AUTHORIZATION}")
+            resp = error_response(error=errors.Unauthorized, message="invalid or missing token")
+            auth_ctx.response_started = True
+            await resp(scope, receive, send)
+            return
+
+        logger.debug(f"Verifying token: {token[:10]}...")
         user_data, ok = await verify_token(token)
         if not ok:
+            logger.warning("Token verification failed")
             resp = error_response(error=errors.Unauthorized, message="invalid or missing token")
+            auth_ctx.response_started = True
             await resp(scope, receive, send)
             return
 
         user_id = user_data.get("id")
         if not user_id:
+            logger.warning("Token verified but user_id is None")
             resp = error_response(error=errors.Unauthorized, message="invalid or missing token, user_id is None")
+            auth_ctx.response_started = True
             await resp(scope, receive, send)
             return
 
-        # 4. 设置上下文 (在 ASGI 中这里是安全的，会传递给 self.app)
-        logger.info(f"set user_id to context: {user_id}")
-        set_user_id(user_id)
+        # 设置用户上下文
+        logger.debug(f"Set user_id to context: {user_id}")
+        context.set_user_id(user_id)
 
         await self.app(scope, receive, send)
