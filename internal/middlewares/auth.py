@@ -150,22 +150,15 @@ class ASGIAuthMiddleware:
             return
 
         logger.debug(f"Verifying token: {token[:10]}...")
-        user_data, ok = await verify_token(token)
+        result, ok = await verify_token(token)
         if not ok:
-            logger.warning("Token verification failed")
+            logger.warning(f"Token verification failed: {result}")
             resp = error_response(error=errors.Unauthorized, message="invalid or missing token")
             auth_ctx.response_started = True
             await resp(scope, receive, send)
             return
 
-        user_id = user_data.get("id")
-        if not user_id:
-            logger.warning("Token verified but user_id is None")
-            resp = error_response(error=errors.Unauthorized, message="invalid or missing token, user_id is None")
-            auth_ctx.response_started = True
-            await resp(scope, receive, send)
-            return
-
+        user_id = result.get("id")
         # 设置用户上下文
         logger.debug(f"Set user_id to context: {user_id}")
         context.set_user_id(user_id)

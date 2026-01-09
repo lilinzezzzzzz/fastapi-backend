@@ -1,29 +1,19 @@
-from internal.infra.redis import cache
-from internal.utils.cache import token_cache_key, token_list_cache_key
+from internal.dao.redis import cache_dao
 from pkg.toolkit.logger import logger
-from pkg.toolkit.json import orjson_loads
 
 
-async def get_cache_user_info(token: str) -> dict | None:
-    token_value = await cache.get_value(token_cache_key(token))
-    if token_value is None:
-        logger.warning("Token verification failed: token not found")
-        return None
+async def verify_token(token: str) -> tuple[str | dict | None, bool]:
+    user_metadata: dict = await cache_dao.get_auth_user_metadata(token)
+    if user_metadata is None:
+        return "Token verification failed: token not found", False
 
-    return orjson_loads(token_value)
+    user_id = user_metadata.get("id")
+    if not user_id:
+        return "Token verification failed: user_id is None", False
 
-
-async def verify_token(token: str) -> tuple[dict | None, bool]:
-    user_data: dict = await get_cache_user_info(token)
-    if user_data is None:
-        logger.warning("Token verification failed: token not found")
-        return None, False
-
-    user_id = user_data.get("id")
     # 检查有没有在token 列表里
-    token_list = await cache.get_list(token_list_cache_key(user_id))
+    token_list = await cache_dao.get_auth_user_token_list(user_id)
     if token_list is None or token not in token_list:
-        logger.warning(f"Token verification failed: token not found in token list, user_id: {user_id}")
-        return None, False
+        return f"Token verification failed: token not found in token list, user_id: {user_id}", False
 
-    return user_data, True
+    return user_metadata, True
