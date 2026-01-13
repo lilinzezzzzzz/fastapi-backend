@@ -204,7 +204,7 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
         if model_ins is not None:
             self._stmt = self._stmt.where(self._model_cls.id == model_ins.id)
 
-    async def update(self, *, execute: bool = True, **kwargs) -> Self:
+    async def update(self, **kwargs) -> Self:
         for k, v in kwargs.items():
             if not self._model_cls.has_column(k):
                 logger.warning(f"{k} is not a {self._model_cls.__name__} column")
@@ -215,19 +215,13 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
 
             self._update_dict[k] = v
 
-        if not execute:
-            return self
+        return self
 
-        return await self._execute()
-
-    async def soft_delete(self, *, execute: bool = True) -> Self:
+    async def soft_delete(self) -> Self:
         if self._model_cls.has_deleted_at_column():
             self._update_dict[self._model_cls.deleted_at_column_name()] = utc_now_naive()
 
-        if not execute:
-            return self
-
-        return await self._execute()
+        return self
 
     @property
     def update_stmt(self) -> Update:
@@ -250,7 +244,7 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
 
         return self._stmt.values(**self._update_dict).execution_options(synchronize_session=False)
 
-    async def _execute(self):
+    async def execute(self):
         if not self._update_dict:
             return
 
