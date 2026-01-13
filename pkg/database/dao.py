@@ -42,19 +42,15 @@ class BaseDao[T: ModelMixin]:
 
     @property
     def querier(self) -> QueryBuilder[T]:
-        return QueryBuilder(
-            self._model_cls,
-            session_provider=self._session_provider,
-            include_deleted=False
-        ).desc_(self._model_cls.updated_at)
+        return QueryBuilder(self._model_cls, session_provider=self._session_provider, include_deleted=False).desc_(
+            self._model_cls.updated_at
+        )
 
     @property
     def querier_inc_deleted(self) -> QueryBuilder[T]:
-        return QueryBuilder(
-            self._model_cls,
-            session_provider=self._session_provider,
-            include_deleted=True
-        ).desc_(self._model_cls.updated_at)
+        return QueryBuilder(self._model_cls, session_provider=self._session_provider, include_deleted=True).desc_(
+            self._model_cls.updated_at
+        )
 
     @property
     def querier_unsorted(self) -> QueryBuilder[T]:
@@ -74,8 +70,13 @@ class BaseDao[T: ModelMixin]:
         return CountBuilder(self._model_cls, session_provider=self._session_provider, include_deleted=False)
 
     def col_counter(self, count_column: InstrumentedAttribute, *, is_distinct: bool = False) -> CountBuilder[T]:
-        return CountBuilder(self._model_cls, session_provider=self._session_provider, count_column=count_column,
-                            is_distinct=is_distinct, include_deleted=False)
+        return CountBuilder(
+            self._model_cls,
+            session_provider=self._session_provider,
+            count_column=count_column,
+            is_distinct=is_distinct,
+            include_deleted=False,
+        )
 
     # --- Updaters ---
     @property
@@ -87,11 +88,7 @@ class BaseDao[T: ModelMixin]:
 
     # --- Common Methods ---
     async def query_by_primary_id(
-        self,
-        primary_id: int,
-        *,
-        creator_id: int = None,
-        include_deleted: bool = False
+        self, primary_id: int, *, creator_id: int = None, include_deleted: bool = False
     ) -> T | None:
         qb = self.querier_inc_deleted if include_deleted else self.querier
         qb = qb.eq_(self._model_cls.id, primary_id)
@@ -109,49 +106,91 @@ async def execute_transaction(
     autoflush: bool = True,
 ) -> None:
     """
-        [Transaction] 手动事务执行器：通过回调函数在同一个事务中执行复杂逻辑。
+    [Transaction] 手动事务执行器：通过回调函数在同一个事务中执行复杂逻辑。
 
-        该方法解决了简单的批量执行无法处理 "先插入获取ID，再使用ID插入关联表" 的逻辑依赖问题。
-        它会自动开启事务，并在回调执行完毕后提交；如果发生异常则自动回滚。
+    该方法解决了简单的批量执行无法处理 "先插入获取ID，再使用ID插入关联表" 的逻辑依赖问题。
+    它会自动开启事务，并在回调执行完毕后提交；如果发生异常则自动回滚。
 
-        Args:
-            session_provider: Session 提供者
-            callback: 包含业务逻辑的异步函数。接收当前事务的 `AsyncSession`。
-            autoflush: 是否自动刷新（默认 True）。如果在事务中需要立即获取自增 ID，请保持为 True。
+    Args:
+        session_provider: Session 提供者
+        callback: 包含业务逻辑的异步函数。接收当前事务的 `AsyncSession`。
+        autoflush: 是否自动刷新（默认 True）。如果在事务中需要立即获取自增 ID，请保持为 True。
 
-        Raises:
-            RuntimeError: 当事务执行失败时抛出，并包含原始异常信息。
+    Raises:
+        RuntimeError: 当事务执行失败时抛出，并包含原始异常信息。
 
-        Examples:
-            **场景 1：简单的混合操作**
-            ```python
-            async def _do_work(sess: AsyncSession) -> None:
-                # 1. ORM 添加
-                sess.add(User(name="Alice"))
-                # 2. SQL 执行
-                await sess.execute(update(Log).where(...))
+    Examples:
+        **场景 1：使用 UpdateBuilder 进行批量更新**
+        ```python
+        async def _batch_update(sess: AsyncSession) -> None:
+            # 使用 UpdateBuilder 构建 SQL 语句
+            updater = await dao.updater.eq_(
+                Model.id, record_id
+            ).update(
+                status="active",
+                execute=False,  # 不自动执行
+            )
+            # 在事务的 session 中执行
+            await sess.execute(updater.update_stmt)
 
-            await execute_transaction(session_provider, _do_work)
-            ```
+        await execute_transaction(session_provider, _batch_update)
+        ```
 
-            **场景 2：有逻辑依赖的操作 (先插后查/后改)**
-            *注意：需要调用 await sess.flush() 来获取生成的 ID*
-            ```python
-            async def _create_order_flow(sess: AsyncSession) -> None:
-                # 1. 创建主订单
-                order = Order(user_id=1, amount=100)
-                sess.add(order)
+        **场景 2：混合 ORM 和原生 SQL**
+        ```python
+        async def _mixed_operations(sess: AsyncSession) -> None:
+            # 1. ORM 添加新对象
+            new_user = User(name="Alice")
+            sess.add(new_user)
+            await sess.flush()  # 获取自增 ID
 
-                # [关键] 刷新到数据库以获取自增 ID (此时并未 commit)
-                await sess.flush()
+            # 2. 使用 UpdateBuilder 批量更新
+            updater = await dao.updater.eq_(
+                Log.user_id, new_user.id
+            ).update(
+                execute=False,
+                status="processed",
+            )
+            await sess.execute(updater.update_stmt)
 
-                # 2. 使用生成的 ID 创建子项
-                item = OrderItem(order_id=order.id, product="Apple")
-                sess.add(item)
+        await execute_transaction(session_provider, _mixed_operations)
+        ```
 
-            await execute_transaction(session_provider, _create_order_flow)
-            ```
-        """
+        **场景 3：先插入后关联（使用雪花算法 ID）**
+        ```python
+        async def _create_with_relation(sess: AsyncSession) -> None:
+            # 1. 创建主记录（ID 通过雪花算法预先生成）
+            order = Order.create(user_id=1, amount=100)
+            # order.id 已经有值，无需 flush
+
+            # 2. 直接使用 order.id 创建子记录
+            item = OrderItem.create(order_id=order.id, product="Apple")
+
+            # 3. 一起添加到 session
+            sess.add(order)
+            sess.add(item)
+
+        await execute_transaction(session_provider, _create_with_relation)
+        ```
+
+        **场景 4：数据库自增 ID（需要 flush）**
+        *仅当使用数据库自增 ID 时需要此场景*
+        ```python
+        async def _create_with_auto_increment(sess: AsyncSession) -> None:
+            # 1. 创建主记录（ID 由数据库自增生成）
+            order = OtherModel(user_id=1, amount=100)
+            sess.add(order)
+
+            # [关键] 刷新到数据库以获取自增 ID（此时并未 commit）
+            await sess.flush()
+
+            # 2. 使用获取的 ID 创建子记录
+            item = RelatedModel(other_id=order.id, product="Apple")
+            sess.add(item)
+
+        await execute_transaction(session_provider, _create_with_auto_increment)
+        ```
+    """
     try:
         async with session_provider(autoflush=autoflush) as sess:
             async with sess.begin():
