@@ -260,6 +260,7 @@ class LoggerManager:
         """JSON Lines 格式化器 (save_json=True 时使用)"""
         extra_data = record["extra"].copy()
         json_content = extra_data.pop("json_content", None)
+        extra_data.pop("_json_out", None)
 
         if not isinstance(json_content, (dict, list, str, type(None))):
             raise TypeError(f"json_content must be types or None. Got {type(json_content)}")
@@ -279,8 +280,8 @@ class LoggerManager:
             log_record["json_content"] = json_content
 
         serialized = orjson_dumps(log_record, default=str)
-        record["extra"]["serialized_json"] = serialized
-        return "{extra[serialized_json]}\n"
+        record["extra"]["_json_out"] = serialized
+        return "{extra[_json_out]}\n"
 
     # --- 辅助方法 ---
     @staticmethod
