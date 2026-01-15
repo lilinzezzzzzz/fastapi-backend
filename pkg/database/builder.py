@@ -201,6 +201,7 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
         super().__init__(target_cls, session_provider=session_provider)
         self._stmt = update(self._model_cls)
         self._update_dict = {}
+        self._model_ins = model_ins
         if model_ins is not None:
             self._stmt = self._stmt.where(self._model_cls.id == model_ins.id)
 
@@ -242,6 +243,9 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
                 context.get_user_id(),
             )
 
+        # 自动同步更新字典到模型实例
+        self._sync_update_dict_to_instance()
+
         return self._stmt.values(**self._update_dict).execution_options(synchronize_session=False)
 
     async def execute(self):
@@ -254,3 +258,15 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
                 await sess.commit()
         except Exception as e:
             raise RuntimeError(f"Error when updating data, {self._model_cls.__name__}: {e}") from e
+
+    def _sync_update_dict_to_instance(self) -> None:
+        """将更新字典同步到模型实例
+
+        将 _update_dict 中的所有字段（包括自动添加的 updated_at、updater_id 等）
+        同步到模型实例，保持内存对象与数据库状态一致。
+
+        注意：该方法仅在 model_ins 存在时执行同步。
+        """
+        if self._model_ins is not None:
+            for key, value in self._update_dict.items():
+                setattr(self._model_ins, key, value)

@@ -248,10 +248,13 @@ class LoggerManager:
         )
 
         # 检查并追加 json_content
-        if record["extra"].get("json_content") is not None:
+        json_content = record["extra"].get("json_content")
+        if json_content is not None:
+            # 序列化为 JSON 字符串并存入 extra，避免直接输出 dict
+            serialized = orjson_dumps(json_content, default=str)
+            record["extra"]["_text_json"] = serialized
             # 这里选择换行追加，保持与 Console 视觉一致，且避免单行过长
-            # 如果希望单行，可以将 \n 替换为 | 或 -
-            fmt += "\n{extra[json_content]}"
+            fmt += "\n{extra[_text_json]}"
 
         return fmt + "\n"
 
