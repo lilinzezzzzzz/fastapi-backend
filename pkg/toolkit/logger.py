@@ -5,6 +5,7 @@ from typing import Any
 
 import loguru
 
+from pkg.toolkit import context
 from pkg.toolkit.json import orjson_dumps
 from pkg.toolkit.string import uuid6_unique_str_id
 from pkg.toolkit.timer import format_iso_datetime
@@ -217,13 +218,17 @@ class LoggerManager:
 
     # --- 格式化器 ---
 
-    @staticmethod
-    def _console_formatter(record: Any) -> str:
+    @classmethod
+    def _console_formatter(cls, record: Any) -> str:
+        """控制台格式化器，仅输出纯文本，不包含 json_content"""
+        # 获取 trace_id
+        trace_id = cls._get_trace_id(record)
+
         fmt = (
             "<green>{time:YYYY-MM-DD HH:mm:ss.SSSZ}</green> | "
             "<level>{level: <8}</level> | "
             "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
-            "<magenta>{extra[trace_id]}</magenta> | "
+            f"<magenta>{trace_id}</magenta> | "
             "<yellow>{extra[log_type]}</yellow> - <level>{message}</level>"
         )
 
@@ -234,16 +239,18 @@ class LoggerManager:
             fmt += "\n<cyan>{extra[json_content]}</cyan>"
         return fmt + "\n"
 
-    @staticmethod
-    def _file_formatter(record: Any) -> str:
+    @classmethod
+    def _file_formatter(cls, record: Any) -> str:
         """
         File 文本动态格式化器 (save_json=False 时使用)
         """
+        trace_id = cls._get_trace_id(record)
+
         fmt = (
             "{time:YYYY-MM-DD HH:mm:ss.SSSZ} | "
             "{level: <8} | "
             "{name}:{function}:{line} | "
-            "{extra[trace_id]} | "
+            f"{trace_id} | "
             "{extra[log_type]} - {message}"
         )
 
@@ -258,9 +265,11 @@ class LoggerManager:
 
         return fmt + "\n"
 
-    @staticmethod
-    def _json_formatter(record: Any) -> str:
+    @classmethod
+    def _json_formatter(cls, record: Any) -> str:
         """JSON Lines 格式化器 (save_json=True 时使用)"""
+        trace_id = cls._get_trace_id(record)
+
         extra_data = record["extra"].copy()
         json_content = extra_data.pop("json_content", None)
         extra_data.pop("_json_out", None)
@@ -271,9 +280,8 @@ class LoggerManager:
         log_record = {
             "time": format_iso_datetime(record["time"]),
             "level": record["level"].name,
-            "name": record["name"],
-            "function": record["function"],
-            "line": record["line"],
+            "trace_id": trace_id,
+            "location": f"{record['name']}.{record['function']}:{record['line']}",
             "text": "",
             "message": record["message"],
             **extra_data,
@@ -300,6 +308,26 @@ class LoggerManager:
         if not path.parent.exists():
             raise FileNotFoundError(f"Parent directory does not exist: {path.parent}")
         path.mkdir(exist_ok=True)
+
+    @classmethod
+    def _get_trace_id(cls, record: Any) -> str:
+        """
+        获取 trace_id，优先级：extra[trace_id] > context.get_trace_id() > "-"
+
+        Args:
+            record: 日志记录对象
+
+        Returns:
+            trace_id 字符串
+        """
+        trace_id = record["extra"].get("trace_id")
+
+        # 如果 trace_id 为 None 或 "-"，尝试从 context 获取
+        if trace_id is None:
+            trace_id = context.get_trace_id()
+
+        # 如果仍然没有，返回 "-"
+        return trace_id
 
 
 logger = LoggerManager().setup()

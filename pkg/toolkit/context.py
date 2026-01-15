@@ -1,8 +1,6 @@
 from contextvars import ContextVar
 from typing import Any
 
-from pkg.toolkit.logger import logger
-
 _request_context_var: ContextVar[dict[str, Any]] = ContextVar("request_context")
 
 
@@ -40,7 +38,6 @@ class _RequestContextManager:
             # 修改：移除自动 init，直接报错或记录严重错误
             # 如果这是一个纯 Web 包，应该 raise 异常。
             # 如果为了兼容，打印 Error 且不执行操作可能更安全。
-            logger.error(f"Try to set context key '{key}' but Context is not initialized!")
             raise RuntimeError("Request Context not initialized. Is Middleware added?") from e
 
     @staticmethod
@@ -85,7 +82,6 @@ def set_user_id(user_id: int):
 def get_user_id() -> int:
     user_id = _ctx_manager.get("user_id")
     if user_id is None:
-        logger.warning("user_id is not set in current context")
         raise LookupError("user_id is not set")
     return user_id
 
