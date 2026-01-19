@@ -25,6 +25,7 @@ class _RequestContext:
     trace_id: str = field(default_factory=uuid6_unique_str_id)
     receive: Receive | None = None
     response_started: bool = False
+    _process_time: float | None = field(default=None, init=False, repr=False)
 
     def __post_init__(self):
         # 优先使用请求头中的 trace_id
@@ -34,6 +35,9 @@ class _RequestContext:
 
     @property
     def process_time(self) -> float:
+        """返回请求处理耗时。如果已记录则返回记录值，否则返回当前实时值。"""
+        if self._process_time is not None:
+            return self._process_time
         return time.perf_counter() - self.start_time
 
     def create_send_wrapper(self, send: Send, scope: Scope):
