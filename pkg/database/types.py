@@ -97,54 +97,52 @@ class JSONType(TypeDecorator):
         if value is None:
             return None
 
-        # 1. 针对原生支持 JSON 的数据库，直接返回对象
-        if dialect.name in ("postgresql", "mysql", "sqlite"):
-            return value
-        if dialect.name == "oracle" and self.oracle_native_json:
-            return value
-
-        # 2. 避免双重序列化：如果已经是字符串，则不再次 dumps
+        # 避免双重序列化：如果已经是字符串，则不再次 dumps
         if isinstance(value, (str, bytes)):
             return value
 
-        # 3. 手动序列化 (Oracle CLOB, MSSQL Text 等)
+        # PostgreSQL JSONB 原生支持 dict，无需序列化
+        if dialect.name == "postgresql":
+            return value
+
+        # Oracle 原生 JSON 模式（21c+）
+        if dialect.name == "oracle" and self.oracle_native_json:
+            return value
+
+        # MySQL/SQLite/Oracle CLOB/其他：手动序列化
+        # 注意：aiomysql 驱动不支持直接传递 dict，必须序列化
         return orjson_dumps(value)
 
     def process_result_value(self, value: Any, dialect: Dialect) -> Any:
         if value is None:
             return None
 
-        # 1. 原生类型或驱动已处理的情况
+        # 1. 已经是 dict/list，直接返回（驱动已处理）
         if isinstance(value, (dict, list)):
             return value
 
-        if dialect.name in ("postgresql", "mysql", "sqlite"):
+        # 2. PostgreSQL JSONB 驱动会自动反序列化
+        if dialect.name == "postgresql":
             return value
+
+        # 3. Oracle 原生 JSON 模式（21c+）
         if dialect.name == "oracle" and self.oracle_native_json:
             return value
 
-        # 2. 处理 Oracle LOB 对象等边缘情况 (如果驱动返回的是 LOB 流)
+        # 4. 处理 Oracle LOB 对象
         if hasattr(value, "read"):
             value = value.read()
 
-        # 3. 空字符串处理
+        # 5. 空字符串处理
         if isinstance(value, str) and not value.strip():
             return None
 
-        # 4. 反序列化
+        # 6. 反序列化（MySQL/SQLite/Oracle CLOB/其他）
         try:
             return orjson_loads(value)
         except ValueError:
             # 容错：如果数据库里存了非 JSON 的纯文本，避免整个查询崩溃
-            # 视业务需求，这里也可以记录日志并 raise
             return value
-
-
-# ==========================================================================
-# 重要：为 JSONType 注册变更追踪
-# ==========================================================================
-# 这样操作 model.config['key'] = 'value' 时，SA 才能感知到变化并执行 UPDATE
-# 注意：MutableDict 只能追踪顶层 key 的变化，深层嵌套修改仍需手动 flag_modified
 
 
 class MutableJSON(Mutable):
@@ -172,6 +170,13 @@ class MutableJSON(Mutable):
 
         # 4. 其他类型（如 int, str 等），无法追踪内部变更，直接返回
         return value
+
+
+# ==========================================================================
+# 重要：为 JSONType 注册变更追踪
+# ==========================================================================
+# 这样操作 model.config['key'] = 'value' 时，SA 才能感知到变化并执行 UPDATE
+# 注意：MutableDict 只能追踪顶层 key 的变化，深层嵌套修改仍需手动 flag_modified
 
 
 MutableJSON.associate_with(JSONType)
