@@ -87,6 +87,7 @@ class ASGIRecordMiddleware:
             # 1. 初始化上下文
             context.init(trace_id=req_ctx.trace_id)
 
+            send_wrapper = req_ctx.create_send_wrapper(send, scope)
             # 2. 记录访问日志
             with logger.contextualize(trace_id=req_ctx.trace_id):
                 logger.info(
@@ -95,7 +96,6 @@ class ASGIRecordMiddleware:
                 )
 
                 # 3. 创建 send 包装器并执行应用逻辑
-                send_wrapper = req_ctx.create_send_wrapper(send, scope)
                 await self.app(scope, receive, send_wrapper)
 
                 # 4. 记录响应日志
@@ -117,8 +117,6 @@ class ASGIRecordMiddleware:
                 else:
                     error_resp = error_response(error=errors.InternalServerError, message=str(exc))
 
-                # 复用 send_wrapper,错误响应也会自动注入追踪头
-                send_wrapper = req_ctx.create_send_wrapper(send, scope)
                 await error_resp(scope, receive, send_wrapper)
             else:
                 logger.critical(f"Response already started, cannot send error response. trace_id={req_ctx.trace_id}")
