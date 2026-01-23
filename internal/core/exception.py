@@ -1,6 +1,21 @@
 from pkg.toolkit.response import AppError
 
 
+class AppException(Exception):
+    def __init__(self, error: AppError, message: str = ""):
+        """
+        自定义 HTTP 异常，支持任意状态码，不受 http.HTTPStatus 限制。
+
+        :param error: AppError
+        :param message: 详细信息，可以是字符串或字典
+        """
+        self.error = error
+        self.message = message
+
+    def __repr__(self):
+        return f"AppException(error={self.error}, message={self.message})"
+
+
 class GlobalErrors:
     """
     全局状态码定义
@@ -20,18 +35,3 @@ class GlobalErrors:
 
 
 errors = GlobalErrors()
-
-
-class AppException(Exception):
-    def __init__(self, error: AppError, message: str = ""):
-        """
-        自定义 HTTP 异常，支持任意状态码，不受 http.HTTPStatus 限制。
-
-        :param error: AppError
-        :param message: 详细信息，可以是字符串或字典
-        """
-        self.error = error
-        self.message = message
-
-    def __repr__(self):
-        return f"AppException(error={self.error}, message={self.message})"
