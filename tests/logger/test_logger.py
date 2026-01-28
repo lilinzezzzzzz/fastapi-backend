@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 
 import pytest
 from loguru import logger as loguru_logger
@@ -17,7 +17,7 @@ def setup_logging(tmp_path):
     # 注意：直接修改类属性。由于 SYSTEM_LOG_DIR 是在类加载时计算的，
     # 修改 BASE_LOG_DIR 后必须手动更新 SYSTEM_LOG_DIR。
     LoggerManager.BASE_LOG_DIR = tmp_path / "logs"
-    LoggerManager.SYSTEM_LOG_DIR = LoggerManager.BASE_LOG_DIR / LoggerManager.SYSTEM_LOG_TYPE
+    LoggerManager.SYSTEM_LOG_DIR = LoggerManager.BASE_LOG_DIR / LoggerManager.SYSTEM_LOG_NAMESPACE
 
     # 3. 重新初始化 LoggerManager
     LoggerManager().setup(write_to_file=True, write_to_console=False)
@@ -34,13 +34,14 @@ def get_today_str():
     return datetime.now().strftime("%Y-%m-%d")
 
 
-def find_json_log(file_path, target_message: str) -> Optional[Dict[str, Any]]:
+def find_json_log(file_path, target_message: str) -> dict[str, Any] | None:
     """JSON 日志查找辅助函数"""
     if not file_path.exists():
         return None
     content = file_path.read_text(encoding="utf-8")
-    for line in content.strip().split('\n'):
-        if not line.strip(): continue
+    for line in content.strip().split("\n"):
+        if not line.strip():
+            continue
         try:
             data = json.loads(line)
             # 5. 结构调整：新格式没有外层的 "record" 包装，直接是扁平字典
@@ -81,13 +82,12 @@ def test_system_logging(setup_logging):
 
 
 def test_dynamic_logger_creation(setup_logging):
-    """测试动态 Logger 创建 (默认为 JSON)"""
+    """测试动态 Logger 创建 (格式由 LoggerManager 的 log_format 参数决定)"""
     base_log_dir = setup_logging
     dev_id = "device_test_01"
     msg = "Connect success"
 
     # 使用新导出的 get_dynamic_logger 方法
-    # 默认 save_json=True
     dev_logger = global_logger.get_dynamic_logger(dev_id)
     dev_logger.info(msg)
     loguru_logger.complete()
@@ -96,13 +96,8 @@ def test_dynamic_logger_creation(setup_logging):
     expected = base_log_dir / dev_id / f"{get_today_str()}.log"
     assert expected.exists(), f"设备日志文件未创建: {expected}"
 
-    # 验证 JSON 内容
-    record = find_json_log(expected, msg)
-    assert record is not None
-    # 验证 extra 中的 type
-    assert record["extra"]["type"] == dev_id
-    # 验证 text 字段为空 (符合之前需求)
-    assert record["text"] == ""
+    # 验证文本内容（默认 log_format="text"）
+    assert find_text_log(expected, msg), "未在日志文件中找到目标消息"
 
 
 def test_create_failure_fallback(setup_logging, monkeypatch):
@@ -135,11 +130,11 @@ def test_create_failure_fallback(setup_logging, monkeypatch):
     system_log = base_log_dir / "system" / f"{get_today_str()}.log"
     assert system_log.exists()
 
-    # 注意：降级到 system log 后，格式变成了文本格式 (因为 System Logger 是文本)
-    # 同时 context type 会变成 "system"
+    # 注意：降级到 system log 后，格式与 System Logger 一致
+    # 同时 context log_namespace 会变成 "system"
     assert find_text_log(system_log, msg), "未在系统降级日志中找到消息"
 
-    # 如果你想验证它是作为 "system" 类型记录的，需要去 parse 文本日志的格式
-    # 文本格式包含: ... | {extra[type]} - {message}
+    # 如果你想验证它是作为 "system" 命名空间记录的，需要去 parse 文本日志的格式
+    # 文本格式包含: ... | {extra[log_namespace]} - {message}
     content = system_log.read_text(encoding="utf-8")
     assert f"system - {msg}" in content or f"| system - {msg}" in content

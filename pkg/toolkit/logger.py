@@ -24,7 +24,7 @@ class LoggerManager:
     配置在实例化 (__init__) 时传入，并在 setup() 时生效。
     """
 
-    SYSTEM_LOG_TYPE: str = "system"
+    SYSTEM_LOG_NAMESPACE: str = "system"
 
     def __init__(
         self,
@@ -37,6 +37,7 @@ class LoggerManager:
         compression: str | None = None,
         use_utc: bool = True,
         enqueue: bool = True,
+        log_format: str = "text",
     ):
         """
         构造函数：接收所有配置参数并存储为实例属性。
@@ -49,9 +50,13 @@ class LoggerManager:
         :param compression: 压缩格式 (e.g., "zip")
         :param use_utc: 是否强制使用 UTC 时间 (影响日志内容及轮转触发时间)
         :param enqueue: 是否使用多进程安全的队列写入
+        :param log_format: 日志格式 ("json" 或 "text"，默认 "text")
         """
+        if log_format not in ("json", "text"):
+            raise ValueError(f"log_format must be 'json' or 'text', got '{log_format}'")
+
         self._logger = loguru.logger
-        self._registered_types: dict[str, dict[str, Any]] = {}
+        self._registered_namespaces: dict[str, dict[str, Any]] = {}
         self._is_initialized = False
 
         # --- 配置属性 ---
@@ -62,6 +67,7 @@ class LoggerManager:
         self.compression = compression
         self.use_utc = use_utc
         self.enqueue = enqueue
+        self.log_format = log_format
 
         # --- 轮转策略的特殊处理 ---
         # 如果强制使用 UTC，且传入的 rotation 是默认的无时区 time 对象，
@@ -77,13 +83,13 @@ class LoggerManager:
         注意：setup 不再接收配置参数，而是使用 __init__ 中保存的属性。
         """
         self._logger.remove()
-        self._registered_types.clear()
+        self._registered_namespaces.clear()
 
         # 1. 准备基础配置
         config_params: dict[str, Any] = {
             "extra": {
                 "trace_id": "-",
-                "log_type": self.SYSTEM_LOG_TYPE,
+                "log_namespace": self.SYSTEM_LOG_NAMESPACE,
                 "json_content": None,
             },
         }
@@ -94,15 +100,20 @@ class LoggerManager:
 
         self._logger.configure(**config_params)
 
+        # 根据 log_format 决定使用的格式化器
+        is_json = self.log_format == "json"
+        console_format = self._json_formatter if is_json else self._console_formatter
+        file_format = self._json_formatter if is_json else self._file_formatter
+
         # 3. Console 输出
         if write_to_console:
             self._logger.add(
                 sink=sys.stderr,
                 level=self.level,
                 enqueue=self.enqueue,
-                colorize=True,
+                colorize=not is_json,
                 diagnose=True,
-                format=self._console_formatter,
+                format=console_format,
                 filter=self._filter_system,
             )
 
@@ -118,65 +129,61 @@ class LoggerManager:
                 retention=self.retention,
                 compression=self.compression,
                 enqueue=self.enqueue,
-                format=self._file_formatter,
+                format=file_format,
                 filter=self._filter_system,
             )
 
-            self._registered_types[self.SYSTEM_LOG_TYPE] = {"save_json": False}
+            self._registered_namespaces[self.SYSTEM_LOG_NAMESPACE] = {"sink_registered": True}
 
         mode_str = "UTC" if self.use_utc else "Local Time"
-        self._logger.info(f"Logger initialized. Mode: {mode_str} | Rotation: {self.rotation} | Level: {self.level}")
+        self._logger.info(
+            f"Logger initialized. Mode: {mode_str} | Format: {self.log_format} | Rotation: {self.rotation} | Level: {self.level}"
+        )
         self._is_initialized = True
         return self._logger
 
     def get_dynamic_logger(
         self,
-        log_type: str,
+        log_namespace: str,
         *,
         write_to_console: bool = False,
-        save_json: bool = True,
     ) -> "loguru.Logger":
         """
-        获取动态类型的 Logger。
-        使用实例属性 (self.rotation, self.retention 等) 创建新的 Sink。
+        获取动态命名空间的 Logger。
+        使用实例属性 (self.rotation, self.retention, self.log_format 等) 创建新的 Sink。
 
-        :param log_type: 日志类型标识
-        :param write_to_console: 是否输出到控制台（仅针对该日志类型，不会重复输出）
-        :param save_json: 文件是否使用 JSON 格式
+        :param log_namespace: 日志命名空间标识
+        :param write_to_console: 是否输出到控制台（仅针对该日志命名空间，不会重复输出）
         """
         if not self._is_initialized:
             raise RuntimeError("LoggerManager is not initialized! Call setup() first.")
 
-        if not log_type:
-            raise ValueError(f"log_type cannot be empty, value = {log_type}")
+        if not log_namespace:
+            raise ValueError(f"log_namespace cannot be empty, value = {log_namespace}")
 
-        # 为了避免 JSON 和 text sink 互相干扰，使用不同的内部 key
-        # JSON 日志使用 "{log_type}_json"，text 日志使用原始 "{log_type}"
-        internal_key = f"{log_type}_json" if save_json else log_type
-
-        # 定义该设备专属的过滤器 (闭包)
-        # 这保证了即使添加多个 stderr sink，每个 sink 也只处理自己 internal_key 的消息
+        # 定义该命名空间专属的过滤器 (闭包)
         def _specific_filter(record):
-            return record["extra"].get("log_type") == internal_key
+            return record["extra"].get("log_namespace") == log_namespace
 
-        # 获取或初始化配置（使用 internal_key 作为注册的 key）
-        if internal_key not in self._registered_types:
-            self._registered_types[internal_key] = {
-                "format": "json" if save_json else "text",
+        # 获取或初始化配置
+        if log_namespace not in self._registered_namespaces:
+            self._registered_namespaces[log_namespace] = {
                 "write_to_console": False,
                 "sink_registered": False,
             }
 
-        config = self._registered_types[internal_key]
+        config = self._registered_namespaces[log_namespace]
+
+        # 根据 log_format 决定使用的格式化器
+        is_json = self.log_format == "json"
+        file_format = self._json_formatter if is_json else self._file_formatter
+        console_format = self._json_formatter if is_json else self._console_formatter
 
         # 1. 检查并添加文件 Sink
         if not config["sink_registered"]:
             try:
-                # 文件存储在原始 log_type 目录下（而不是 internal_key）
-                self._ensure_dir(log_dir := self.base_log_dir / log_type)
+                self._ensure_dir(log_dir := self.base_log_dir / log_namespace)
                 sink_path = log_dir / "{time:YYYY-MM-DD}.log"
-
-                log_format = self._json_formatter if save_json else self._file_formatter
 
                 self._logger.add(
                     sink=sink_path,
@@ -185,36 +192,34 @@ class LoggerManager:
                     retention=self.retention,
                     compression=self.compression,
                     enqueue=self.enqueue,
-                    format=log_format,
+                    format=file_format,
                     serialize=False,
                     filter=_specific_filter,
                 )
 
                 config["sink_registered"] = True
-                self._logger.info(f"System: Registered {config['format']} sink for log_type '{log_type}'")
+                self._logger.info(f"System: Registered {self.log_format} sink for log_namespace '{log_namespace}'")
 
             except Exception as e:
-                self._logger.error(f"System: Failed to register sink for '{log_type}'. Error: {e}")
-                return self._logger.bind(log_type=self.SYSTEM_LOG_TYPE, original_type=log_type)
+                self._logger.error(f"System: Failed to register sink for '{log_namespace}'. Error: {e}")
+                return self._logger.bind(log_namespace=self.SYSTEM_LOG_NAMESPACE, original_namespace=log_namespace)
 
         # 2. 检查并添加控制台 Sink
         if write_to_console and not config["write_to_console"]:
-            # 控制台格式也根据 save_json 参数决定
-            console_format = self._json_formatter if save_json else self._console_formatter
             self._logger.add(
                 sink=sys.stderr,
                 format=console_format,
                 level=self.level,
                 enqueue=self.enqueue,
-                colorize=not save_json,  # JSON 格式不需要颜色
+                colorize=not is_json,
                 diagnose=True,
                 filter=_specific_filter,
             )
             config["write_to_console"] = True
-            self._logger.info(f"System: Added console sink for log_type '{log_type}'")
+            self._logger.info(f"System: Added console sink for log_namespace '{log_namespace}'")
 
-        # 返回绑定 internal_key 的 logger，确保日志只被对应的 sink 处理
-        return self._logger.bind(log_type=internal_key)
+        # 返回绑定 log_namespace 的 logger
+        return self._logger.bind(log_namespace=log_namespace)
 
     # --- 格式化器 ---
 
@@ -229,7 +234,7 @@ class LoggerManager:
             "<level>{level: <8}</level> | "
             "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
             f"<magenta>{trace_id}</magenta> | "
-            "<yellow>{extra[log_type]}</yellow> - <level>{message}</level>"
+            "<yellow>{extra[log_namespace]}</yellow> - <level>{message}</level>"
         )
 
         # 检查 json_content 是否存在且不为 None
@@ -242,7 +247,7 @@ class LoggerManager:
     @classmethod
     def _file_formatter(cls, record: Any) -> str:
         """
-        File 文本动态格式化器 (save_json=False 时使用)
+        File 文本动态格式化器 (log_format='text' 时使用)
         """
         trace_id = cls._get_trace_id(record)
 
@@ -251,7 +256,7 @@ class LoggerManager:
             "{level: <8} | "
             "{name}:{function}:{line} | "
             f"{trace_id} | "
-            "{extra[log_type]} - {message}"
+            "{extra[log_namespace]} - {message}"
         )
 
         # 检查并追加 json_content
@@ -267,7 +272,7 @@ class LoggerManager:
 
     @classmethod
     def _json_formatter(cls, record: Any) -> str:
-        """JSON Lines 格式化器 (save_json=True 时使用)"""
+        """JSON Lines 格式化器 (log_format='json' 时使用)"""
         trace_id = cls._get_trace_id(record)
 
         extra_data = record["extra"].copy()
@@ -301,7 +306,7 @@ class LoggerManager:
 
     @staticmethod
     def _filter_system(record: Any) -> bool:
-        return record["extra"].get("log_type") == LoggerManager.SYSTEM_LOG_TYPE
+        return record["extra"].get("log_namespace") == LoggerManager.SYSTEM_LOG_NAMESPACE
 
     @staticmethod
     def _ensure_dir(path: Path):
