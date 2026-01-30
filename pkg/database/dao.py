@@ -13,9 +13,9 @@ from pkg.database.builder import CountBuilder, QueryBuilder, UpdateBuilder
 
 
 class BaseDao[T: ModelMixin]:
-    _model_cls: type[T] = None  # 类型提示
+    _model_cls: type[T]|None = None  # 类型提示
 
-    def __init__(self, *, session_provider: SessionProvider, model_cls: type[T] = None):
+    def __init__(self, *, session_provider: SessionProvider, model_cls: type[T] | None = None):
         """
         修复了 __init__ 逻辑：
         1. 先赋值 session_provider
@@ -35,43 +35,46 @@ class BaseDao[T: ModelMixin]:
 
     @property
     def model_cls(self) -> type[T]:
+        if self._model_cls is None:
+            raise ValueError(f"DAO {self.__class__.__name__} must define _model_cls or pass it to __init__")
+
         return self._model_cls
 
     def create(self, **kwargs) -> T:
-        return self._model_cls.create(**kwargs)
+        return self.model_cls.create(**kwargs)
 
     @property
     def querier(self) -> QueryBuilder[T]:
-        return QueryBuilder(self._model_cls, session_provider=self._session_provider, include_deleted=False).desc_(
-            self._model_cls.updated_at
+        return QueryBuilder(self.model_cls, session_provider=self._session_provider, include_deleted=False).desc_(
+            self.model_cls.updated_at
         )
 
     @property
     def querier_inc_deleted(self) -> QueryBuilder[T]:
-        return QueryBuilder(self._model_cls, session_provider=self._session_provider, include_deleted=True).desc_(
-            self._model_cls.updated_at
+        return QueryBuilder(self.model_cls, session_provider=self._session_provider, include_deleted=True).desc_(
+            self.model_cls.updated_at
         )
 
     @property
     def querier_unsorted(self) -> QueryBuilder[T]:
-        return QueryBuilder(self._model_cls, session_provider=self._session_provider, include_deleted=False)
+        return QueryBuilder(self.model_cls, session_provider=self._session_provider, include_deleted=False)
 
     @property
     def querier_inc_deleted_unsorted(self) -> QueryBuilder[T]:
-        return QueryBuilder(self._model_cls, session_provider=self._session_provider, include_deleted=True)
+        return QueryBuilder(self.model_cls, session_provider=self._session_provider, include_deleted=True)
 
     def sub_querier(self, subquery: Subquery) -> QueryBuilder[T]:
-        alias = aliased(self._model_cls, subquery)
-        return QueryBuilder(self._model_cls, session_provider=self._session_provider, custom_stmt=select(alias))
+        alias = aliased(self.model_cls, subquery)
+        return QueryBuilder(self.model_cls, session_provider=self._session_provider, custom_stmt=select(alias))
 
     # --- Counters ---
     @property
     def counter(self) -> CountBuilder[T]:
-        return CountBuilder(self._model_cls, session_provider=self._session_provider, include_deleted=False)
+        return CountBuilder(self.model_cls, session_provider=self._session_provider, include_deleted=False)
 
     def col_counter(self, count_column: InstrumentedAttribute, *, is_distinct: bool = False) -> CountBuilder[T]:
         return CountBuilder(
-            self._model_cls,
+            self.model_cls,
             session_provider=self._session_provider,
             count_column=count_column,
             is_distinct=is_distinct,
@@ -81,7 +84,7 @@ class BaseDao[T: ModelMixin]:
     # --- Updaters ---
     @property
     def updater(self) -> UpdateBuilder[T]:
-        return UpdateBuilder(model_cls=self._model_cls, session_provider=self._session_provider)
+        return UpdateBuilder(model_cls=self.model_cls, session_provider=self._session_provider)
 
     def ins_updater(self, ins: T) -> UpdateBuilder[T]:
         return UpdateBuilder(model_ins=ins, session_provider=self._session_provider)
@@ -91,13 +94,13 @@ class BaseDao[T: ModelMixin]:
         self, primary_id: int, *, creator_id: int = None, include_deleted: bool = False
     ) -> T | None:
         qb = self.querier_inc_deleted if include_deleted else self.querier
-        qb = qb.eq_(self._model_cls.id, primary_id)
-        if creator_id and self._model_cls.has_creator_id_column():
-            qb = qb.where(self._model_cls.get_creator_id_column() == creator_id)
+        qb = qb.eq_(self.model_cls.id, primary_id)
+        if creator_id and self.model_cls.has_creator_id_column():
+            qb = qb.where(self.model_cls.get_creator_id_column() == creator_id)
         return await qb.first()
 
     async def query_by_ids(self, ids: list[int]) -> list[T]:
-        return await self.querier.in_(self._model_cls.id, ids).all()
+        return await self.querier.in_(self.model_cls.id, ids).all()
 
 
 async def execute_transaction(

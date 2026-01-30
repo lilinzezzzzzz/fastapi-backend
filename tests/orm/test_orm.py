@@ -15,8 +15,12 @@ from sqlalchemy.orm import Mapped, mapped_column
 # ==========================================
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(current_dir)
+project_root = os.path.dirname(os.path.dirname(current_dir))
 pkg_path = os.path.join(project_root, "pkg")
+
+# 添加项目根目录到 sys.path
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 mock_pkg = types.ModuleType("pkg")
 mock_pkg.__path__ = [pkg_path]
@@ -27,12 +31,13 @@ mock_pkg.orjson_loads_types = (str, bytes)
 mock_pkg.utc_now_naive = lambda: datetime.utcnow()
 mock_pkg.unique_list = lambda x, exclude_none=False: list(set([i for i in x if i is not None] if exclude_none else x))
 
-mock_context = MagicMock()
-mock_context.ctx.get_user_id.return_value = 999
+# Mock context module
+mock_context = types.ModuleType("pkg.toolkit.context")
+mock_context.get_user_id = lambda: 999
 
 mock_logger = MagicMock()
-mock_snowflake = MagicMock()
 
+# Mock snowflake ID generator
 _id_counter = 0
 
 
@@ -42,12 +47,17 @@ def mock_gen_id():
     return _id_counter
 
 
-mock_snowflake.generate_snowflake_id = mock_gen_id
+mock_snowflake_module = types.ModuleType("pkg.toolkit.inter")
+mock_snowflake_generator = types.SimpleNamespace()
+mock_snowflake_generator.generate = mock_gen_id
+mock_snowflake_module.snowflake_id_generator = mock_snowflake_generator
 
-sys.modules["pkg"] = mock_pkg
+# 不要 mock pkg 主模块，让它正常导入
+# sys.modules["pkg"] = mock_pkg
+sys.modules["pkg.toolkit.context"] = mock_context
 sys.modules["pkg.context"] = mock_context
 sys.modules["pkg.logger_tool"] = mock_logger
-sys.modules["pkg.snowflake_tool"] = mock_snowflake
+sys.modules["pkg.toolkit.inter"] = mock_snowflake_module
 
 # ==========================================
 # 2. 导入目标代码
@@ -207,7 +217,7 @@ async def test_soft_delete(user_dao, db_session):
     user = User.create(username="del_me")
     await user.save(db_session)
 
-    await user_dao.ins_updater(user).soft_delete().execute()
+    await (await user_dao.ins_updater(user).soft_delete()).execute()
 
     # 默认不查出
     assert await user_dao.querier.eq_(User.id, user.id).first() is None
@@ -221,7 +231,7 @@ async def test_updater_builder_logic(user_dao, db_session):
     user = User.create(username="old_name")
     await user.save(db_session)
 
-    await user_dao.ins_updater(user).update(username="new_name").execute()
+    await (await user_dao.ins_updater(user).update(username="new_name")).execute()
 
     reloaded = await user_dao.query_by_primary_id(user.id)
     assert reloaded.username == "new_name"

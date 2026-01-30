@@ -30,6 +30,7 @@ sys.modules["pkg.toolkit.json"] = mock_json
 # 1.2 Mock pkg.toolkit.timer
 mock_timer = types.ModuleType("pkg.toolkit.timer")
 mock_timer.utc_now_naive = lambda: datetime.now(UTC).replace(tzinfo=None)
+mock_timer.format_iso_datetime = lambda val, *, use_z=True, timespec="milliseconds": val.isoformat()
 sys.modules["pkg.toolkit.timer"] = mock_timer
 
 # 1.3 Mock pkg.toolkit.context
@@ -197,7 +198,7 @@ async def test_query_builder(user_dao, db_session):
 async def test_soft_delete(user_dao, db_session):
     user = User.create(username="del_me")
     await user.save(db_session)
-    await user_dao.ins_updater(user).soft_delete()
+    await (await user_dao.ins_updater(user).soft_delete()).execute()
     assert await user_dao.querier.eq_(User.id, user.id).first() is None
     assert await user_dao.querier_inc_deleted.eq_(User.id, user.id).first() is not None
 
@@ -206,7 +207,7 @@ async def test_soft_delete(user_dao, db_session):
 async def test_updater_builder_logic(user_dao, db_session):
     user = User.create(username="old_name")
     await user.save(db_session)
-    await user_dao.ins_updater(user).update(username="new_name")
+    await (await user_dao.ins_updater(user).update(username="new_name")).execute()
     reloaded = await user_dao.query_by_primary_id(user.id)
     assert reloaded.username == "new_name"
 
