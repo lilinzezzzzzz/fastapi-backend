@@ -1,4 +1,4 @@
-from internal.infra.apscheduler.register import _register_tasks
+from internal.utils.apscheduler.register import _register_tasks
 from pkg.logger import logger
 from pkg.toolkit.apscheduler import ApsSchedulerManager
 from pkg.toolkit.types import LazyProxy

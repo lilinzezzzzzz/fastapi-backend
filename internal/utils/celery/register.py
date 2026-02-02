@@ -1,7 +1,7 @@
 import anyio
 
-from internal.infra.celery import celery_client
 from internal.tasks.demo_task import handle_number_sum
+from internal.utils.celery import celery_client
 from pkg.logger import logger
 
 

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
 from internal.core.exception import AppException, errors
-from internal.infra.anyio_task import anyio_task_manager
+from internal.utils.anyio_task import anyio_task_manager
 from pkg.decorators import stream_with_chunk_control
 from pkg.logger import logger
 from pkg.toolkit.response import success_response

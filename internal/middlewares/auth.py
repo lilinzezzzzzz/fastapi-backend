@@ -5,7 +5,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from internal.core.auth import verify_token
 from internal.core.exception import AppException, errors
-from internal.core.signature import signature_auth_handler
+from internal.utils.signature import signature_auth_handler
 from pkg.logger import logger
 from pkg.toolkit import context
 
