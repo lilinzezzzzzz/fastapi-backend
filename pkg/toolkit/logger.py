@@ -69,6 +69,12 @@ class LoggerManager:
         self.enqueue = enqueue
         self.log_format = log_format
 
+        # --- 根据 log_format 确定格式化器 ---
+        is_json = self.log_format == "json"
+        self.console_format = self._json_formatter if is_json else self._console_formatter
+        self.file_format = self._json_formatter if is_json else self._file_formatter
+        self.colorize = not is_json
+
         # --- 轮转策略的特殊处理 ---
         # 如果强制使用 UTC，且传入的 rotation 是默认的无时区 time 对象，
         # 则自动为其添加 UTC 时区，确保轮转时刻与日志时间一致。
@@ -100,20 +106,15 @@ class LoggerManager:
 
         self._logger.configure(**config_params)
 
-        # 根据 log_format 决定使用的格式化器
-        is_json = self.log_format == "json"
-        console_format = self._json_formatter if is_json else self._console_formatter
-        file_format = self._json_formatter if is_json else self._file_formatter
-
         # 3. Console 输出
         if write_to_console:
             self._logger.add(
                 sink=sys.stderr,
                 level=self.level,
                 enqueue=self.enqueue,
-                colorize=not is_json,
+                colorize=self.colorize,
                 diagnose=True,
-                format=console_format,
+                format=self.console_format,
                 filter=self._filter_system,
             )
 
@@ -129,7 +130,7 @@ class LoggerManager:
                 retention=self.retention,
                 compression=self.compression,
                 enqueue=self.enqueue,
-                format=file_format,
+                format=self.file_format,
                 filter=self._filter_system,
             )
 
@@ -174,11 +175,6 @@ class LoggerManager:
 
         config = self._registered_namespaces[log_namespace]
 
-        # 根据 log_format 决定使用的格式化器
-        is_json = self.log_format == "json"
-        file_format = self._json_formatter if is_json else self._file_formatter
-        console_format = self._json_formatter if is_json else self._console_formatter
-
         # 1. 检查并添加文件 Sink
         if not config["sink_registered"]:
             try:
@@ -192,7 +188,7 @@ class LoggerManager:
                     retention=self.retention,
                     compression=self.compression,
                     enqueue=self.enqueue,
-                    format=file_format,
+                    format=self.file_format,
                     serialize=False,
                     filter=_specific_filter,
                 )
@@ -208,10 +204,10 @@ class LoggerManager:
         if write_to_console and not config["write_to_console"]:
             self._logger.add(
                 sink=sys.stderr,
-                format=console_format,
+                format=self.console_format,
                 level=self.level,
                 enqueue=self.enqueue,
-                colorize=not is_json,
+                colorize=self.colorize,
                 diagnose=True,
                 filter=_specific_filter,
             )
