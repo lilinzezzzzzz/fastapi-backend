@@ -6,7 +6,7 @@ from fastapi.responses import StreamingResponse
 from internal.core.exception import AppException, errors
 from internal.infra.anyio_task import anyio_task_manager
 from pkg.decorators import stream_with_chunk_control
-from pkg.toolkit.logger import logger
+from pkg.logger import logger
 from pkg.toolkit.response import success_response
 
 router = APIRouter(prefix="/test", tags=["public v1 test"])

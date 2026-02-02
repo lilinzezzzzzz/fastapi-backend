@@ -1,5 +1,5 @@
-from internal.core.logger import logger
 from internal.infra.redis import cache
+from pkg.logger import logger
 from pkg.toolkit.json import orjson_loads
 
 

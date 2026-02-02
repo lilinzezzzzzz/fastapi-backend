@@ -8,7 +8,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from pkg.toolkit.logger import logger
+from pkg.logger import logger
 
 
 class ApsSchedulerManager:

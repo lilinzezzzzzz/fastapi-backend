@@ -1,6 +1,6 @@
 import grpc
 
-from pkg.toolkit.logger import logger
+from pkg.logger import logger
 
 
 class GrpcChannel:

@@ -1,11 +1,14 @@
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 from loguru import logger as loguru_logger
 
-from pkg.toolkit.logger import LoggerManager, logger as global_logger
+from pkg.logger import LoggerManager
+
+# 全局变量用于存储测试期间的 manager 实例
+_test_manager: LoggerManager | None = None
 
 
 @pytest.fixture
@@ -13,25 +16,28 @@ def setup_logging(tmp_path):
     """
     Fixture: 初始化测试环境
     """
-    # 2. 修改配置路径
-    # 注意：直接修改类属性。由于 SYSTEM_LOG_DIR 是在类加载时计算的，
-    # 修改 BASE_LOG_DIR 后必须手动更新 SYSTEM_LOG_DIR。
-    LoggerManager.BASE_LOG_DIR = tmp_path / "logs"
-    LoggerManager.SYSTEM_LOG_DIR = LoggerManager.BASE_LOG_DIR / LoggerManager.SYSTEM_LOG_NAMESPACE
+    global _test_manager
+    base_log_dir = tmp_path / "logs"
+    base_log_dir.mkdir(parents=True, exist_ok=True)  # 确保目录存在
 
-    # 3. 重新初始化 LoggerManager
-    LoggerManager().setup(write_to_file=True, write_to_console=False)
+    # 创建新的 LoggerManager 实例
+    _test_manager = LoggerManager(
+        base_log_dir=base_log_dir,
+        system_subdir="system",
+    )
+    _test_manager.setup(write_to_file=True, write_to_console=False)
 
-    print(f"\n---> 当前测试日志路径: {LoggerManager.BASE_LOG_DIR}")
+    print(f"\n---> 当前测试日志路径: {base_log_dir}")
 
-    yield LoggerManager.BASE_LOG_DIR
+    yield base_log_dir
 
-    # 4. 清理
+    # 清理
     loguru_logger.remove()
+    _test_manager = None
 
 
 def get_today_str():
-    return datetime.now().strftime("%Y-%m-%d")
+    return datetime.now(UTC).strftime("%Y-%m-%d")
 
 
 def find_json_log(file_path, target_message: str) -> dict[str, Any] | None:
@@ -68,8 +74,9 @@ def test_system_logging(setup_logging):
     base_log_dir = setup_logging
     msg = "System start sequence"
 
-    # 使用 global_logger (System logger)
-    global_logger.info(msg)
+    # 使用测试 manager 的 logger
+    assert _test_manager is not None
+    _test_manager._logger.info(msg)
     loguru_logger.complete()
 
     # 路径变更：default -> system, 文件名不再包含 app_ 前缀
@@ -87,8 +94,9 @@ def test_dynamic_logger_creation(setup_logging):
     dev_id = "device_test_01"
     msg = "Connect success"
 
-    # 使用新导出的 get_dynamic_logger 方法
-    dev_logger = global_logger.get_dynamic_logger(dev_id)
+    # 使用测试 manager 的 get_dynamic_logger 方法
+    assert _test_manager is not None
+    dev_logger = _test_manager.get_dynamic_logger(dev_id)
     dev_logger.info(msg)
     loguru_logger.complete()
 
@@ -119,7 +127,8 @@ def test_create_failure_fallback(setup_logging, monkeypatch):
     monkeypatch.setattr(LoggerManager, "_ensure_dir", mock_ensure_dir)
 
     # 触发日志
-    dev_logger = global_logger.get_dynamic_logger(dev_id)
+    assert _test_manager is not None
+    dev_logger = _test_manager.get_dynamic_logger(dev_id)
     dev_logger.info(msg)
     loguru_logger.complete()
 

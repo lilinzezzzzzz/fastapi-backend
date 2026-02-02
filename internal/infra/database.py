@@ -11,8 +11,8 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from internal.config.load_config import settings
-from internal.core.logger import logger
 from pkg.database.base import new_async_engine, new_async_session_maker
+from pkg.logger import logger
 from pkg.toolkit.json import orjson_dumps, orjson_loads
 
 # 全局单例变量，初始为 None

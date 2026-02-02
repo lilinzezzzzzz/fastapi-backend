@@ -8,9 +8,9 @@ import sys
 import pytest
 from celery.result import AsyncResult
 
-from internal.core.logger import init_logger
 from internal.infra.celery import celery_app, celery_client
 from internal.infra.celery.register import number_sum
+from pkg.logger import init_logger
 
 # 初始化日志系统（测试环境必须）
 init_logger(level="INFO")

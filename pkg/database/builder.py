@@ -5,9 +5,9 @@ from sqlalchemy import ClauseElement, ColumnElement, Delete, Select, Update, dis
 from sqlalchemy.orm import InstrumentedAttribute, Mapped
 
 from pkg.database.base import ModelMixin, SessionProvider
+from pkg.logger import logger
 from pkg.toolkit import context
 from pkg.toolkit.list import unique_list
-from pkg.toolkit.logger import logger
 from pkg.toolkit.timer import utc_now_naive
 
 """

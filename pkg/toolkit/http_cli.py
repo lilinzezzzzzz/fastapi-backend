@@ -7,7 +7,7 @@ from typing import Any
 import anyio
 import httpx
 
-from pkg.toolkit.logger import logger
+from pkg.logger import logger
 
 
 @dataclass

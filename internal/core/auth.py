@@ -1,5 +1,4 @@
 from internal.dao.redis import cache_dao
-from pkg.toolkit.logger import logger
 
 
 async def verify_token(token: str) -> tuple[str | dict | None, bool]:

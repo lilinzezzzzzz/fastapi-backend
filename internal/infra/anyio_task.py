@@ -1,4 +1,4 @@
-from internal.core.logger import logger
+from pkg.logger import logger
 from pkg.toolkit.async_task import AnyioTaskHandler
 from pkg.toolkit.types import LazyProxy
 

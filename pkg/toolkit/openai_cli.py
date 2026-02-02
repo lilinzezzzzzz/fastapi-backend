@@ -1,20 +1,24 @@
 import time
-from typing import Any, AsyncGenerator, NamedTuple
+from collections.abc import AsyncGenerator
+from typing import Any, NamedTuple
 
 import openai
+
 # 导入所有可能用到的异常类型，以便更精确地捕获
-from openai import (
-    APIError, NOT_GIVEN
-)
+from openai import NOT_GIVEN, APIError
 from openai.types.chat import (
-    ChatCompletion, ChatCompletionAssistantMessageParam, ChatCompletionDeveloperMessageParam,
-    ChatCompletionFunctionMessageParam, ChatCompletionMessageParam,
+    ChatCompletion,
+    ChatCompletionAssistantMessageParam,
+    ChatCompletionDeveloperMessageParam,
+    ChatCompletionFunctionMessageParam,
+    ChatCompletionMessageParam,
     ChatCompletionSystemMessageParam,
-    ChatCompletionToolMessageParam, ChatCompletionUserMessageParam
+    ChatCompletionToolMessageParam,
+    ChatCompletionUserMessageParam,
 )
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 
-from pkg.toolkit.logger import logger  # 假设这个日志模块是可用的
+from pkg.logger import logger
 
 
 class ChatCompletionRes(NamedTuple):

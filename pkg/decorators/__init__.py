@@ -7,7 +7,7 @@ from typing import Any
 import anyio
 from starlette.requests import Request
 
-from pkg.toolkit.logger import logger
+from pkg.logger import logger
 
 
 def async_generator_timer(slow_threshold: float = 5.0):
