@@ -1,7 +1,8 @@
 import json
 import time
+from collections.abc import AsyncGenerator, AsyncIterable, Callable
 from functools import wraps
-from typing import Any, AsyncGenerator, AsyncIterable, Callable
+from typing import Any
 
 import anyio
 from starlette.requests import Request

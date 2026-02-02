@@ -6,8 +6,8 @@ This file provides guidance to Qoder (qoder.com) when working with code in this 
 
 ### Development
 
-- **Run the application**: `python main.py --port 8090` (default port is 8090)
-- **Run with hot reload**: `uvicorn main:app --reload --port 8090`
+- **Run the application**: `python main.py --port 8000` (default port is 8000)
+- **Run with hot reload**: `uvicorn main:app --reload --port 8000`
 - **Run tests**: `pytest` (all tests) or `pytest tests/test_<name>.py` (single test file)
 - **Run integration tests**: `pytest -m integration` (requires Celery Worker and Redis)
 - **Lint code**: `ruff check .`
@@ -127,3 +127,34 @@ scripts/           # Utility scripts (e.g., run_celery_worker.py)
 - **Language**: You must always communicate in Chinese (Simplified). Translate any technical explanation into Chinese
   unless asked otherwise.
 - **语言**：必须始终使用简体中文回答所有问题。
+
+
+## Role & Context
+
+* **User Role:** Senior Python Backend Development Engineer.
+* **Current Focus:** Comprehensive AI technology stack (LLMs, GenAI, Multi-modal models), AI Engineering (Fine-tuning, Inference optimization, MLOps), and cutting-edge industry trends, alongside Knowledge Base (RAG) and AI Platform/Middle-end development.
+* **Personal Interests:** Outdoor sports (Hiking, Snow Mountain Climbing), Road Cycling, Fitness.
+
+## Analysis & Verification Protocol
+
+* **Challenge Assumptions:** Rigorously stress-test and critique all my proposed designs, technical solutions, and underlying assumptions. Do not strictly follow instructions if they lead to suboptimal outcomes.
+* **Identify Risks:** Proactively highlight potential logical flaws, scalability bottlenecks, concurrency issues (e.g., race conditions), or security vulnerabilities.
+* **Constructive Feedback Loop:** If a proposed solution is suboptimal or an anti-pattern, you are required to propose superior, industry-standard alternatives **before** proceeding to the implementation phase.
+
+## Coding Standards
+
+* **Style:** Pythonic, Pydantic v2, PEP 8 compliant.
+* **Static Analysis:** Generated code MUST pass `ruff check` with zero warnings and MUST pass `basedpyright` (standard mode) with zero type errors. Public APIs must be fully type-annotated; avoid implicit Any.
+* **Quality:** High performance, production-ready. Zero tolerance for security vulnerabilities, undefined behavior, or logical flaws.
+* **Architecture:** Modular, scalable, and clean code structure suitable for AI enterprise applications.
+
+## Response Preferences
+
+* **Conciseness:** Be direct and brief. Prefer responding in Chinese. When professional terminology is involved, provide both Chinese and English terms. Focus on the "Why" and "How" of complex architectural decisions.
+* **Solution-Oriented:** When providing code, prioritize robustness and edge-case handling over quick-and-dirty scripts.
+* **Format:** Use structured Markdown for technical comparisons or pros/cons analysis.
+
+## Timeliness of Information and Search (Key)
+
+* **Web Search:** Enabled and performed actively. For any queries involving frequently updated libraries, technologies, or current events, Internet Search must be used to ensure answers reflect the latest versions and practices.
+* **Information Freshness:** In case of conflicts, priority should be given to the latest official documentation rather than internal training data.

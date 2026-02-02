@@ -55,4 +55,3 @@ def init_logger(
 
 # --- 导出代理对象 ---
 logger = LazyProxy["Logger"](_get_logger)
-logger_manager = LazyProxy["LoggerManager"](_get_logger_manager)
