@@ -1,4 +1,5 @@
 import asyncio
+from typing import Never
 
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
@@ -13,14 +14,14 @@ router = APIRouter(prefix="/test", tags=["public v1 test"])
 
 
 @router.get("/test_raise_exception", summary="测试异常")
-async def test_raise_exception(_: Request):
+async def test_raise_exception(_: Request) -> Never:
     # 如果触发fastapi.HTTPException会有限被main.py的exception_handler捕获，
     # 如果是Exception会被middleware的exception.py捕获
     raise Exception("test_raise_exception")
 
 
 @router.get("/test_raise_app_exception", summary="测试APP异常")
-async def test_raise_app_exception():
+async def test_raise_app_exception() -> Never:
     raise AppException(errors.InternalServerError, message="test_raise_app_exception")
 
 

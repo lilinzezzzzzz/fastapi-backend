@@ -32,4 +32,9 @@ def is_safe_float_range(value: Decimal, max_abs_value: float = 1e15, max_decimal
     # Decimal.as_tuple().exponent 返回指数值
     # 对于小数，exponent 为负数，例如 0.01 的 exponent 为 -2
     # 如果 exponent >= -max_decimal_places，表示小数位数不超过限制
-    return value.as_tuple().exponent >= -max_decimal_places
+    # 注意：当 Decimal 为 NaN 或 Infinity 时，exponent 是字符串类型 ('n', 'N', 'F')
+    exponent = value.as_tuple().exponent
+    if not isinstance(exponent, int):
+        # NaN 或 Infinity 不在安全范围内
+        return False
+    return exponent >= -max_decimal_places

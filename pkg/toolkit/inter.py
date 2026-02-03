@@ -1,6 +1,7 @@
 import hashlib
 import socket
 import uuid
+from typing import cast
 
 from snowflake import SnowflakeGenerator
 
@@ -27,10 +28,12 @@ class SnowflakeIDGenerator:
         self._generator = SnowflakeGenerator(node_id)
 
     def generate(self) -> int:
-        return next(self._generator)
+        # SnowflakeGenerator 是无限生成器，next() 永远不会返回 None
+        return cast(int, next(self._generator))
 
     def generate_batch(self, count: int) -> list[int]:
-        return [next(self._generator) for _ in range(count)]
+        # SnowflakeGenerator 是无限生成器，next() 永远不会返回 None
+        return [cast(int, next(self._generator)) for _ in range(count)]
 
 
 snowflake_id_generator = SnowflakeIDGenerator(node_id=auto_snowflake_node_id())
