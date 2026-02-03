@@ -146,7 +146,10 @@ class _ResponseFactory:
             raise TypeError("Items must be a list")
 
         processed_items = self._process_success_data(items)
-        return self.success(data={"items": processed_items, "page": page, "limit": limit, "total": total})
+        return self._make_response(
+            code=success_status.code,
+            data={"items": processed_items, "page": page, "limit": limit, "total": total},
+        )
 
     def error(self, error: AppError, *, message: str = "", lang: str = "zh") -> CustomORJSONResponse:
         """
