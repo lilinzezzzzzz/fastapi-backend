@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+
 from internal.controllers.internalapi import user
 
 router = APIRouter(prefix="/v1/internal")

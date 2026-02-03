@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from pydantic import Field, BaseModel
+from pydantic import BaseModel, Field
 
 from internal.schemas import BaseListResponse
 
