@@ -44,7 +44,7 @@ class LoggerHandler:
         compression: str | None = None,
         use_utc: bool = True,
         enqueue: bool = True,
-        log_format: LogFormat | str = LogFormat.TEXT,
+        log_format: LogFormat = LogFormat.TEXT,
     ):
         """
         构造函数：接收所有配置参数并存储为实例属性。
@@ -59,12 +59,6 @@ class LoggerHandler:
         :param enqueue: 是否使用多进程安全的队列写入
         :param log_format: 日志格式 (LogFormat.JSON 或 LogFormat.TEXT，默认 LogFormat.TEXT)
         """
-        # 兼容字符串输入
-        if isinstance(log_format, str):
-            try:
-                log_format = LogFormat(log_format)
-            except ValueError:
-                raise ValueError(f"log_format must be 'json' or 'text', got '{log_format}'")
 
         self._logger = loguru.logger
         self._registered_namespaces: dict[str, dict[str, Any]] = {}
