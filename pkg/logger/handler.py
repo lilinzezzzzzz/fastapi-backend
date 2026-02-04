@@ -1,5 +1,6 @@
 import sys
 from datetime import UTC, time, timedelta
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,13 @@ _DEFAULT_BASE_LOG_DIR = Path("/tmp/fastapi_logs")
 # 类型别名
 RotationType = str | int | time | timedelta
 RetentionType = str | int | timedelta
+
+
+class LogFormat(StrEnum):
+    """日志格式枚举"""
+
+    JSON = "json"
+    TEXT = "text"
 
 
 class LoggerHandler:
@@ -36,7 +44,7 @@ class LoggerHandler:
         compression: str | None = None,
         use_utc: bool = True,
         enqueue: bool = True,
-        log_format: str = "text",
+        log_format: LogFormat | str = LogFormat.TEXT,
     ):
         """
         构造函数：接收所有配置参数并存储为实例属性。
@@ -49,10 +57,14 @@ class LoggerHandler:
         :param compression: 压缩格式 (e.g., "zip")
         :param use_utc: 是否强制使用 UTC 时间 (影响日志内容及轮转触发时间)
         :param enqueue: 是否使用多进程安全的队列写入
-        :param log_format: 日志格式 ("json" 或 "text"，默认 "text")
+        :param log_format: 日志格式 (LogFormat.JSON 或 LogFormat.TEXT，默认 LogFormat.TEXT)
         """
-        if log_format not in ("json", "text"):
-            raise ValueError(f"log_format must be 'json' or 'text', got '{log_format}'")
+        # 兼容字符串输入
+        if isinstance(log_format, str):
+            try:
+                log_format = LogFormat(log_format)
+            except ValueError:
+                raise ValueError(f"log_format must be 'json' or 'text', got '{log_format}'")
 
         self._logger = loguru.logger
         self._registered_namespaces: dict[str, dict[str, Any]] = {}
@@ -69,7 +81,7 @@ class LoggerHandler:
         self.log_format = log_format
 
         # --- 根据 log_format 确定格式化器 ---
-        is_json = self.log_format == "json"
+        is_json = self.log_format == LogFormat.JSON
         self.console_format = self._json_formatter if is_json else self._console_formatter
         self.file_format = self._json_formatter if is_json else self._file_formatter
         self.colorize = not is_json
@@ -292,7 +304,7 @@ class LoggerHandler:
 
         serialized = orjson_dumps(log_record, default=str)
         record["extra"]["_json_out"] = serialized
-        return "{extra[_json_out]}\n"
+        return "{extra[_json_out]}\n\n"
 
     # --- 辅助方法 ---
     @staticmethod

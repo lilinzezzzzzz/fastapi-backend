@@ -10,7 +10,7 @@ from internal.infra.redis import close_async_redis, init_async_redis
 from internal.utils.anyio_task import close_anyio_task_handler, init_anyio_task_handler
 from internal.utils.signature import init_signature_auth_handler
 from internal.utils.snowflake import init_snowflake_id_generator
-from pkg.logger import init_logger, logger
+from pkg.logger import LogFormat, init_logger, logger
 from pkg.toolkit.response import error_response
 
 
@@ -85,7 +85,7 @@ def register_middleware(app: FastAPI):
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     # 初始化日志
-    init_logger()
+    init_logger(log_format=LogFormat.JSON)
     # 初始化 DB
     init_async_db()
     # 初始化 Redis

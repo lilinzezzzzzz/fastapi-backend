@@ -17,7 +17,7 @@ from datetime import UTC, time, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from pkg.logger.handler import LoggerHandler, RetentionType, RotationType
+from pkg.logger.handler import LogFormat, LoggerHandler, RetentionType, RotationType
 from pkg.toolkit.types import LazyProxy
 
 if TYPE_CHECKING:
@@ -52,7 +52,7 @@ def init_logger(
     compression: str | None = None,
     use_utc: bool = True,
     enqueue: bool = True,
-    log_format: str = "text",
+    log_format: LogFormat | str = LogFormat.TEXT,
     write_to_file: bool = True,
     write_to_console: bool = True,
 ) -> "Logger":
@@ -67,7 +67,7 @@ def init_logger(
     :param compression: 压缩格式 (e.g., "zip")
     :param use_utc: 是否强制使用 UTC 时间
     :param enqueue: 是否使用多进程安全的队列写入
-    :param log_format: 日志格式 ("json" 或 "text"，默认 "text")
+    :param log_format: 日志格式 (LogFormat.JSON 或 LogFormat.TEXT，默认 LogFormat.TEXT)
     :param write_to_file: 是否写入文件
     :param write_to_console: 是否输出到控制台
     :return: 初始化后的 Logger 实例
@@ -102,6 +102,8 @@ logger: "Logger" = LazyProxy["Logger"](_get_logger)  # type: ignore[assignment]
 __all__ = [
     # 类
     "LoggerHandler",
+    # 枚举
+    "LogFormat",
     # 类型别名
     "RotationType",
     "RetentionType",
