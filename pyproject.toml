@@ -90,6 +90,7 @@ dev = [
     "pytest-tornasync>=0.6.0.post2",
     "pytest-trio>=0.8.0",
     "pytest-twisted>=1.14.3",
+    "basedpyright>=1.37.4",
 ]
 
 # CI 构建相关工具（可选，按需添加）

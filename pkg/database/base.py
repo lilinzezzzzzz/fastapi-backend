@@ -184,6 +184,9 @@ class ModelMixin(Base):
                 f"Please use save() or insert_instances() first."
             )
 
+        if session_provider is None:
+            raise ValueError(f"{self.__class__.__name__} update requires session_provider")
+
         for column_name, value in kwargs.items():
             if self.has_column(column_name):
                 setattr(self, column_name, value)
@@ -280,13 +283,13 @@ class ModelMixin(Base):
         return values
 
     @staticmethod
-    async def _execute_or_return(
-        stmt: Executable, session_provider: SessionProvider | None, execute: bool, error_context: str
-    ) -> Executable | None:
+    async def _execute_or_return[ExecT: Executable](
+        stmt: ExecT, session_provider: SessionProvider | None, execute: bool, error_context: str
+    ) -> ExecT | None:
         """
         统一处理 SQL 语句的执行逻辑：
-        - 如果 execute=False，直接返回语句对象。
-        - 如果 execute=True，校验 session_provider 并执行事务。
+        - 如果 execute=False，直接返回语句对象（保持原类型）。
+        - 如果 execute=True，校验 session_provider 并执行事务，返回 None。
         """
         if not execute:
             return stmt
