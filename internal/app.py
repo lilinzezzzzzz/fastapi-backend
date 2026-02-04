@@ -85,7 +85,7 @@ def register_middleware(app: FastAPI):
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     # 初始化日志
-    init_logger(log_format=LogFormat.JSON)
+    init_logger(log_format=LogFormat.TEXT)
     # 初始化 DB
     init_async_db()
     # 初始化 Redis
