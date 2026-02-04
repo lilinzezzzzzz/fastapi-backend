@@ -2,7 +2,7 @@ import os
 import time as time_module
 from datetime import UTC, time, timedelta
 
-from pkg.logger import LoggerManager
+from pkg.logger import LoggerHandler
 
 
 class TestLogRotationRetention:
@@ -31,7 +31,7 @@ class TestLogRotationRetention:
 
         # 2. 实例化 Manager (直接注入配置)
         # 使用 1 byte 轮转触发 retention 检查
-        manager = LoggerManager(
+        manager = LoggerHandler(
             base_log_dir=base_log_dir,
             system_subdir="system",  # 指定子目录
             use_utc=True,
@@ -67,7 +67,7 @@ class TestLogRotationRetention:
         base_log_dir.mkdir(parents=True, exist_ok=True)
 
         # 1. 实例化 (注入 1秒 轮转策略)
-        manager = LoggerManager(
+        manager = LoggerHandler(
             base_log_dir=base_log_dir,
             system_subdir="system",  # 指定子目录
             use_utc=True,
@@ -98,14 +98,14 @@ class TestLogRotationRetention:
         测试构造函数的时区逻辑
         """
         # 1. 默认情况: 传入 UTC=True, rotation=Naive Time -> 自动转 UTC
-        mgr1 = LoggerManager(use_utc=True, rotation=time(0, 0, 0))
+        mgr1 = LoggerHandler(use_utc=True, rotation=time(0, 0, 0))
         assert mgr1.rotation.tzinfo == UTC
 
         # 2. 显式本地: 传入 UTC=False -> 保持 Naive
-        mgr2 = LoggerManager(use_utc=False, rotation=time(0, 0, 0))
+        mgr2 = LoggerHandler(use_utc=False, rotation=time(0, 0, 0))
         assert mgr2.rotation.tzinfo is None
 
         # 3. 混合: 传入 UTC=True, 但 rotation 已经是 UTC -> 保持 UTC
         custom_utc = time(12, 0, 0, tzinfo=UTC)
-        mgr3 = LoggerManager(use_utc=True, rotation=custom_utc)
+        mgr3 = LoggerHandler(use_utc=True, rotation=custom_utc)
         assert mgr3.rotation == custom_utc

@@ -2,14 +2,14 @@
 
 此模块已迁移至 pkg.logger，保留此文件仅为了向后兼容。
 请更新你的导入语句为:
-    from pkg.logger import LoggerManager, logger, ...
+    from pkg.logger import LoggerHandler, logger, ...
 
 此兼容模块将在后续版本中移除。
 """
 import warnings
 
 from pkg.logger import (
-    LoggerManager,
+    LoggerHandler,
     RetentionType,
     RotationType,
     init_logger,
@@ -23,7 +23,7 @@ warnings.warn(
 )
 
 __all__ = [
-    "LoggerManager",
+    "LoggerHandler",
     "RotationType",
     "RetentionType",
     "init_logger",

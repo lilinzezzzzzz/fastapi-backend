@@ -7,18 +7,17 @@ import loguru
 
 from pkg.toolkit import context
 from pkg.toolkit.json import orjson_dumps
-from pkg.toolkit.string import uuid6_unique_str_id
 from pkg.toolkit.timer import format_iso_datetime
 
-# 默认日志目录：/tmp/fastapi_{唯一字符}_logs
-_DEFAULT_BASE_LOG_DIR = Path(f"/tmp/fastapi_{uuid6_unique_str_id()}_logs")
+# 默认日志目录
+_DEFAULT_BASE_LOG_DIR = Path("/tmp/fastapi_logs")
 
 # 类型别名
 RotationType = str | int | time | timedelta
 RetentionType = str | int | timedelta
 
 
-class LoggerManager:
+class LoggerHandler:
     """
     日志管理器
     配置在实例化 (__init__) 时传入，并在 setup() 时生效。
@@ -157,7 +156,7 @@ class LoggerManager:
         :param write_to_console: 是否输出到控制台（仅针对该日志命名空间，不会重复输出）
         """
         if not self._is_initialized:
-            raise RuntimeError("LoggerManager is not initialized! Call setup() first.")
+            raise RuntimeError("LoggerHandler is not initialized! Call setup() first.")
 
         if not log_namespace:
             raise ValueError(f"log_namespace cannot be empty, value = {log_namespace}")
@@ -302,7 +301,7 @@ class LoggerManager:
 
     @staticmethod
     def _filter_system(record: Any) -> bool:
-        return record["extra"].get("log_namespace") == LoggerManager.SYSTEM_LOG_NAMESPACE
+        return record["extra"].get("log_namespace") == LoggerHandler.SYSTEM_LOG_NAMESPACE
 
     @staticmethod
     def _ensure_dir(path: Path):

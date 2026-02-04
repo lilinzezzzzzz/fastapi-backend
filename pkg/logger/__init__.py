@@ -17,14 +17,14 @@ from datetime import UTC, time, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from pkg.logger.handler import LoggerManager, RetentionType, RotationType
+from pkg.logger.handler import LoggerHandler, RetentionType, RotationType
 from pkg.toolkit.types import LazyProxy
 
 if TYPE_CHECKING:
     from loguru import Logger
 
 # 内部持有真实对象（延迟初始化）
-_logger_manager: "LoggerManager | None" = None
+_logger_manager: "LoggerHandler | None" = None
 _logger: "Logger | None" = None
 
 
@@ -35,9 +35,9 @@ def _get_logger() -> "Logger":
     return _logger
 
 
-def _get_logger_manager() -> "LoggerManager":
+def _get_logger_manager() -> "LoggerHandler":
     if _logger_manager is None:
-        raise RuntimeError("LoggerManager not initialized. Call init_logger() first.")
+        raise RuntimeError("LoggerHandler not initialized. Call init_logger() first.")
     return _logger_manager
 
 
@@ -74,7 +74,7 @@ def init_logger(
     """
     global _logger_manager, _logger
 
-    _logger_manager = LoggerManager(
+    _logger_manager = LoggerHandler(
         level=level,
         base_log_dir=base_log_dir,
         system_subdir=system_subdir,
@@ -90,8 +90,8 @@ def init_logger(
     return _logger
 
 
-def get_logger_manager() -> "LoggerManager":
-    """获取当前的 LoggerManager 实例（需先调用 init_logger）"""
+def get_logger_manager() -> "LoggerHandler":
+    """获取当前的 LoggerHandler 实例（需先调用 init_logger）"""
     return _get_logger_manager()
 
 
@@ -101,7 +101,7 @@ logger: "Logger" = LazyProxy["Logger"](_get_logger)  # type: ignore[assignment]
 # --- 公开 API ---
 __all__ = [
     # 类
-    "LoggerManager",
+    "LoggerHandler",
     # 类型别名
     "RotationType",
     "RetentionType",

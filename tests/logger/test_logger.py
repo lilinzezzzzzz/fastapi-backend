@@ -5,10 +5,10 @@ from typing import Any
 import pytest
 from loguru import logger as loguru_logger
 
-from pkg.logger import LoggerManager
+from pkg.logger import LoggerHandler
 
 # 全局变量用于存储测试期间的 manager 实例
-_test_manager: LoggerManager | None = None
+_test_manager: LoggerHandler | None = None
 
 
 @pytest.fixture
@@ -20,8 +20,8 @@ def setup_logging(tmp_path):
     base_log_dir = tmp_path / "logs"
     base_log_dir.mkdir(parents=True, exist_ok=True)  # 确保目录存在
 
-    # 创建新的 LoggerManager 实例
-    _test_manager = LoggerManager(
+    # 创建新的 LoggerHandler 实例
+    _test_manager = LoggerHandler(
         base_log_dir=base_log_dir,
         system_subdir="system",
     )
@@ -89,7 +89,7 @@ def test_system_logging(setup_logging):
 
 
 def test_dynamic_logger_creation(setup_logging):
-    """测试动态 Logger 创建 (格式由 LoggerManager 的 log_format 参数决定)"""
+    """测试动态 Logger 创建 (格式由 LoggerHandler 的 log_format 参数决定)"""
     base_log_dir = setup_logging
     dev_id = "device_test_01"
     msg = "Connect success"
@@ -115,7 +115,7 @@ def test_create_failure_fallback(setup_logging, monkeypatch):
     msg = "Should fallback to system log"
 
     # 模拟 mkdir 抛出权限错误
-    # 注意：我们要 Patch 的是 LoggerManager 内部调用的静态方法 _ensure_dir
+    # 注意：我们要 Patch 的是 LoggerHandler 内部调用的静态方法 _ensure_dir
     def mock_ensure_dir(path):
         # 只针对 device_error 的路径抛错，避免影响 system log 的创建
         if dev_id in str(path):
@@ -124,7 +124,7 @@ def test_create_failure_fallback(setup_logging, monkeypatch):
         if not path.exists():
             path.mkdir(parents=True, exist_ok=True)
 
-    monkeypatch.setattr(LoggerManager, "_ensure_dir", mock_ensure_dir)
+    monkeypatch.setattr(LoggerHandler, "_ensure_dir", mock_ensure_dir)
 
     # 触发日志
     assert _test_manager is not None
