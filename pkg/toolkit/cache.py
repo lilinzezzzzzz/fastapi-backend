@@ -49,7 +49,8 @@ class CacheClient:
         """设置键值对，可选过期时间（秒）"""
         async with self.session_provider() as redis:
             result = await redis.set(key, value, ex=ex)
-            return result is True or result == "OK"
+            # redis.set() 返回 True 或 None
+            return result is True
 
     @handle_redis_exception
     async def get_value(self, key: str) -> str | None:

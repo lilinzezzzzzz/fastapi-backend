@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING, Literal, overload
 
 from pkg.oss import (
-    aliyun as _aliyun_module,
+    aliyun as _aliyun_module,  # noqa: F401
     s3 as _s3_module,
 )
 from pkg.oss.base import _STORAGE_REGISTRY, BaseStorage, StorageType, register_storage

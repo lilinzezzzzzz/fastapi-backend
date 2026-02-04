@@ -1,13 +1,13 @@
-import json
 import time
 from collections.abc import AsyncGenerator, AsyncIterable, Callable
 from functools import wraps
-from typing import Any
+from typing import Any, cast
 
 import anyio
 from starlette.requests import Request
 
 from pkg.logger import logger
+from pkg.toolkit.response import wrap_sse_data
 
 
 def async_generator_timer(slow_threshold: float = 5.0):
@@ -78,9 +78,8 @@ async def stream_with_chunk_control[T](
             logger.warning(f"[Stream Timeout] Chunk generation timed out after {chunk_timeout}s")
 
             if is_sse:
-                # 构造 SSE 格式的超时错误消息
                 err_data = {"code": 408, "message": f"Stream chunk timed out. No data received for {chunk_timeout}s"}
-                yield f"data: {json.dumps(err_data)}\n\n"
+                yield cast(T, wrap_sse_data(err_data))
 
             # 单个 Chunk 超时通常意味着上游服务卡死，建议中断流
             break
@@ -94,5 +93,5 @@ async def stream_with_chunk_control[T](
         except Exception as e:
             logger.error(f"Stream generation error: {e}", exc_info=True)
             if is_sse:
-                yield f"data: {json.dumps({'code': 500, 'message': str(e)})}\n\n"
+                yield cast(T, wrap_sse_data({"code": 500, "message": str(e)}))
             break

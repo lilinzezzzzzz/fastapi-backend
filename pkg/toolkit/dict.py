@@ -2,7 +2,7 @@ def extract_dict(d, keys):
     return {k: v for k, v in d.items() if k in keys}
 
 
-def deep_compare_dict(d1: dict, d2: dict):
+def deep_compare_dict(d1: dict | None, d2: dict | None):
     if d1 is None and d2 is None:
         return True
 
