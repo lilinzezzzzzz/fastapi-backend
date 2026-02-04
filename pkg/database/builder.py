@@ -25,10 +25,17 @@ class BaseBuilder[T: ModelMixin]:
         self._stmt: Select | Delete | Update | None = None
         self._session_provider = session_provider
 
+    @property
+    def stmt(self) -> Select | Delete | Update:
+        """获取当前语句，若未初始化则抛出异常"""
+        if self._stmt is None:
+            raise RuntimeError("Statement not initialized")
+        return self._stmt
+
     # --- 条件构造 ---
     def where(self, *conditions: ClauseElement) -> Self:
         if conditions:
-            self._stmt = self._stmt.where(*conditions)
+            self._stmt = self.stmt.where(*conditions)
         return self
 
     def apply_kwargs_filters(self, **kwargs):
@@ -90,22 +97,9 @@ class BaseBuilder[T: ModelMixin]:
     def or_(self, *conditions: ColumnElement[bool]) -> Self:
         return self.where(or_(*conditions)) if conditions else self
 
-    # --- 排序与分组 ---
-    def distinct_(self, *cols: InstrumentedAttribute) -> Self:
-        self._stmt = self._stmt.distinct(*cols)
-        return self
-
-    def desc_(self, col: InstrumentedAttribute | Mapped) -> Self:
-        self._stmt = self._stmt.order_by(col.desc())
-        return self
-
-    def asc_(self, col: InstrumentedAttribute) -> Self:
-        self._stmt = self._stmt.order_by(col.asc())
-        return self
-
     def _apply_delete_at_is_none(self) -> None:
         if deleted_column := self._model_cls.get_column_or_none(self._model_cls.deleted_at_column_name()):
-            self._stmt = self._stmt.where(deleted_column.is_(None))
+            self._stmt = self.stmt.where(deleted_column.is_(None))
 
 
 class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
@@ -130,7 +124,22 @@ class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
 
     @property
     def select_stmt(self) -> Select:
+        if not isinstance(self._stmt, Select):
+            raise RuntimeError("Statement is not a Select")
         return self._stmt
+
+    # --- 排序与分组 ---
+    def distinct_(self, *cols: InstrumentedAttribute) -> Self:
+        self._stmt = self.select_stmt.distinct(*cols)
+        return self
+
+    def desc_(self, col: InstrumentedAttribute | Mapped) -> Self:
+        self._stmt = self.select_stmt.order_by(col.desc())
+        return self
+
+    def asc_(self, col: InstrumentedAttribute) -> Self:
+        self._stmt = self.select_stmt.order_by(col.asc())
+        return self
 
     def paginate(self, *, page: int, limit: int) -> Self:
         if not isinstance(page, int) or page < 1:
@@ -139,13 +148,13 @@ class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
         if not isinstance(limit, int) or limit < 1:
             raise ValueError("limit must be greater than or equal to 1")
 
-        self._stmt = self._stmt.offset((page - 1) * limit).limit(limit)
+        self._stmt = self.select_stmt.offset((page - 1) * limit).limit(limit)
         return self
 
     async def all(self) -> list[T]:
         try:
             async with self._session_provider() as sess:
-                result = await sess.execute(self._stmt)
+                result = await sess.execute(self.select_stmt)
                 await sess.commit()
                 return cast(list[T], result.scalars().all())
         except Exception as e:
@@ -154,7 +163,7 @@ class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
     async def first(self) -> T | None:
         try:
             async with self._session_provider() as sess:
-                result = await sess.execute(self._stmt)
+                result = await sess.execute(self.select_stmt)
                 await sess.commit()
                 return result.scalars().first()
         except Exception as e:
@@ -167,7 +176,7 @@ class CountBuilder[T: ModelMixin](BaseBuilder[T]):
         model_cls: type[T],
         *,
         session_provider: SessionProvider,
-        count_column: InstrumentedAttribute = None,
+        count_column: InstrumentedAttribute | None = None,
         is_distinct: bool = False,
         include_deleted: bool = None,
     ):
@@ -179,10 +188,16 @@ class CountBuilder[T: ModelMixin](BaseBuilder[T]):
         if include_deleted is False and self._model_cls.has_deleted_at_column():
             self._apply_delete_at_is_none()
 
+    @property
+    def count_stmt(self) -> Select:
+        if not isinstance(self._stmt, Select):
+            raise RuntimeError("Statement is not a Select")
+        return self._stmt
+
     async def count(self) -> int:
         try:
             async with self._session_provider() as sess:
-                total = (await sess.execute(self._stmt)).scalar()
+                total = (await sess.execute(self.count_stmt)).scalar()
                 await sess.commit()
                 return total
         except Exception as e:
