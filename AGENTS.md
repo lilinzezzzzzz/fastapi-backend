@@ -54,11 +54,21 @@ docker run -p 8000:8000 fastapi-backend
 
 ### Celery Worker
 ```bash
-# Start Celery worker
+# Start Celery worker (recommended method)
 python scripts/run_celery_worker.py
 
-# With custom log level
-python scripts/run_celery_worker.py --loglevel=info
+# Start worker with Celery CLI (development)
+celery -A internal.utils.celery.initialization.celery_app worker -l info -c 1 -Q default,celery_queue
+
+# Start Celery Beat (for scheduled tasks)
+celery -A internal.utils.celery.initialization.celery_app beat -l info
+
+# Production worker with memory limits
+celery -A internal.utils.celery.initialization.celery_app worker \
+    -l info -c 4 \
+    --max-tasks-per-child 1000 \
+    --max-memory-per-child 120000 \
+    -Q default,celery_queue
 ```
 
 ## Architecture
@@ -108,6 +118,8 @@ The application uses a sophisticated multi-environment configuration system:
 
 Configuration is loaded via `internal/config/load_config.py` and accessed through the global `settings` object.
 
+**Important**: The `.secrets` file must contain `APP_ENV`, `AES_SECRET`, and `JWT_SECRET` at minimum. A `.secrets.example` is provided as a template.
+
 ### Application Lifecycle
 
 The FastAPI app (`internal/app.py`) uses a lifespan context manager that initializes:
@@ -130,53 +142,102 @@ All resources are properly cleaned up on shutdown.
 
 ### Database Access Pattern
 
-- **Initialization**: `init_async_db()` creates singleton engine and session maker
+- **Initialization**: `init_async_db()` creates singleton engine and session maker (called in app lifespan)
 - **Session Access**: Use `get_session()` context manager (available in both FastAPI and Celery contexts)
 - **Connection Pooling**: Configured with pre-ping, pool size 10, max overflow 20
 - **SQL Monitoring**: Automatic slow query logging (>0.5s) and debug SQL logging
-- **Celery Support**: `reset_async_db()` for event loop management in tasks
+- **Celery Support**: `reset_async_db()` for event loop management in tasks (required when using async DB in Celery workers)
+- **Transaction Management**: Use `execute_transaction()` from `pkg/database/dao.py` for complex multi-step transactions
+
+**DAO Pattern**: All database access should go through DAO classes (`internal/dao/`) which extend `BaseDao` from `pkg/database/dao.py`. The DAO provides query builders, counters, and updaters with built-in soft-delete handling.
+
+**Query Builder Pattern**: Use the fluent query builder API (`.eq_()`, `.in_()`, `.like_()`, etc.) instead of raw SQLAlchemy queries for consistency and maintainability.
+
+**Important**: When using database operations in Celery tasks, always call `reset_async_db()` before `init_async_db()` to avoid event loop conflicts.
 
 ### API Structure
 
-The application exposes 4 API groups:
+The application exposes 4 API groups with different authentication strategies:
 
-- **`/v1`** - Service API (`internal/controllers/serviceapi/`)
-- **`/v1/public`** - Public API (no auth required, `internal/controllers/publicapi/`)
-- Internal API (`internal/controllers/internalapi/`)
-- Web routes (`internal/controllers/web/`)
+- **`/v1`** - Service API (`internal/controllers/serviceapi/`) - Requires JWT authentication
+- **`/v1/public`** - Public API (`internal/controllers/publicapi/`) - No authentication required (whitelisted)
+- **`/v1/internal`** - Internal API (`internal/controllers/internalapi/`) - Requires X-Signature authentication (see `internal/utils/signature.py`)
+- Web routes (`internal/controllers/web/`) - Requires JWT authentication
 
 Each controller module defines routers that are aggregated in `__init__.py` and registered in `app.py`.
 
+**Authentication Whitelist**: The auth middleware (`internal/middlewares/auth.py`) whitelists paths starting with `/v1/public` or `/test`, and specific paths like `/docs`, `/auth/login`, etc.
+
 ### Async Task Processing
 
-- **Celery**: Task definitions in `internal/tasks/`, registered via `internal/utils/celery/register.py`
-- **APScheduler**: For scheduled tasks (integrated with Celery)
-- **AnyIO Tasks**: Background tasks within FastAPI request context (`internal/utils/anyio_task`)
+The project supports three async task strategies with distinct use cases:
+
+- **Celery**: Distributed task queue for long-running tasks
+  - Task definitions in `internal/tasks/`, registered via `internal/utils/celery/register.py`
+  - Initialization in `internal/utils/celery/__init__.py` with worker lifecycle hooks
+  - Worker startup: `python scripts/run_celery_worker.py` or use Celery CLI directly
+  - Use `run_in_async()` helper to execute async code within Celery tasks (handles event loop creation)
+  - Supports dynamic queue routing via `CELERY_TASK_ROUTES`
+  
+- **APScheduler**: Scheduled/periodic tasks (integrated with Celery Beat)
+  - Static schedules defined in `STATIC_BEAT_SCHEDULE` in `internal/utils/celery/__init__.py`
+  - Supports both cron and interval-based scheduling
+  - Beat scheduler: `celery -A internal.utils.celery.initialization.celery_app beat -l info`
+  
+- **AnyIO Tasks**: Background tasks within FastAPI request lifecycle
+  - Managed by `AnyioTaskHandler` in `internal/utils/anyio_task.py`
+  - Initialized during app lifespan, auto-cleaned on shutdown
+  - Supports task tracking, cancellation, timeout, and concurrency limiting
+  - Use for request-scoped async operations (e.g., fire-and-forget notifications)
+
+**Pattern**: Use AnyIO for lightweight request-scoped tasks, Celery for distributed/long-running operations, and APScheduler for periodic jobs.
 
 ### Logging
 
 Configured through `pkg/logger` using loguru:
-- Startup logs → `logs/startup.log`
-- Application logs → configured in `pkg/logger/handler.py`
-- Rotation: Daily with 7-day retention
-- Format: Includes timestamp, level, file, function, line number
+- **Startup logs**: `logs/startup.log` (configuration loading and initialization)
+- **Application logs**: Configured in `pkg/logger/handler.py` with rotation
+- **Rotation**: Daily with 7-day retention
+- **Format**: Includes timestamp, level, file, function, line number
+- **Log Formats**: Supports both JSON and text formats (configurable via `LogFormat.JSON` or `LogFormat.TEXT`)
+
+**Important**: Logger is initialized in the app lifespan (`internal/app.py`) and should not be reconfigured elsewhere. For Celery workers, logger is initialized in the worker startup hook.
 
 ## Database Models
 
-All SQLAlchemy models should be in `internal/models/` and use the async engine configured in `internal/infra/database.py`. The project supports MySQL, PostgreSQL, and Oracle with async drivers (aiomysql, asyncpg, oracledb).
+All SQLAlchemy models should:
+- Be placed in `internal/models/` and use the async engine configured in `internal/infra/database.py`
+- Extend from `ModelMixin` (from `pkg/database/base.py`) which provides:
+  - Automatic ID generation using Snowflake algorithm (64-bit distributed IDs)
+  - Soft delete support (`is_deleted`, `deleted_at` columns)
+  - Timestamp tracking (`created_at`, `updated_at` columns)
+  - Creator tracking (`creator_id` column, optional)
+  - Common utility methods (`.create()`, `.to_dict()`, etc.)
+  
+**Supported Databases**: The project supports MySQL, PostgreSQL, and Oracle with async drivers (aiomysql, asyncpg, oracledb). The connection string is automatically built based on `DB_TYPE` in configuration.
+
+**Snowflake IDs**: All models use Snowflake IDs by default (not database auto-increment). This enables distributed ID generation without database round-trips. IDs are generated at object creation time via `ModelMixin.create()`.
 
 ## JSON Serialization
 
-The project uses `orjson` for high-performance JSON serialization throughout (SQLAlchemy, API responses, etc.). Use the utilities in `pkg/toolkit/json.py` for consistent serialization.
+The project uses `orjson` for high-performance JSON serialization throughout (SQLAlchemy, API responses, Celery task payloads, etc.). 
+
+**Custom JSON Types**: SQLAlchemy columns can use `pkg/database/types.py` JSON types which provide automatic serialization/deserialization with orjson. This includes support for Pydantic models, dataclasses, and nested structures.
+
+**API Responses**: All FastAPI responses use orjson automatically. Use utilities in `pkg/toolkit/json.py` for manual JSON operations to maintain consistency.
 
 ## Development Notes
 
-- Python 3.12+ required
-- Use `ruff` for linting and formatting (configured in `pyproject.toml`)
-- Pre-commit hooks automatically run ruff on commit
-- Type hints are enforced with mypy
-- The project uses `uv` instead of pip for faster dependency management
-- Windows is not supported for Celery workers (POSIX systems only)
+- **Python Version**: Python 3.12+ required (uses modern type hints like `type[T]` and PEP 695 generic syntax)
+- **Package Manager**: Use `uv` instead of pip for faster dependency management
+  - Install dependencies: `uv sync` (dev) or `uv sync --no-dev --frozen` (prod)
+  - Run commands: `uv run <command>` or activate venv: `source .venv/bin/activate`
+- **Code Quality Tools**:
+  - `ruff` for linting and formatting (configured in `pyproject.toml`)
+  - Pre-commit hooks automatically run ruff on commit (`.pre-commit-config.yaml`)
+  - Type hints enforced with mypy (`mypy .`)
+- **Platform Support**: Windows is not supported for Celery workers (POSIX systems only) due to Celery's Unix-only dependencies
+- **Testing**: Run tests with `pytest`, integration tests marked with `@pytest.mark.integration` require Redis and Celery
 
 
 ## Coding Standards
