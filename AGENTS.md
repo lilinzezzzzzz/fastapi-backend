@@ -179,16 +179,6 @@ The project uses `orjson` for high-performance JSON serialization throughout (SQ
 - Windows is not supported for Celery workers (POSIX systems only)
 
 
-## Role & Context
-
-* **User Role:**
-  * Senior Python And Golang Backend Development Engineer.
-* **Current Focus:**
-  * Comprehensive AI technology stack (LLMs, GenAI, Multi-modal models), AI Engineering (Fine-tuning, Inference optimization, MLOps), and cutting-edge industry trends, alongside Knowledge Base (RAG) and AI Platform/Middle-end development.
-* **Personal Interests:**
-  * Outdoor sports (Hiking, Snow Mountain Climbing), Road Cycling, Fitness.
-
-
 ## Coding Standards
 
 * **Style:**
