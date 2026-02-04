@@ -116,7 +116,7 @@ class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
 
         self._stmt = custom_stmt if custom_stmt is not None else select(self._model_cls)
 
-        if include_deleted is False and self._model_cls.has_deleted_at_column:
+        if include_deleted is False and self._model_cls.has_deleted_at_column():
             self._apply_delete_at_is_none()
 
         if initial_where is not None:
@@ -199,7 +199,7 @@ class CountBuilder[T: ModelMixin](BaseBuilder[T]):
             async with self._session_provider() as sess:
                 total = (await sess.execute(self.count_stmt)).scalar()
                 await sess.commit()
-                return total
+                return total if total is not None else 0
         except Exception as e:
             raise RuntimeError(f"Error when querying count data, {self._model_cls.__name__}: {e}") from e
 
@@ -240,9 +240,16 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
         return self
 
     @property
+    def _update_stmt(self) -> Update:
+        """获取 Update 语句，若类型不匹配则抛出异常"""
+        if not isinstance(self._stmt, Update):
+            raise RuntimeError("Statement is not an Update")
+        return self._stmt
+
+    @property
     def update_stmt(self) -> Update:
         if not self._update_dict:
-            return self._stmt
+            return self._update_stmt
 
         # 自动处理 updated_at 和 deleted_at 同步
         updated_col = self._model_cls.updated_at_column_name()
@@ -261,7 +268,7 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
         # 自动同步更新字典到模型实例
         self._sync_update_dict_to_instance()
 
-        return self._stmt.values(**self._update_dict).execution_options(synchronize_session=False)
+        return self._update_stmt.values(**self._update_dict).execution_options(synchronize_session=False)
 
     async def execute(self):
         if not self._update_dict:

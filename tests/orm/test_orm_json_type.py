@@ -1,13 +1,13 @@
 import os
 import sys
 import types
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import pytest
 import pytest_asyncio
 from sqlalchemy import String
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import Mapped, mapped_column
 
 # ==========================================
@@ -65,11 +65,11 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 try:
-    from pkg.database.base import Base, ModelMixin, JSONType, new_async_session_maker
+    from pkg.database.base import Base, JSONType, ModelMixin, new_async_session_maker
     from pkg.database.dao import BaseDao
 except ImportError as e:
     try:
-        from pkg.database import ModelMixin, BaseDao, Base, new_async_session_maker, JSONType
+        from pkg.database import Base, BaseDao, JSONType, ModelMixin, new_async_session_maker
     except ImportError:
         print(f"CRITICAL: Cannot import from pkg.database. path={sys.path}")
         raise e
@@ -79,7 +79,7 @@ except ImportError as e:
 # 3. 定义测试模型
 # ==========================================
 class User(ModelMixin):
-    __tablename__ = "users"
+    __tablename__ = "users_json_type"
     username: Mapped[str] = mapped_column(String(50))
     email: Mapped[str] = mapped_column(String(100), nullable=True)
     info: Mapped[dict] = mapped_column(JSONType(), default=dict)  # 使用实例
