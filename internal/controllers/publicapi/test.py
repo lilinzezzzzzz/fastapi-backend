@@ -2,6 +2,7 @@ import asyncio
 
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 
 from internal.core.exception import AppException, errors
 from internal.utils.anyio_task import anyio_task_manager
@@ -10,6 +11,29 @@ from pkg.logger import logger
 from pkg.toolkit.response import success_response
 
 router = APIRouter(prefix="/test", tags=["public v1 test"])
+
+
+# ==================== Schema ====================
+class TestValidationRequest(BaseModel):
+    """测试请求验证的 Schema"""
+
+    name: str = Field(..., min_length=2, max_length=20, description="名称，2-20个字符")
+    age: int = Field(..., ge=0, le=150, description="年龄，0-150")
+    email: str = Field(..., pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$", description="邮箱格式")
+
+
+# ==================== 测试接口 ====================
+@router.post("/test_validation_error", summary="测试请求验证异常")
+async def test_validation_error(req: TestValidationRequest):
+    """
+    测试 RequestValidationError 在中间件中的处理。
+
+    传入不符合规则的数据会触发验证异常，例如:
+    - name 长度不在 2-20 之间
+    - age 不在 0-150 之间
+    - email 格式不正确
+    """
+    return success_response(data=req.model_dump())
 
 
 @router.get("/test_raise_exception", summary="测试异常")

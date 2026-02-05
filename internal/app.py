@@ -4,14 +4,12 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 
 from internal.config.load_config import settings
-from internal.core.exception import errors
 from internal.infra.database import close_async_db, init_async_db
 from internal.infra.redis import close_async_redis, init_async_redis
 from internal.utils.anyio_task import close_anyio_task_handler, init_anyio_task_handler
 from internal.utils.signature import init_signature_auth_handler
 from internal.utils.snowflake import init_snowflake_id_generator
 from pkg.logger import LogFormat, init_logger, logger
-from pkg.toolkit.response import error_response
 
 
 def create_app() -> FastAPI:
@@ -48,8 +46,8 @@ def register_router(app: FastAPI):
 def register_exception(app: FastAPI):
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(_: Request, exc: RequestValidationError):
-        logger.warning(f"Validation Error: {exc}")
-        return error_response(error=errors.BadRequest, message=f"Validation Error: {exc}")
+        # 重新抛出异常，让外层中间件统一处理
+        raise exc
 
 
 def register_middleware(app: FastAPI):

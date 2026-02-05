@@ -1,6 +1,8 @@
 import time
 from dataclasses import dataclass, field
 
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import Response
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -67,6 +69,39 @@ class ASGIRecordMiddleware:
     def __init__(self, app: ASGIApp):
         self.app = app
 
+    @staticmethod
+    def _log_exception(exc: Exception) -> None:
+        """
+        记录异常日志，根据异常类型使用不同的日志级别
+
+        Args:
+            exc: 捕获的异常
+        """
+        if isinstance(exc, AppException):
+            logger.warning(f"Business exception, exc={get_business_exec_tb(exc)}")
+        elif isinstance(exc, RequestValidationError):
+            logger.warning(f"Validation Error: {exc}")
+        else:
+            logger.error(f"Unexpected exception, exc={get_unexpected_exec_tb(exc)}")
+
+    @staticmethod
+    def _build_error_response(exc: Exception) -> Response:
+        """
+        根据异常类型构造错误响应
+
+        Args:
+            exc: 捕获的异常
+
+        Returns:
+            FastAPI Response 对象
+        """
+        if isinstance(exc, AppException):
+            return error_response(error=exc.error, message=exc.message)
+        elif isinstance(exc, RequestValidationError):
+            return error_response(error=errors.BadRequest, message=f"Validation Error: {exc}")
+        else:
+            return error_response(error=errors.InternalServerError, message=str(exc))
+
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
@@ -102,21 +137,11 @@ class ASGIRecordMiddleware:
                 logger.info(f"response log, processing time={req_ctx.process_time:.4f}s")
 
         except Exception as exc:
-            # 5. 统一异常处理 - 区分业务异常与系统异常
-            if isinstance(exc, AppException):
-                # 业务异常使用 warning 级别
-                logger.warning(f"Business exception, exc={get_business_exec_tb(exc)}")
-            else:
-                # 系统异常使用 error 级别
-                logger.error(f"Unexpected exception, exc={get_unexpected_exec_tb(exc)}")
+            # 5. 统一异常处理
+            self._log_exception(exc)
 
             if not req_ctx.response_started:
-                # 构造错误响应
-                if isinstance(exc, AppException):
-                    error_resp = error_response(error=exc.error, message=exc.message)
-                else:
-                    error_resp = error_response(error=errors.InternalServerError, message=str(exc))
-
+                error_resp = self._build_error_response(exc)
                 await error_resp(scope, receive, send_wrapper)
             else:
                 logger.critical(f"Response already started, cannot send error response. trace_id={req_ctx.trace_id}")
