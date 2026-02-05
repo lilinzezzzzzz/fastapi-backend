@@ -1,4 +1,3 @@
-from internal.utils.apscheduler.register import _register_tasks
 from pkg.logger import logger
 from pkg.toolkit.apscheduler import ApsSchedulerManager
 from pkg.toolkit.types import LazyProxy
@@ -11,11 +10,18 @@ def init_apscheduler():
     logger.info("Initializing APScheduler...")
     if _apscheduler_manager is not None:
         logger.warning("APScheduler has already been initialized.")
-    else:
-        _apscheduler_manager: ApsSchedulerManager = ApsSchedulerManager(timezone="UTC", max_instances=50)
+        return
 
-    _register_tasks()
+    _apscheduler_manager = ApsSchedulerManager(timezone="UTC", max_instances=50)
+    _register_tasks(_apscheduler_manager)
     logger.info("APScheduler initialized successfully.")
+
+
+def _register_tasks(manager: ApsSchedulerManager):
+    """注册定时任务"""
+    from internal.utils.apscheduler.tasks import handle_number_sum
+
+    manager.register_cron(handle_number_sum, cron_kwargs={"minute": "*/15", "second": 0})
 
 
 def _get_apscheduler_manager() -> ApsSchedulerManager:

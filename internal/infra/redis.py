@@ -59,7 +59,7 @@ async def close_async_redis() -> None:
     _cache = None
 
 
-async def reset_async_redis() -> None:
+def reset_async_redis() -> None:
     global _redis_client, _redis_pool, _cache
 
     _redis_client = None

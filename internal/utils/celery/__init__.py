@@ -9,6 +9,7 @@ from internal.config.load_config import settings
 from internal.infra.database import close_async_db, init_async_db, reset_async_db
 from internal.infra.redis import close_async_redis, init_async_redis, reset_async_redis
 from pkg.logger import init_logger, logger
+from pkg.toolkit import context
 from pkg.toolkit.celery import CeleryClient
 
 # =========================================================
@@ -136,33 +137,38 @@ def check_celery_health():
         logger.error(f"Celery Broker connection failed: {e}")
 
 
-def run_in_async[T](coro_func: Callable[[], Coroutine[None, None, T]]) -> T:
+def run_in_async[T](coro_func: Callable[[], Coroutine[None, None, T]], trace_id: str) -> T:
     """
     在 Celery 同步任务中执行异步代码。
     """
-    # from app.utils.redis import reset_async_redis, init_async_redis, close_async_redis
 
     # 1. 重置旧的连接池
     reset_async_db()
     reset_async_redis()
 
-    # 修改 _wrapper 接收参数
-    async def _wrapper(target_func: Callable[[], Coroutine[None, None, T]]) -> T:
-        # 2. 在新事件循环中初始化
+    # 2. 准备上下文
+    context_kwargs: dict[str, str | int] = {
+        "trace_id": trace_id,
+    }
+
+    async def _wrapper() -> T:
+        # 1. 在新事件循环中初始化
         init_async_db()
         init_async_redis()
 
-        try:
-            # 3. 执行业务逻辑 (使用传入的 target_func)
-            return await target_func()
-        finally:
-            # 4. 清理连接
-            await close_async_db()
-            await close_async_redis()
+        # 2. 设置上下文
+        context.init(**context_kwargs)
 
-    # 5. 使用 anyio.run 执行，并将 coro_func 作为参数传递
-    # 这样 args 就变成了 (coro_func,)，不再为空
-    return anyio.run(_wrapper, coro_func)
+        with logger.contextualize(trace_id=trace_id):
+            try:
+                # 3. 执行业务逻辑 (通过闭包捕获 coro_func)
+                return await coro_func()
+            finally:
+                # 4. 清理连接
+                await close_async_db()
+                await close_async_redis()
+
+    return anyio.run(_wrapper)
 
 
 """
