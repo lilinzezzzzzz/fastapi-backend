@@ -1,6 +1,10 @@
-from internal.celery_tasks.__init__ import default_celery_client, default_queue
 import os
 import sys
+
+from internal.utils.celery import celery_client
+
+# 默认队列配置
+DEFAULT_QUEUE = "celery_queue"
 
 
 def main() -> None:
@@ -10,7 +14,7 @@ def main() -> None:
         sys.exit(1)
 
     # 可用环境变量覆盖，括号内为默认值
-    queues = default_queue
+    queues = DEFAULT_QUEUE
     loglevel = "debug"
 
     pool = "prefork"
@@ -31,7 +35,7 @@ def main() -> None:
     ]
 
     # 用 worker_main 更稳（避免 Click 解析 "celery" 命令名的问题）
-    default_celery_client.app.worker_main(argv)
+    celery_client.app.worker_main(argv)
 
 
 if __name__ == "__main__":
