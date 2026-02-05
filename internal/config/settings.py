@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     DB_PASSWORD: SecretStr
     DB_DATABASE: str
     DB_SERVICE_NAME: str = ""  # Oracle 专用: Service Name
+    DB_ECHO: bool = False  # 是否输出 SQL 日志
 
     # --- Redis ---
     REDIS_HOST: str

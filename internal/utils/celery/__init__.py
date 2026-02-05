@@ -5,7 +5,7 @@ import anyio
 from celery import Celery
 from celery.schedules import crontab
 
-from internal.config import settings
+from internal.config import init_settings, settings
 from internal.infra.database import close_async_db, init_async_db, reset_async_db
 from internal.infra.redis import close_async_redis, init_async_redis, reset_async_redis
 from pkg.logger import init_logger, logger
@@ -54,39 +54,28 @@ STATIC_BEAT_SCHEDULE = {
 
 def _worker_startup():
     """
-    [Startup Hook] Worker 进程启动时执行：初始化 Logger、DB 和 Redis 连接池
+    [Startup Hook] Worker 进程启动时执行：初始化基础资源
+    注意：数据库和 Redis 连接在 run_in_async 中按需初始化
     """
-    # 1. 首先初始化 Logger (其他模块依赖它)
-    init_logger(level="INFO", base_log_dir=Path("/temp/celery"))
-    logger.info(">>> Worker Process Starting: Initializing resources...")
+    # 1. 首先初始化配置 (其他组件可能依赖配置)
     try:
-        # 2. 初始化数据库和 Redis
-        init_async_db()
-        init_async_redis()
-        logger.success("Worker Process Resources Initialized successfully.")
+        init_settings()
+        logger.info(f"Celery worker initialized with APP_ENV: {settings.APP_ENV}")
     except Exception as e:
-        logger.critical(f"Worker resource initialization failed: {e}")
+        logger.critical(f"Worker configuration initialization failed: {e}")
         raise e
+
+    # 2. 然后初始化 Logger (依赖配置中的日志格式等)
+    init_logger(level="INFO", base_log_dir=Path("/temp/celery"))
+    logger.info(">>> Worker Process Starting: Initializing basic resources...")
 
 
 async def _worker_shutdown():
     """
-    [Shutdown Hook] Worker 进程关闭时执行：释放资源
+    [Shutdown Hook] Worker 进程关闭时执行：基础资源清理
+    注意：数据库和 Redis 连接在 run_in_async 中已自动清理
     """
-    logger.warning("Worker Process Stopping: Releasing resources...")
-
-    async def safe_close(close_func):
-        try:
-            await close_func()
-        except Exception as e:
-            logger.error(f"Error during resource shutdown: {e}")
-
-    # 并发关闭 DB 和 Redis，加快关闭速度
-    async with anyio.create_task_group() as tg:
-        tg.start_soon(safe_close, close_async_redis)
-        tg.start_soon(safe_close, close_async_db)
-
-    logger.warning("Worker Process Resources Released.")
+    logger.warning("Worker Process Stopping: Cleaning up basic resources...")
 
 
 # =========================================================
@@ -152,8 +141,8 @@ def run_in_async[T](coro_func: Callable[[], Coroutine[None, None, T]], trace_id:
     }
 
     async def _wrapper() -> T:
-        # 1. 在新事件循环中初始化
-        init_async_db()
+        # 1. 在新事件循环中初始化（使用配置中的 echo 参数）
+        init_async_db(echo=settings.DB_ECHO)
         init_async_redis()
 
         # 2. 设置上下文

@@ -23,10 +23,13 @@ _session_maker: async_sessionmaker[AsyncSession] | None = None
 # ---------------------- 1. 生命周期管理 ----------------------
 
 
-def init_async_db() -> None:
+def init_async_db(echo: bool | None = None) -> None:
     """
     初始化数据库连接池。
     应在 FastAPI lifespan 或 Celery worker_process_init 中调用。
+
+    Args:
+        echo: 是否输出 SQL 日志，None 时使用配置文件中的值
     """
     global _engine, _session_maker
     logger.info("Initializing Database Connection...")
@@ -35,10 +38,13 @@ def init_async_db() -> None:
         logger.info("Database connection already initialized.")
         return
 
+    # 使用传入的 echo 参数，如果为 None 则使用配置
+    db_echo = echo if echo is not None else settings.DB_ECHO
+
     # 1. 创建 Engine
     _engine = new_async_engine(
         database_uri=settings.sqlalchemy_database_uri,
-        echo=False,  # 通常设为 False，由下方的 event listener 接管日志
+        echo=db_echo,  # 使用配置或参数指定的值
         pool_pre_ping=True,
         pool_size=10,
         max_overflow=20,
