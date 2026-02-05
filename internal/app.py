@@ -87,8 +87,8 @@ async def lifespan(_app: FastAPI):
 
     # 初始化日志（使用配置中的格式）
     init_logger(log_format=settings.LOG_FORMAT)
-    # 初始化 DB
-    init_async_db()
+    # 初始化 DB（使用配置中的 echo）
+    init_async_db(echo=settings.DB_ECHO)
     # 初始化 Redis
     init_async_redis()
     # 初始化签名认证
