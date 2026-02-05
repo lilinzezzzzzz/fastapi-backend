@@ -1,5 +1,4 @@
 from pkg.toolkit.grpc import GrpcChannel
-
 from pkg.toolkit.types import LazyProxy
 
 _grpc_channel: GrpcChannel | None = None
@@ -43,16 +42,16 @@ class UserGrpcClient:
     async def get_user(self, uid: int):
         # 调用远程 GetUser 方法
         request = user_pb2.GetUserRequest(id=user_id)
-        
+
         # 可以在这里注入通用的 Metadata，比如 trace_id 或 token
         metadata = (("x-client-id", "fastapi-app"),)
-        
+
         response = await self.stub.GetUser(
-            request, 
+            request,
             timeout=settings.GRPC_TIMEOUT,
             metadata=metadata
         )
-        
+
         # 将 Proto Message 转换为 Python Dict 或 Pydantic Model 返回，解耦 Proto
         return {
             "id": response.id,

@@ -6,7 +6,7 @@ _aes_cipher: AESCipher | None = None
 
 def init_aes_cipher(secret_key: str):
     global _aes_cipher
-    _aes_cipher: AESCipher = AESCipher(secret_key)
+    _aes_cipher = AESCipher(secret_key)
 
 
 def _get_aes_cipher() -> AESCipher:
