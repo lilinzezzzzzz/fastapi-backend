@@ -178,12 +178,12 @@ The project supports three async task strategies with distinct use cases:
   - Worker startup: `python scripts/run_celery_worker.py` or use Celery CLI directly
   - Use `run_in_async()` helper to execute async code within Celery tasks (handles event loop creation)
   - Supports dynamic queue routing via `CELERY_TASK_ROUTES`
-  
+
 - **APScheduler**: Scheduled/periodic tasks (integrated with Celery Beat)
   - Static schedules defined in `STATIC_BEAT_SCHEDULE` in `internal/utils/celery/__init__.py`
   - Supports both cron and interval-based scheduling
   - Beat scheduler: `celery -A internal.utils.celery.initialization.celery_app beat -l info`
-  
+
 - **AnyIO Tasks**: Background tasks within FastAPI request lifecycle
   - Managed by `AnyioTaskHandler` in `internal/utils/anyio_task.py`
   - Initialized during app lifespan, auto-cleaned on shutdown
@@ -213,14 +213,14 @@ All SQLAlchemy models should:
   - Timestamp tracking (`created_at`, `updated_at` columns)
   - Creator tracking (`creator_id` column, optional)
   - Common utility methods (`.create()`, `.to_dict()`, etc.)
-  
+
 **Supported Databases**: The project supports MySQL, PostgreSQL, and Oracle with async drivers (aiomysql, asyncpg, oracledb). The connection string is automatically built based on `DB_TYPE` in configuration.
 
 **Snowflake IDs**: All models use Snowflake IDs by default (not database auto-increment). This enables distributed ID generation without database round-trips. IDs are generated at object creation time via `ModelMixin.create()`.
 
 ## JSON Serialization
 
-The project uses `orjson` for high-performance JSON serialization throughout (SQLAlchemy, API responses, Celery task payloads, etc.). 
+The project uses `orjson` for high-performance JSON serialization throughout (SQLAlchemy, API responses, Celery task payloads, etc.).
 
 **Custom JSON Types**: SQLAlchemy columns can use `pkg/database/types.py` JSON types which provide automatic serialization/deserialization with orjson. This includes support for Pydantic models, dataclasses, and nested structures.
 
@@ -238,56 +238,3 @@ The project uses `orjson` for high-performance JSON serialization throughout (SQ
   - Type hints enforced with mypy (`mypy .`)
 - **Platform Support**: Windows is not supported for Celery workers (POSIX systems only) due to Celery's Unix-only dependencies
 - **Testing**: Run tests with `pytest`, integration tests marked with `@pytest.mark.integration` require Redis and Celery
-
-
-## Coding Standards
-
-* **Style:**
-  * Pythonic, Pydantic v2, PEP 8 compliant.
-  * Code style and type usage must be compatible with ruff and basedpyright (basic mode).
-  * Public APIs must be fully type-annotated.
-  * Avoid implicit Any.
-  * Use explicit, precise types over permissive or ambiguous typing.
-  * Do NOT include instructions to run ruff or basedpyright; compliance is assumed at generation time.
-* **Runtime & Environment:**
-  * Project environment and dependency management are strictly based on uv (Astral).
-  * Dependencies are defined via pyproject.toml (PEP 621) and resolved with uv.lock.
-  * Do NOT assume requirements.txt, pip, pip-tools, poetry, or conda.
-  * Generated code and instructions must be compatible with execution via uv run and installation via uv pip.
-* **Quality:**
-  * High performance, production-ready.
-  * Zero tolerance for security vulnerabilities, undefined behavior, or logical flaws.
-* **Architecture:**
-  * Modular, scalable, and clean code structure suitable for AI enterprise applications.
-
-
-## Response Preferences
-
-* **Conciseness:**
-  * Be direct and brief. Prefer responding in Chinese.
-  * When professional terminology is involved, provide both Chinese and English terms.
-  * Focus on the "Why" and "How" of complex architectural decisions.
-* **Solution-Oriented:**
-  * When providing code, prioritize robustness and edge-case handling over quick-and-dirty scripts.
-* **Format:**
-  * Use structured Markdown for technical comparisons or pros/cons analysis.
-
-
-## Analysis & Verification Protocol
-
-* **Challenge Assumptions:**
-  * Rigorously stress-test and critique all my proposed designs, technical solutions, and underlying assumptions.
-  * Do not strictly follow instructions if they lead to suboptimal outcomes.
-* **Identify Risks:**
-  * Proactively highlight potential logical flaws, scalability bottlenecks, concurrency issues (e.g., race conditions), or security vulnerabilities.
-* **Constructive Feedback Loop:**
-  * If a proposed solution is suboptimal or an anti-pattern, you are required to propose superior, industry-standard alternatives **before** proceeding to the implementation phase.
-
-
-## Timeliness of Information and Search (Key)
-
-* **Web Search:**
-  * Enabled and performed actively.
-  * For any queries involving frequently updated libraries, technologies, or current events, Internet Search must be used to ensure answers reflect the latest versions and practices.
-* **Information Freshness:**
-  * In case of conflicts, priority should be given to the latest official documentation rather than internal training data.
