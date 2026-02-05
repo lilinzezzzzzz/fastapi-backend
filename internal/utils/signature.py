@@ -1,4 +1,4 @@
-from internal.config.load_config import settings
+from internal.config import settings
 from pkg.logger import logger
 from pkg.toolkit.signature import SignatureAuthHandler
 from pkg.toolkit.types import LazyProxy

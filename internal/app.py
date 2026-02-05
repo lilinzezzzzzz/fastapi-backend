@@ -3,13 +3,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 
-from internal.config.load_config import settings
+from internal.config import init_settings, settings
 from internal.infra.database import close_async_db, init_async_db
 from internal.infra.redis import close_async_redis, init_async_redis
 from internal.utils.anyio_task import close_anyio_task_handler, init_anyio_task_handler
 from internal.utils.signature import init_signature_auth_handler
 from internal.utils.snowflake import init_snowflake_id_generator
-from pkg.logger import LogFormat, init_logger, logger
+from pkg.logger import init_logger, logger
 
 
 def create_app() -> FastAPI:
@@ -82,8 +82,11 @@ def register_middleware(app: FastAPI):
 # 定义 lifespan 事件处理器
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    # 初始化日志
-    init_logger(log_format=LogFormat.TEXT)
+    # 初始化配置（必须最先执行）
+    init_settings()
+
+    # 初始化日志（使用配置中的格式）
+    init_logger(log_format=settings.LOG_FORMAT)
     # 初始化 DB
     init_async_db()
     # 初始化 Redis

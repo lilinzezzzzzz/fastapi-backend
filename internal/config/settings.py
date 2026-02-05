@@ -1,37 +1,18 @@
-import os
-from functools import lru_cache
+"""应用配置模型定义"""
+
 from typing import Literal
 
-from dotenv import dotenv_values
 from loguru import logger
 from pydantic import MySQLDsn, PostgresDsn, RedisDsn, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from internal import BASE_DIR
 from pkg.crypter.aes import aes_decrypt
-
-
-# =========================================================
-# 日志配置 (懒加载)
-# =========================================================
-def _setup_startup_logger():
-    """配置启动日志"""
-    log_dir = BASE_DIR / "logs"
-    log_dir.mkdir(exist_ok=True)
-    logger.add(
-        log_dir / "startup.log",
-        rotation="1 day",
-        retention="7 days",
-        level="INFO",
-        enqueue=True,
-        encoding="utf-8",
-    )
-    return logger
-
+from pkg.logger import LogFormat
 
 # =========================================================
 # 配置定义
 # =========================================================
+
 # 支持的数据库类型
 DBType = Literal["mysql", "postgresql", "oracle"]
 
@@ -51,6 +32,9 @@ class Settings(BaseSettings):
     # --- 核心环境配置 ---
     APP_ENV: Literal["local", "dev", "test", "prod"]
     DEBUG: bool = False
+
+    # --- 日志配置 ---
+    LOG_FORMAT: LogFormat = LogFormat.TEXT  # 日志格式: TEXT 或 JSON
 
     # --- 密钥配置 ---
     AES_SECRET: SecretStr
@@ -171,72 +155,3 @@ class Settings(BaseSettings):
                 path=f"{self.REDIS_DB}",
             )
         )
-
-
-# =========================================================
-# 工厂函数 (简化版)
-# =========================================================
-@lru_cache
-def get_settings() -> Settings:
-    _logger = _setup_startup_logger()
-    _logger.info("Loading configuration...")
-
-    secrets_path = BASE_DIR / "configs" / ".secrets"
-
-    # 1. 检查 .secrets 是否存在
-    if not secrets_path.exists():
-        msg = f"CRITICAL: Secrets file missing at {secrets_path}"
-        _logger.critical(msg)
-        raise FileNotFoundError(msg)
-
-    # 2. 提取 APP_ENV (优先级: 系统环境变量 > .secrets 文件)
-    # 不再实例化 Pydantic 类，直接读取
-    app_env = os.getenv("APP_ENV")
-
-    if not app_env:
-        # 如果系统没设，从文件读
-        secrets_dict = dotenv_values(secrets_path)
-        app_env = secrets_dict.get("APP_ENV")
-
-    if not app_env:
-        msg = "CRITICAL: APP_ENV not found in system env or .secrets file!"
-        _logger.critical(msg)
-        raise ValueError(msg)
-
-    _logger.info(f"Detected Environment: {app_env}")
-
-    # 3. 检查对应环境文件是否存在
-    env_file_path = BASE_DIR / "configs" / f".env.{app_env}"
-    if not env_file_path.exists():
-        msg = f"CRITICAL: Config file missing for environment '{app_env}' at {env_file_path}"
-        _logger.critical(msg)
-        raise FileNotFoundError(msg)
-
-    # 4. 加载配置
-    # load_files 顺序：[.env.dev, .secrets] -> 后者覆盖前者
-    load_files = [env_file_path, secrets_path]
-    _logger.info(f"Loading files: {[f.name for f in load_files]}")
-
-    try:
-        _settings = Settings(_env_file=load_files)  # type: ignore
-        _logger.success("Configuration loaded successfully.")
-
-        # 根据 ECHO_CONFIG 决定是否打印配置
-        if _settings.ECHO_CONFIG:
-            _logger.info("=" * 50)
-            _logger.info("Configuration Details (ECHO_CONFIG=true):")
-            for key, value in _settings.model_dump().items():
-                # SecretStr 类型需要获取原始值
-                if isinstance(getattr(_settings, key, None), SecretStr):
-                    value = getattr(_settings, key).get_secret_value()
-                _logger.info(f"  {key}: {value}")
-
-            _logger.info("=" * 50)
-
-        return _settings
-    except Exception as e:
-        _logger.critical(f"Config load failed: {e}")
-        raise
-
-
-settings = get_settings()

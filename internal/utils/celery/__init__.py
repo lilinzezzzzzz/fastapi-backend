@@ -5,7 +5,7 @@ import anyio
 from celery import Celery
 from celery.schedules import crontab
 
-from internal.config.load_config import settings
+from internal.config import settings
 from internal.infra.database import close_async_db, init_async_db, reset_async_db
 from internal.infra.redis import close_async_redis, init_async_redis, reset_async_redis
 from pkg.logger import init_logger, logger

@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from redis.asyncio import ConnectionPool, Redis
 
-from internal.config.load_config import settings
+from internal.config import settings
 from pkg.logger import logger
 from pkg.toolkit.cache import CacheClient
 from pkg.toolkit.types import LazyProxy
