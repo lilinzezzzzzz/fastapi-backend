@@ -17,6 +17,9 @@ _DEFAULT_BASE_LOG_DIR = Path("/tmp/fastapi_logs")
 RotationType = str | int | time | timedelta
 RetentionType = str | int | timedelta
 
+# OTel LoggingHandler 实例（延迟初始化）
+_otel_log_handler: Any = None
+
 
 class LogFormat(StrEnum):
     """日志格式枚举"""
@@ -88,10 +91,14 @@ class LoggerHandler:
         else:
             self.rotation = rotation
 
-    def setup(self, *, write_to_file: bool = True, write_to_console: bool = True) -> "loguru.Logger":
+    def setup(self, *, write_to_file: bool = True, write_to_console: bool = True, enable_otel_bridge: bool = True) -> "loguru.Logger":
         """
         应用配置并初始化系统日志。
         注意：setup 不再接收配置参数，而是使用 __init__ 中保存的属性。
+
+        :param write_to_file: 是否写入文件
+        :param write_to_console: 是否输出到控制台
+        :param enable_otel_bridge: 是否启用 OTel 日志桥接（将日志转发到 OTel Logs Backend）
         """
         self._logger.remove()
         self._registered_namespaces.clear()
@@ -140,6 +147,10 @@ class LoggerHandler:
             )
 
             self._registered_namespaces[self.SYSTEM_LOG_NAMESPACE] = {"sink_registered": True}
+
+        # 5. OTel 日志桥接（将 loguru 日志转发到 OTel Logs Backend）
+        if enable_otel_bridge:
+            self._setup_otel_bridge()
 
         mode_str = "UTC" if self.use_utc else "Local Time"
         self._logger.info(
@@ -314,6 +325,70 @@ class LoggerHandler:
         if not path.parent.exists():
             raise FileNotFoundError(f"Parent directory does not exist: {path.parent}")
         path.mkdir(exist_ok=True)
+
+    def _setup_otel_bridge(self) -> None:
+        """
+        设置 OTel 日志桥接，将 loguru 日志转发到 OTel Logs Backend。
+        """
+        global _otel_log_handler
+
+        try:
+            from internal.infra.otel import get_otel_logging_handler
+
+            _otel_log_handler = get_otel_logging_handler()
+            if _otel_log_handler is None:
+                self._logger.debug("OTel logging bridge skipped: LoggerProvider not initialized.")
+                return
+
+            # 创建 loguru sink 函数，将日志转发到 OTel
+            def otel_sink(message):
+                record = message.record
+                # 将 loguru 日志级别映射到 OTel SeverityNumber
+                level_map = {
+                    "TRACE": 1,
+                    "DEBUG": 5,
+                    "INFO": 9,
+                    "SUCCESS": 9,
+                    "WARNING": 13,
+                    "ERROR": 17,
+                    "CRITICAL": 21,
+                }
+                severity_number = level_map.get(record["level"].name, 9)
+
+                # 构建日志属性
+                attributes = {
+                    "loguru.name": record["name"],
+                    "loguru.function": record["function"],
+                    "loguru.line": record["line"],
+                    "loguru.file": record["file"].name,
+                }
+
+                # 添加 trace_id 和 span_id（如果存在）
+                trace_id = record["extra"].get("trace_id")
+                if trace_id and trace_id != "-":
+                    attributes["trace_id"] = trace_id
+
+                # 通过 OTel LoggingHandler 发送日志
+                _otel_log_handler.emit(
+                    record={
+                        "body": record["message"],
+                        "severity_number": severity_number,
+                        "severity_text": record["level"].name,
+                        "attributes": attributes,
+                    }
+                )
+
+            # 添加 OTel sink
+            self._logger.add(
+                sink=otel_sink,
+                level=self.level,
+                enqueue=self.enqueue,
+                filter=self._filter_system,
+            )
+            self._logger.info("OTel logging bridge enabled: logs will be forwarded to Logs Backend.")
+
+        except Exception as e:
+            self._logger.warning(f"Failed to setup OTel logging bridge: {e}")
 
     @classmethod
     def _get_trace_id(cls, record: Any) -> str:

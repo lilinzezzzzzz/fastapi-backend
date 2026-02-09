@@ -56,6 +56,12 @@ class Settings(BaseSettings):
     DB_SERVICE_NAME: str = ""  # Oracle 专用: Service Name
     DB_ECHO: bool = False  # 是否输出 SQL 日志
 
+    # --- OpenTelemetry ---
+    OTEL_ENABLED: bool = True  # 是否启用 OpenTelemetry
+    OTEL_SERVICE_NAME: str = "fastapi-backend"  # 服务名称（需根据实际项目修改）
+    OTEL_OTLP_ENDPOINT: str = ""  # OTLP 导出端点，为空则只使用 Console 导出
+    OTEL_CONSOLE_EXPORT: bool = True  # 是否启用 Console 导出（开发调试用）
+
     # --- Redis ---
     REDIS_HOST: str
     REDIS_PORT: int = 6379

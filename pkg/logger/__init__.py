@@ -55,6 +55,7 @@ def init_logger(
     log_format: LogFormat | str = LogFormat.TEXT,
     write_to_file: bool = True,
     write_to_console: bool = True,
+    enable_otel_bridge: bool = True,
 ) -> "Logger":
     """
     初始化应用层 Logger。
@@ -70,6 +71,7 @@ def init_logger(
     :param log_format: 日志格式 (LogFormat.JSON 或 LogFormat.TEXT，默认 LogFormat.TEXT)
     :param write_to_file: 是否写入文件
     :param write_to_console: 是否输出到控制台
+    :param enable_otel_bridge: 是否启用 OTel 日志桥接（将日志转发到 Logs Backend）
     :return: 初始化后的 Logger 实例
     """
     global _logger_manager, _logger
@@ -85,7 +87,11 @@ def init_logger(
         enqueue=enqueue,
         log_format=log_format,
     )
-    _logger = _logger_manager.setup(write_to_file=write_to_file, write_to_console=write_to_console)
+    _logger = _logger_manager.setup(
+        write_to_file=write_to_file,
+        write_to_console=write_to_console,
+        enable_otel_bridge=enable_otel_bridge,
+    )
 
     return _logger
 

@@ -10,6 +10,7 @@ from internal.core.exception import AppException, errors
 from pkg.logger import logger
 from pkg.toolkit import context
 from pkg.toolkit.exc import get_business_exec_tb, get_unexpected_exec_tb
+from pkg.toolkit.otel import get_current_trace_id
 from pkg.toolkit.response import error_response
 from pkg.toolkit.string import uuid6_unique_str_id
 
@@ -30,10 +31,14 @@ class _RequestContext:
     _process_time: float | None = field(default=None, init=False, repr=False)
 
     def __post_init__(self):
-        # 优先使用请求头中的 trace_id
-        header_trace_id = self.headers.get("X-Trace-ID")
-        if header_trace_id:
-            self.trace_id = header_trace_id
+        # trace_id 优先级：OTel context > 请求头 X-Trace-ID > uuid6
+        otel_trace_id = get_current_trace_id()
+        if otel_trace_id:
+            self.trace_id = otel_trace_id
+        else:
+            header_trace_id = self.headers.get("X-Trace-ID")
+            if header_trace_id:
+                self.trace_id = header_trace_id
 
     @property
     def process_time(self) -> float:
