@@ -69,7 +69,7 @@ def init_otel(
         try:
             from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 
-            otlp_processor = BatchSpanProcessor(OTLPSpanExporter(endpoint=otlp_endpoint))
+            otlp_processor = BatchSpanProcessor(OTLPSpanExporter(endpoint=f"{otlp_endpoint}/v1/traces"))
             _tracer_provider.add_span_processor(otlp_processor)
             logger.info(f"OpenTelemetry: OTLPSpanExporter enabled, endpoint={otlp_endpoint}")
         except Exception as e:
@@ -109,6 +109,8 @@ def instrument_fastapi_app(app) -> None:
         from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
         FastAPIInstrumentor.instrument_app(app)
+        # 强制重建中间件栈，确保 OpenTelemetryMiddleware 被正确添加
+        app.middleware_stack = app.build_middleware_stack()
         logger.info("OpenTelemetry: FastAPI app instrumented (instance-level).")
     except Exception as e:
         logger.warning(f"OpenTelemetry: Failed to instrument FastAPI app: {e}")
