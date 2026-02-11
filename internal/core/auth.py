@@ -1,4 +1,4 @@
-from internal.dao.redis import cache_dao
+from internal.utils.cache.redis import cache_dao
 
 
 async def verify_token(token: str) -> tuple[str | dict | None, bool]:
