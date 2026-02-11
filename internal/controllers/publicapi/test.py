@@ -1,5 +1,4 @@
-import asyncio
-
+import anyio
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -51,7 +50,7 @@ async def test_raise_app_exception():
 async def async_task():
     """可以继承上下文的trace_id"""
     logger.info("async_task_trace_id-test")
-    await asyncio.sleep(10)
+    await anyio.sleep(10)
 
 
 @router.get("/test_contextvars_on_asyncio_task", summary="测试Contextvars在Asyncio任务")
@@ -65,7 +64,7 @@ async def text_generator():
     answer_text = "演示用异步生成器陆续返回文本答案。"
     for c in answer_text:
         yield c
-        await asyncio.sleep(0.05)
+        await anyio.sleep(0.05)
 
 
 @router.get("/test/sse-stream", summary="测试SSE")
@@ -73,11 +72,11 @@ async def test_sse():
     async def event_generator():
         # 1. 请求进入，先返回：hello，正在查询资料
         yield "data: hello，正在查询资料\n\n"
-        await asyncio.sleep(2)
+        await anyio.sleep(2)
 
         # 2. sleep，返回：正在组织回答
         yield "data: 正在组织回答\n\n"
-        await asyncio.sleep(2)
+        await anyio.sleep(2)
 
         yield "data: 开始回答\n\n"
         yield "data: =========\n\n"
@@ -85,7 +84,7 @@ async def test_sse():
         answer_text = "演示了SSE的基本用法, 逐字返回文本答案"
         for c in answer_text:
             yield f"data: {c}\n\n"
-            await asyncio.sleep(0.05)
+            await anyio.sleep(0.05)
 
         yield "data: =========\n\n"
 
@@ -102,7 +101,7 @@ async def test_sse():
 async def fake_stream_generator():
     for i in range(5):
         yield f"data: chunk {i}\n\n"
-        await asyncio.sleep(3)
+        await anyio.sleep(3)
 
 
 @router.get("/chat/sse-stream/timeout", summary="测试SSE超时控制")
