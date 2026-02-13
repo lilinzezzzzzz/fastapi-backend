@@ -1,8 +1,9 @@
 from fastapi import APIRouter
 
-from internal.controllers.serviceapi import user
+from internal.controllers.internal import user
 
-router = APIRouter(prefix="/v1")
+router = APIRouter(prefix="/v1/internal")
+
 routers = [
     user.router,
 ]

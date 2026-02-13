@@ -9,7 +9,7 @@ from pkg.decorators import stream_with_chunk_control
 from pkg.logger import logger
 from pkg.toolkit.response import success_response
 
-router = APIRouter(prefix="/test", tags=["public v1 test"])
+router = APIRouter(prefix="/test", tags=["public test"])
 
 
 # ==================== Schema ====================

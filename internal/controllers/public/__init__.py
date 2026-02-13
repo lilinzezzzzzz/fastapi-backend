@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from internal.controllers.publicapi import test
+from internal.controllers.public import test
 
 router = APIRouter(prefix="/v1/public")
 

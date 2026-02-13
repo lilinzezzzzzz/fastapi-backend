@@ -24,10 +24,9 @@ class _AuthConstants:
     BEARER_PREFIX: str = "Bearer "
 
     # 路径前缀 (认证策略说明)
-    PATH_PUBLIC: str = "/v1/public"       # 公共API，无需认证 (包含 /v1/public/test 等)
-    PATH_INTERNAL: str = "/v1/internal"   # 内部API，签名认证 (X-Signature)
-    PATH_SERVICE: str = "/v1/service"     # 服务API，Token认证 (Redis缓存校验)
-    PATH_WEB: str = "/v1"                 # Web路由，Token认证 (Redis缓存校验)
+    PATH_PUBLIC: str = "/v1/public"      # 公共API，无需认证
+    PATH_INTERNAL: str = "/v1/internal"  # 内部API，签名认证
+    # 其他所有路径默认 Token 认证
 
     # 白名单路径(精确匹配)
     WHITELIST_PATHS: frozenset[str] = frozenset(
