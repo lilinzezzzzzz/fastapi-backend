@@ -9,4 +9,4 @@ routers = [
 ]
 
 for r in routers:
-    router.include_router(r)
+    router.include_router(router=r)
