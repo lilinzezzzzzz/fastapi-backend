@@ -23,10 +23,11 @@ class _AuthConstants:
     # Token 前缀
     BEARER_PREFIX: str = "Bearer "
 
-    # 路径前缀
-    PATH_PUBLIC: str = "/v1/public"
-    PATH_INTERNAL: str = "/v1/internal"
-    PATH_TEST: str = "/test"
+    # 路径前缀 (认证策略说明)
+    PATH_PUBLIC: str = "/v1/public"       # 公共API，无需认证 (包含 /v1/public/test 等)
+    PATH_INTERNAL: str = "/v1/internal"   # 内部API，签名认证 (X-Signature)
+    PATH_SERVICE: str = "/v1/service"     # 服务API，Token认证 (Redis缓存校验)
+    PATH_WEB: str = "/v1"                 # Web路由，Token认证 (Redis缓存校验)
 
     # 白名单路径(精确匹配)
     WHITELIST_PATHS: frozenset[str] = frozenset(
@@ -35,9 +36,6 @@ class _AuthConstants:
             "/auth/register",
             "/docs",
             "/openapi.json",
-            "/v1/auth/login_by_account",
-            "/v1/auth/login_by_phone",
-            "/v1/auth/verify_token",
         }
     )
 
@@ -58,7 +56,6 @@ class _AuthContext:
         """判断是否在白名单中"""
         return (
             self.path.startswith(_AUTH_CONST.PATH_PUBLIC)
-            or self.path.startswith(_AUTH_CONST.PATH_TEST)
             or self.path in _AUTH_CONST.WHITELIST_PATHS
         )
 
@@ -130,18 +127,19 @@ class ASGIAuthMiddleware:
         await self.app(scope, receive, send)
 
     async def _handle_token_auth(self, auth_ctx: _AuthContext, scope: Scope, receive: Receive, send: Send) -> None:
-        """处理 Token 认证"""
+        """处理 Token 认证 (基于 Redis 缓存校验)"""
         token = auth_ctx.get_token()
 
         if not token:
             raise AppException(errors.Unauthorized, message="invalid or missing token")
 
         logger.debug(f"Verifying token: {token[:10]}...")
-        result, ok = await verify_token(token)
-        if not ok:
-            raise AppException(errors.Unauthorized, message=f"invalid or missing token, {result}")
+        auth_metadata = await verify_token(token)
 
-        user_id = result.get("id")
+        user_id = auth_metadata.get("id")
+        if not isinstance(user_id, int):
+            raise AppException(errors.Unauthorized, message="Invalid user_id in token metadata")
+
         # 设置用户上下文
         logger.debug(f"Set user_id to context: {user_id}")
         context.set_user_id(user_id)
