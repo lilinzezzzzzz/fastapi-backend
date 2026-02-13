@@ -1,0 +1,511 @@
+"""
+Pytest 配置文件 (conftest.py)
+
+提供测试运行所需的共享 fixtures、hooks 和配置。
+所有 fixtures 和 hooks 在此文件定义后，可在任意测试文件中直接使用。
+
+主要功能：
+1. Mock 外部依赖（logger、snowflake ID、配置等）
+2. 提供数据库测试 fixtures（内存 SQLite）
+3. 提供 Redis 测试 fixtures
+4. 提供 FastAPI 测试客户端
+5. 配置 pytest-asyncio 后端
+"""
+
+import asyncio
+import os
+import sys
+import types
+from collections.abc import AsyncGenerator, Generator
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+import pytest_asyncio
+from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
+from redis.asyncio import ConnectionPool, Redis
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+
+# ==========================================
+# 1. 路径配置
+# ==========================================
+
+# 获取项目根目录
+PROJECT_ROOT = Path(__file__).parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+# ==========================================
+# 2. Mock 外部依赖 (必须在导入内部模块之前)
+# ==========================================
+
+# Mock logger
+mock_logger = MagicMock()
+mock_logger.info = MagicMock()
+mock_logger.error = MagicMock()
+mock_logger.warning = MagicMock()
+mock_logger.success = MagicMock()
+mock_logger.debug = MagicMock()
+mock_logger.critical = MagicMock()
+
+# Mock pkg.logger 模块
+mock_logger_module = types.ModuleType("pkg.logger")
+mock_logger_module.logger = mock_logger
+mock_logger_module.init_logger = MagicMock()
+
+# 为了让 LazyProxy 正常工作，需要 mock 整个模块
+sys.modules["pkg.logger"] = mock_logger_module
+
+# Mock pkg.toolkit.context 模块
+mock_context = types.ModuleType("pkg.toolkit.context")
+mock_context.get_user_id = MagicMock(return_value=999)
+sys.modules["pkg.toolkit.context"] = mock_context
+
+# Mock snowflake ID 生成器
+_id_counter = 0
+
+
+def mock_gen_id() -> int:
+    global _id_counter
+    _id_counter += 1
+    return _id_counter
+
+
+mock_snowflake_generator = MagicMock()
+mock_snowflake_generator.generate = mock_gen_id
+
+mock_snowflake_module = types.ModuleType("pkg.toolkit.inter")
+mock_snowflake_module.snowflake_id_generator = mock_snowflake_generator
+sys.modules["pkg.toolkit.inter"] = mock_snowflake_module
+
+# ==========================================
+# 3. 测试配置
+# ==========================================
+
+# 测试用的内存数据库 URL
+TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+# 测试用的 Redis URL (使用真实的 Redis 或 fakeredis)
+# 注意：集成测试需要真实的 Redis 服务
+TEST_REDIS_URL = os.getenv("TEST_REDIS_URL", "redis://localhost:6379/15")
+
+
+# ==========================================
+# 4. pytest 配置 hooks
+# ==========================================
+
+
+def pytest_configure(config: pytest.Config):
+    """
+    pytest 配置钩子，在测试开始前执行。
+
+    用于：
+    - 注册自定义 markers
+    - 设置测试环境
+    """
+    # 注册自定义 markers
+    config.addinivalue_line("markers", "integration: 集成测试，需要 Redis/Celery 等外部服务")
+    config.addinivalue_line("markers", "slow: 慢速测试，耗时较长")
+    config.addinivalue_line("markers", "unit: 单元测试，不依赖外部服务")
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]):
+    """
+    修改测试集合的钩子。
+
+    用于：
+    - 自动为异步测试添加 asyncio marker
+    - 根据文件名自动添加标记
+    """
+    for item in items:
+        # 为所有 async 测试函数自动添加 asyncio marker
+        if isinstance(item, pytest.Function) and asyncio.iscoroutinefunction(item.function):
+            item.add_marker(pytest.mark.asyncio)
+
+
+# ==========================================
+# 5. 异步测试配置
+# ==========================================
+
+
+@pytest.fixture(scope="session")
+def event_loop_policy():
+    """配置事件循环策略"""
+    import asyncio
+
+    return asyncio.DefaultEventLoopPolicy()
+
+
+@pytest.fixture
+def anyio_backend():
+    """配置 anyio 后端为 asyncio"""
+    return "asyncio"
+
+
+# ==========================================
+# 6. 数据库 Fixtures
+# ==========================================
+
+
+@pytest_asyncio.fixture(scope="function")
+async def db_engine() -> AsyncGenerator[AsyncEngine, None]:
+    """
+    创建测试用的异步数据库引擎。
+
+    使用内存 SQLite，每个测试函数独立创建和销毁。
+    """
+    engine = create_async_engine(
+        TEST_DATABASE_URL,
+        echo=False,  # 设为 True 可查看 SQL 语句
+        future=True,
+    )
+
+    yield engine
+
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def db_session(db_engine: AsyncEngine) -> AsyncGenerator[async_sessionmaker[AsyncSession], None]:
+    """
+    创建测试用的数据库会话工厂。
+
+    提供：
+    - 自动建表
+    - 事务回滚（测试隔离）
+    """
+    # 导入 Base（需要在 mock 之后导入）
+    from pkg.database.base import Base
+
+    # 创建所有表
+    async with db_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    # 创建会话工厂
+    session_maker = async_sessionmaker(
+        bind=db_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autoflush=False,
+    )
+
+    yield session_maker
+
+    # 清理：删除所有表
+    async with db_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+
+
+@pytest_asyncio.fixture
+async def db_session_with_rollback(db_engine: AsyncEngine) -> AsyncGenerator[AsyncSession, None]:
+    """
+    创建带有自动回滚的数据库会话。
+
+    每个测试后自动回滚，确保测试隔离。
+    适用于需要真实事务行为的测试。
+    """
+    from pkg.database.base import Base
+
+    # 创建所有表
+    async with db_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    # 创建连接并开始事务
+    async with db_engine.connect() as connection:
+        await connection.begin()
+
+        # 绑定会话到连接
+        session = AsyncSession(
+            bind=connection,
+            expire_on_commit=False,
+            autoflush=False,
+        )
+
+        yield session
+
+        # 回滚事务
+        await session.close()
+        await connection.rollback()
+
+    # 清理
+    async with db_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+
+
+# ==========================================
+# 7. Redis Fixtures
+# ==========================================
+
+
+@pytest_asyncio.fixture(scope="function")
+async def redis_client() -> AsyncGenerator[Redis, None]:
+    """
+    创建测试用的 Redis 客户端。
+
+    使用单独的数据库（db=15）避免污染开发数据。
+    测试结束后清空该数据库。
+
+    注意：需要运行的 Redis 服务。
+    """
+    pool = ConnectionPool.from_url(
+        TEST_REDIS_URL,
+        encoding="utf-8",
+        decode_responses=True,
+    )
+    client = Redis(connection_pool=pool)
+
+    try:
+        # 验证连接
+        await client.ping()
+        yield client
+    finally:
+        # 清空测试数据库
+        await client.flushdb()
+        await client.aclose()
+        await pool.disconnect()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def mock_redis() -> AsyncGenerator[MagicMock, None]:
+    """
+    提供 Mock Redis 客户端。
+
+    适用于不需要真实 Redis 的单元测试。
+    """
+    mock = MagicMock(spec=Redis)
+    mock.get = AsyncMock(return_value=None)
+    mock.set = AsyncMock(return_value=True)
+    mock.delete = AsyncMock(return_value=1)
+    mock.exists = AsyncMock(return_value=False)
+    mock.expire = AsyncMock(return_value=True)
+    mock.ttl = AsyncMock(return_value=-1)
+    mock.incr = AsyncMock(return_value=1)
+    mock.decr = AsyncMock(return_value=1)
+    mock.keys = AsyncMock(return_value=[])
+    mock.flushdb = AsyncMock()
+    mock.ping = AsyncMock(return_value=True)
+    mock.aclose = AsyncMock()
+
+    yield mock
+
+
+# ==========================================
+# 8. FastAPI 测试客户端 Fixtures
+# ==========================================
+
+
+@pytest.fixture
+def app():
+    """
+    创建测试用的 FastAPI 应用实例。
+
+    使用测试配置而非生产配置。
+    """
+    # Mock 配置
+    with patch("internal.config.settings") as mock_settings:
+        # 配置基础属性
+        mock_settings.DEBUG = True
+        mock_settings.APP_ENV = "test"
+        mock_settings.JWT_SECRET = "test-jwt-secret-key-for-testing-only"
+        mock_settings.JWT_ALGORITHM = "HS256"
+        mock_settings.ACCESS_TOKEN_EXPIRE_MINUTES = 60
+        mock_settings.BACKEND_CORS_ORIGINS = ["*"]
+        mock_settings.DB_ECHO = False
+        mock_settings.SLOW_SQL_THRESHOLD = 0.5
+        mock_settings.DB_TYPE = "mysql"
+        mock_settings.sqlalchemy_database_uri = TEST_DATABASE_URL
+        mock_settings.redis_url = TEST_REDIS_URL
+
+        # 动态导入并创建 app
+        from internal.app import create_app
+
+        app_instance = create_app()
+        yield app_instance
+
+
+@pytest.fixture
+def client(app) -> Generator[TestClient, None, None]:
+    """
+    创建同步测试客户端。
+
+    适用于简单的 API 测试。
+    """
+    with TestClient(app, raise_server_exceptions=False) as test_client:
+        yield test_client
+
+
+@pytest_asyncio.fixture
+async def async_client(app) -> AsyncGenerator[AsyncClient, None]:
+    """
+    创建异步测试客户端。
+
+    适用于需要异步操作的 API 测试。
+    """
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        yield client
+
+
+# ==========================================
+# 9. 通用测试数据 Fixtures
+# ==========================================
+
+
+@pytest.fixture
+def sample_user_data() -> dict[str, Any]:
+    """提供测试用的用户数据"""
+    return {
+        "username": "testuser",
+        "email": "test@example.com",
+        "password": "TestPassword123!",
+    }
+
+
+@pytest.fixture
+def sample_users_data() -> list[dict[str, Any]]:
+    """提供批量测试用户数据"""
+    return [
+        {"username": f"user_{i}", "email": f"user_{i}@example.com"}
+        for i in range(5)
+    ]
+
+
+# ==========================================
+# 10. 工具函数 Fixtures
+# ==========================================
+
+
+@pytest.fixture
+def reset_id_counter():
+    """重置 Mock ID 计数器的 fixture"""
+
+    def _reset(start: int = 0):
+        global _id_counter
+        _id_counter = start
+
+    return _reset
+
+
+@pytest.fixture
+def freeze_time():
+    """
+    冻结时间的 fixture。
+
+    用于测试时间相关的功能。
+    """
+    from unittest.mock import patch
+
+    frozen_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
+
+    with patch("datetime.datetime") as mock_dt:
+        mock_dt.utcnow.return_value = frozen_time.replace(tzinfo=None)
+        mock_dt.now.return_value = frozen_time
+        mock_dt.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs) if args else frozen_time
+        yield frozen_time
+
+
+# ==========================================
+# 11. 模块导入 Helper
+# ==========================================
+
+
+@pytest.fixture(scope="session")
+def import_modules():
+    """
+    预加载常用模块的 fixture。
+
+    在 session 开始时预加载，加速后续测试。
+    """
+    # 预加载常用的包
+    import orjson
+
+    return {
+        "orjson": orjson,
+    }
+
+
+# ==========================================
+# 12. 日志 Mock Fixture
+# ==========================================
+
+
+@pytest.fixture
+def logger_mock() -> MagicMock:
+    """提供 logger mock 对象，用于验证日志调用"""
+    return mock_logger
+
+
+@pytest.fixture(autouse=True)
+def reset_logger_mock():
+    """每个测试前重置 logger mock"""
+    mock_logger.reset_mock()
+    yield
+    mock_logger.reset_mock()
+
+
+# ==========================================
+# 13. 配置 Mock Fixture
+# ==========================================
+
+
+@pytest.fixture
+def mock_config():
+    """
+    提供 Mock 配置对象的 fixture。
+
+    可以自定义配置值进行测试。
+    """
+    config = MagicMock()
+    config.DEBUG = True
+    config.APP_ENV = "test"
+    config.JWT_SECRET = "test-secret"
+    config.JWT_ALGORITHM = "HS256"
+    config.ACCESS_TOKEN_EXPIRE_MINUTES = 60
+    config.DB_ECHO = False
+    config.SLOW_SQL_THRESHOLD = 0.5
+
+    return config
+
+
+# ==========================================
+# 14. Clean Up
+# ==========================================
+
+
+@pytest.fixture(autouse=True)
+def cleanup_after_test():
+    """
+    自动清理 fixture，在每个测试后执行。
+
+    用于清理测试过程中可能产生的全局状态。
+    """
+    yield
+
+    # 重置配置
+    try:
+        from internal.config.loader import reset_settings
+
+        reset_settings()
+    except ImportError:
+        pass
+
+    # 重置数据库连接
+    try:
+        from internal.infra.database import reset_async_db
+
+        reset_async_db()
+    except ImportError:
+        pass
+
+    # 重置 Redis 连接
+    try:
+        from internal.infra.redis import reset_async_redis
+
+        reset_async_redis()
+    except ImportError:
+        pass
