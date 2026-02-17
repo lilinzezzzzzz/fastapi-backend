@@ -2,6 +2,7 @@ import asyncio
 import sys
 from unittest.mock import MagicMock
 
+import anyio
 import pytest
 
 # --- Mock 依赖 ---
@@ -101,7 +102,7 @@ async def test_async_context_isolation():
         init()
         set_trace_id(trace_id)
         set_user_id(user_id)
-        await asyncio.sleep(delay)
+        await anyio.sleep(delay)
         return get_trace_id(), get_user_id()
 
     task_a = asyncio.create_task(request_handler("trace-A", 100, 0.1))

@@ -1,4 +1,3 @@
-import asyncio
 import functools
 import json
 import time
@@ -6,6 +5,7 @@ from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 from typing import Any
 
+import anyio
 from redis.asyncio import Redis
 
 from pkg.toolkit.json import orjson_dumps, orjson_loads
@@ -234,7 +234,7 @@ class CacheClient:
                 if acquired:
                     return identifier
 
-                await asyncio.sleep(retry_interval_seconds)
+                await anyio.sleep(retry_interval_seconds)
         except Exception as e:
             raise RedisOperationError(f"Error acquiring lock {lock_key}: {e}") from e
 

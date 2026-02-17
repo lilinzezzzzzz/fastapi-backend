@@ -13,16 +13,24 @@ from pkg.database.builder import CountBuilder, QueryBuilder, UpdateBuilder
 
 
 class BaseDao[T: ModelMixin]:
-    _model_cls: type[T]|None = None  # 类型提示
+    _model_cls: type[T] | None = None  # 类型提示
 
-    def __init__(self, *, session_provider: SessionProvider, model_cls: type[T] | None = None):
+    def __init__(
+        self,
+        *,
+        session_provider: SessionProvider,
+        read_session_provider: SessionProvider | None = None,
+        model_cls: type[T] | None = None,
+    ):
         """
-        修复了 __init__ 逻辑：
-        1. 先赋值 session_provider
-        2. 再判断 model_cls 参数
-        3. 最后判断 类属性 _model_cls
+        Args:
+            session_provider: 写库 session 提供者（主库）
+            read_session_provider: 读库 session 提供者（只读副本）。
+                如果为 None，读操作自动 fallback 到写库的 session_provider。
+            model_cls: 模型类，可通过构造函数传入或在子类中定义 _model_cls
         """
         self._session_provider = session_provider
+        self._read_session_provider = read_session_provider or session_provider
 
         # 1. 优先使用构造函数传入的 model_cls
         if model_cls:
@@ -45,37 +53,50 @@ class BaseDao[T: ModelMixin]:
 
     @property
     def querier(self) -> QueryBuilder[T]:
-        return QueryBuilder(self.model_cls, session_provider=self._session_provider, include_deleted=False).desc_(
+        return QueryBuilder(self.model_cls, session_provider=self._read_session_provider, include_deleted=False).desc_(
             self.model_cls.updated_at
         )
 
     @property
     def querier_inc_deleted(self) -> QueryBuilder[T]:
-        return QueryBuilder(self.model_cls, session_provider=self._session_provider, include_deleted=True).desc_(
+        return QueryBuilder(self.model_cls, session_provider=self._read_session_provider, include_deleted=True).desc_(
             self.model_cls.updated_at
         )
 
     @property
     def querier_unsorted(self) -> QueryBuilder[T]:
-        return QueryBuilder(self.model_cls, session_provider=self._session_provider, include_deleted=False)
+        return QueryBuilder(self.model_cls, session_provider=self._read_session_provider, include_deleted=False)
 
     @property
     def querier_inc_deleted_unsorted(self) -> QueryBuilder[T]:
-        return QueryBuilder(self.model_cls, session_provider=self._session_provider, include_deleted=True)
+        return QueryBuilder(self.model_cls, session_provider=self._read_session_provider, include_deleted=True)
 
     def sub_querier(self, subquery: Subquery) -> QueryBuilder[T]:
         alias = aliased(self.model_cls, subquery)
-        return QueryBuilder(self.model_cls, session_provider=self._session_provider, custom_stmt=select(alias))
+        return QueryBuilder(self.model_cls, session_provider=self._read_session_provider, custom_stmt=select(alias))
+
+    # --- Write Queriers (强制读主库，用于写后读一致性场景) ---
+    @property
+    def write_querier(self) -> QueryBuilder[T]:
+        """强制从主库查询（用于写后读一致性场景）"""
+        return QueryBuilder(self.model_cls, session_provider=self._session_provider, include_deleted=False).desc_(
+            self.model_cls.updated_at
+        )
+
+    @property
+    def write_querier_unsorted(self) -> QueryBuilder[T]:
+        """强制从主库查询，不排序"""
+        return QueryBuilder(self.model_cls, session_provider=self._session_provider, include_deleted=False)
 
     # --- Counters ---
     @property
     def counter(self) -> CountBuilder[T]:
-        return CountBuilder(self.model_cls, session_provider=self._session_provider, include_deleted=False)
+        return CountBuilder(self.model_cls, session_provider=self._read_session_provider, include_deleted=False)
 
     def col_counter(self, count_column: InstrumentedAttribute, *, is_distinct: bool = False) -> CountBuilder[T]:
         return CountBuilder(
             self.model_cls,
-            session_provider=self._session_provider,
+            session_provider=self._read_session_provider,
             count_column=count_column,
             is_distinct=is_distinct,
             include_deleted=False,

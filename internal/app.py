@@ -29,18 +29,15 @@ def create_app() -> FastAPI:
 
 
 def register_router(app: FastAPI):
-    from internal.controllers import web
+    from internal.controllers import api
 
-    app.include_router(web.router)
-    from internal.controllers import internalapi
+    app.include_router(api.router)
+    from internal.controllers import internal
 
-    app.include_router(internalapi.router)
-    from internal.controllers import publicapi
+    app.include_router(internal.router)
+    from internal.controllers import public
 
-    app.include_router(publicapi.router)
-    from internal.controllers import serviceapi
-
-    app.include_router(serviceapi.router)
+    app.include_router(public.router)
 
 
 def register_exception(app: FastAPI):

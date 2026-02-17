@@ -1,4 +1,4 @@
-from internal.infra.database import get_session
+from internal.infra.database import get_read_session, get_session
 from internal.models.user import User
 from pkg.database.dao import BaseDao
 
@@ -20,4 +20,7 @@ class UserDao(BaseDao[User]):
 # 单例模式 (Singleton)
 # 在简单的应用中，直接实例化一个全局 dao 是没问题的
 # 因为 session_provider 是一个工厂函数，不会在 import 时建立连接
-user_dao = UserDao(session_provider=get_session)
+user_dao = UserDao(
+    session_provider=get_session,
+    read_session_provider=get_read_session,
+)
