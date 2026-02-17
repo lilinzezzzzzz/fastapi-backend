@@ -247,3 +247,14 @@ class CacheClient:
             return 0
         async with self.session_provider() as redis:
             return await redis.delete(*keys)
+
+    @handle_redis_exception
+    async def remove_from_list(self, name: str, value: str) -> int:
+        """
+        从列表中移除指定元素。
+        返回列表长度（移除后的）。
+        """
+        async with self.session_provider() as redis:
+            # 使用 LREM 移除所有等于 value 的元素
+            # count=0 表示移除所有匹配的元素
+            return await redis.lrem(name, 0, value)

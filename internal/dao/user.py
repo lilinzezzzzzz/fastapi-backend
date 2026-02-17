@@ -11,6 +11,10 @@ class UserDao(BaseDao[User]):
         # 使用你构建的 querier
         return await self.querier.eq_(User.phone, phone).first()
 
+    async def get_by_username(self, username: str) -> User | None:
+        """根据用户名查询用户"""
+        return await self.querier.eq_(User.name, username).first()
+
     async def is_phone_exist(self, phone: str) -> bool:
         # 利用你封装的 count
         count = await self.counter.eq_(User.phone, phone).count()

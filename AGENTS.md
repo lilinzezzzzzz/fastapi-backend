@@ -137,7 +137,7 @@ All resources are properly cleaned up on shutdown.
 
 1. `ASGIRecordMiddleware` - Request/response logging
 2. `CORSMiddleware` - CORS handling (if configured)
-3. `ASGIAuthMiddleware` - JWT authentication
+3. `ASGIAuthMiddleware` - redis token authentication
 4. `GZipMiddleware` - Response compression
 
 ### Database Access Pattern

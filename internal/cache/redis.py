@@ -32,5 +32,9 @@ class CacheDao:
 
         return val
 
+    async def remove_from_list(self, key: str, value: str) -> int:
+        """从列表中移除元素"""
+        return await cache.remove_from_list(key, value)
+
 
 cache_dao = CacheDao()
