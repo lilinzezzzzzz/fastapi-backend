@@ -1,6 +1,6 @@
 from pkg.logger import logger
 from pkg.toolkit.async_task import AnyioTaskHandler
-from pkg.toolkit.types import LazyProxy
+from pkg.toolkit.types import lazy_proxy
 
 _anyio_task_manager: AnyioTaskHandler | None = None
 
@@ -35,4 +35,4 @@ def _get_anyio_task_manager() -> AnyioTaskHandler:
     return _anyio_task_manager
 
 
-anyio_task_manager = LazyProxy[AnyioTaskHandler](_get_anyio_task_manager)
+anyio_task_manager = lazy_proxy(_get_anyio_task_manager)

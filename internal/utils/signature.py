@@ -1,7 +1,7 @@
 from internal.config import settings
 from pkg.logger import logger
 from pkg.toolkit.signature import SignatureAuthHandler
-from pkg.toolkit.types import LazyProxy
+from pkg.toolkit.types import lazy_proxy
 
 _signature_auth_handler: SignatureAuthHandler | None = None
 
@@ -23,4 +23,4 @@ def get_signature_auth_handler() -> SignatureAuthHandler:
     return _signature_auth_handler
 
 
-signature_auth_handler = LazyProxy[SignatureAuthHandler](get_signature_auth_handler)
+signature_auth_handler = lazy_proxy(get_signature_auth_handler)

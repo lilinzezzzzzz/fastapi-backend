@@ -6,13 +6,25 @@ from redis.asyncio import ConnectionPool, Redis
 from internal.config import settings
 from pkg.logger import logger
 from pkg.toolkit.cache import CacheClient
-from pkg.toolkit.types import LazyProxy
+from pkg.toolkit.types import lazy_proxy
 
-# 1. 定义全局变量，初始为 None
+# 全局变量，初始为 None
 _redis_pool: ConnectionPool | None = None
 _redis_client: Redis | None = None
-# cache_client 也改为全局变量，在 init 中初始化
 _cache: CacheClient | None = None
+
+
+def _get_cache() -> CacheClient:
+    """
+    获取全局缓存客户端实例的 Helper 函数
+    替代直接 import cache_client 变量，防止 import 时为 None 的问题
+    """
+    if _cache is None:
+        raise RuntimeError("Redis/Cache is not initialized. Call init_redis() first.")
+    return _cache
+
+
+cache = lazy_proxy(_get_cache)
 
 
 def init_async_redis() -> None:
@@ -82,16 +94,3 @@ async def get_redis() -> AsyncGenerator[Redis, None]:
         # 但可以记录日志
         logger.error(f"Redis operation failed: {e}")
         raise e
-
-
-def _get_cache() -> CacheClient:
-    """
-    获取全局缓存客户端实例的 Helper 函数
-    替代直接 import cache_client 变量，防止 import 时为 None 的问题
-    """
-    if _cache is None:
-        raise RuntimeError("Redis/Cache is not initialized. Call init_redis() first.")
-    return _cache
-
-
-cache = LazyProxy[CacheClient](_get_cache)

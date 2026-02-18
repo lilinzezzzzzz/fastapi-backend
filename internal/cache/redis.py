@@ -26,7 +26,7 @@ class CacheDao:
 
     async def get_auth_user_token_list(self, user_id: int) -> list[str]:
         val = await cache.get_list(self.make_auth_user_token_list_key(user_id))
-        if val is None:
+        if not val:
             logger.warning(f"Token verification failed: token list not found, user_id: {user_id}")
             return []
 

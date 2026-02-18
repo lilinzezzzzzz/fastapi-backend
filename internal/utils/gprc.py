@@ -1,5 +1,5 @@
 from pkg.toolkit.grpc import GrpcChannel
-from pkg.toolkit.types import LazyProxy
+from pkg.toolkit.types import lazy_proxy
 
 _grpc_channel: GrpcChannel | None = None
 _channels: list[GrpcChannel] = []
@@ -22,7 +22,7 @@ async def close_all_grpc_channel():
         await channel.close()
 
 
-def _get_grpc_channel():
+def _get_grpc_channel() -> GrpcChannel:
     """
     获取gRPC通道
     """
@@ -31,7 +31,7 @@ def _get_grpc_channel():
     return _grpc_channel
 
 
-grpc_channel = LazyProxy[GrpcChannel](_get_grpc_channel)
+grpc_channel = lazy_proxy(_get_grpc_channel)
 """
 class UserGrpcClient:
     def __init__(self):

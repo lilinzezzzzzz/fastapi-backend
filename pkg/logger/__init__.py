@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pkg.logger.handler import LogFormat, LoggerHandler, RetentionType, RotationType
-from pkg.toolkit.types import LazyProxy
+from pkg.toolkit.types import lazy_proxy
 
 if TYPE_CHECKING:
     from loguru import Logger
@@ -96,7 +96,7 @@ def get_logger_manager() -> "LoggerHandler":
 
 
 # --- 导出代理对象 ---
-logger: "Logger" = LazyProxy["Logger"](_get_logger)  # type: ignore[assignment]
+logger = lazy_proxy(_get_logger)
 
 # --- 公开 API ---
 __all__ = [

@@ -1,5 +1,5 @@
 from pkg.crypter import AESCipher
-from pkg.toolkit.types import LazyProxy
+from pkg.toolkit.types import lazy_proxy
 
 _aes_cipher: AESCipher | None = None
 
@@ -15,4 +15,4 @@ def _get_aes_cipher() -> AESCipher:
     return _aes_cipher
 
 
-aes_cipher = LazyProxy[AESCipher](_get_aes_cipher)
+aes_cipher = lazy_proxy(_get_aes_cipher)

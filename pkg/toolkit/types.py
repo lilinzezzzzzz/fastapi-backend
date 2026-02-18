@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
-from typing import Annotated, Any
+from typing import Annotated, Any, overload
 
 from pydantic import BeforeValidator, PlainSerializer, WithJsonSchema
 
@@ -144,7 +144,7 @@ def _parse_smart_datetime(v: Any) -> datetime:
     raise ValueError(f"Invalid datetime type: {type(v)}")
 
 
-def _serialize_smart_datetime(v: datetime) -> str | None:
+def _serialize_smart_datetime(v: datetime | None) -> str | None:
     """
     [输出处理] Python -> JSON (ISO String)
     将 datetime 对象转为标准的 ISO 8601 字符串格式（UTC 时间）
@@ -202,6 +202,27 @@ IntStr = Annotated[
 # ==========================================
 
 
+@overload
+def lazy_proxy[T](getter: Callable[[], T]) -> T: ...
+
+
+@overload
+def lazy_proxy[T](getter: Callable[[], T], *, __type__: type[T]) -> T: ...
+
+
+def lazy_proxy[T](getter: Callable[[], T], **kwargs: Any) -> T:
+    """
+    创建懒加载代理对象。
+
+    用法:
+        cache = lazy_proxy(_get_cache)  # 类型推断为 CacheClient
+
+    等价于:
+        cache: CacheClient = LazyProxy(_get_cache)
+    """
+    return LazyProxy(getter)  # type: ignore[return-value]
+
+
 class LazyProxy[T]:
     """
     通用懒加载代理，用于延迟初始化的单例对象。
@@ -223,9 +244,13 @@ class LazyProxy[T]:
                 raise RuntimeError("Redis not initialized")
             return _redis_client
 
-        redis: LazyProxy[Redis] = LazyProxy(_get_redis)  # 导出代理对象，带类型提示
+        # 方式1：使用 lazy_proxy 辅助函数（推荐，类型推断完美）
+        redis = lazy_proxy(_get_redis)
 
-        # 使用时自动转发到真实对象，IDE 会有完整的类型提示
+        # 方式2：使用 LazyProxy 类（需要 TYPE_CHECKING 配合）
+        redis = LazyProxy(_get_redis)
+
+        # 使用时自动转发到真实对象
         redis.get("key")  # 等价于 _get_redis().get("key")
     """
 

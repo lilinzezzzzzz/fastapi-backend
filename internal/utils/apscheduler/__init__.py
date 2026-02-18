@@ -1,6 +1,6 @@
 from pkg.logger import logger
 from pkg.toolkit.apscheduler import ApsSchedulerManager
-from pkg.toolkit.types import LazyProxy
+from pkg.toolkit.types import lazy_proxy
 
 _apscheduler_manager: ApsSchedulerManager | None = None
 
@@ -30,4 +30,4 @@ def _get_apscheduler_manager() -> ApsSchedulerManager:
     return _apscheduler_manager
 
 
-apscheduler_manager = LazyProxy[ApsSchedulerManager](_get_apscheduler_manager)
+apscheduler_manager = lazy_proxy(_get_apscheduler_manager)

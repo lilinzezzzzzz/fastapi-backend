@@ -1,5 +1,5 @@
 from pkg.oss.aliyun import AliyunOSSBackend
-from pkg.toolkit.types import LazyProxy
+from pkg.toolkit.types import lazy_proxy
 
 _aliyun_oss: AliyunOSSBackend | None = None
 
@@ -17,4 +17,4 @@ def _get_aliyun_oss() -> AliyunOSSBackend:
     return _aliyun_oss
 
 
-aliyun_oss = LazyProxy[AliyunOSSBackend](_get_aliyun_oss)
+aliyun_oss = lazy_proxy(_get_aliyun_oss)
