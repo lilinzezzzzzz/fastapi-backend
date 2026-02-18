@@ -179,10 +179,9 @@ async def register(
 
     except ValueError as e:
         # 手机号已存在等错误
-        raise AppException(errors.BadRequest, message=str(e))
+        raise AppException(errors.BadRequest, message=str(e)) from e
     except Exception as e:
-        logger.error(f"Registration failed: {e}")
-        raise AppException(errors.InternalError, message="注册失败，请稍后重试")
+        raise AppException(errors.InternalError, message="注册失败，请稍后重试") from e
 
 
 @router.get("/me", response_model=UserDetailSchema, summary="获取当前用户信息")
