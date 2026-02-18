@@ -28,11 +28,12 @@ class _AuthConstants:
     PATH_INTERNAL: str = "/v1/internal"  # 内部API，签名认证
     # 其他所有路径默认 Token 认证
 
-    # 白名单路径(精确匹配)
+    # 白名单路径 (精确匹配)
     WHITELIST_PATHS: frozenset[str] = frozenset(
         {
             "/auth/login",
             "/auth/register",
+            "/auth/wechat/login",      # 微信登录
             "/docs",
             "/openapi.json",
         }

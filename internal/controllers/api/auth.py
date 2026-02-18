@@ -7,15 +7,18 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header
 
 from internal.cache.redis import cache_dao
+from internal.config import settings
 from internal.core.exception import AppException, errors
 from internal.schemas.user import (
     UserDetailSchema,
     UserLoginReqSchema,
     UserLoginRespSchema,
     UserRegisterReqSchema,
+    WeChatLoginReqSchema,
 )
 from internal.services.user import UserService, new_user_service
 from pkg.logger import logger
+from pkg.third_party_auth import WeChatAuthStrategy, WeChatConfig
 from pkg.toolkit.context import get_user_id
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -211,3 +214,86 @@ async def get_current_user():
     # TODO: 这里应该从数据库或缓存获取完整的用户信息
     # 暂时返回一个基本的响应
     return UserDetailSchema(id=user_id, name="unknown", phone="")
+
+
+@router.post("/wechat/login", response_model=UserLoginRespSchema, summary="微信登录")
+async def wechat_login(
+    req: WeChatLoginReqSchema,
+    user_service: UserServiceDep,
+):
+    """
+    微信登录接口
+
+    流程:
+    1. 通过 code 换取 access_token 和 openid
+    2. 查询 openid 是否存在
+       - 存在：直接登录，生成 token
+       - 不存在：创建新用户，生成 token
+    3. 返回用户信息和 token
+    """
+    # 通过配置创建策略实例（依赖注入）
+    strategy = WeChatAuthStrategy(
+        config=WeChatConfig(
+            app_id=settings.WECHAT_APP_ID,
+            app_secret=settings.WECHAT_APP_SECRET,
+        )
+    )
+
+    try:
+        # 1. 通过授权码获取 access_token
+        token_result = await strategy.get_access_token(req.code)
+
+        access_token = token_result.get("access_token")
+        openid = token_result.get("openid")
+
+        if not access_token or not openid:
+            raise AppException(errors.BadRequest, message="微信授权失败")
+
+        # 2. 获取微信用户信息
+        wechat_user_info = await strategy.get_user_info(access_token, openid)
+
+        # 3. 获取或创建用户
+        user = await user_service.get_or_create_user_by_third_party(
+            platform="wechat",
+            third_party_info=wechat_user_info,
+        )
+
+        # 4. 生成 token
+        token = generate_token()
+
+        # 构建用户元数据
+        user_metadata = {
+            "id": user.id,
+            "username": user.name,
+            "phone": user.phone,
+            "created_at": int(datetime.now(UTC).timestamp()),
+        }
+
+        # 5. 存储 token 到 Redis
+        token_key = cache_dao.make_auth_token_key(token)
+        await cache_dao.set_dict(
+            token_key,
+            user_metadata,
+            ex=TOKEN_EXPIRE_MINUTES * 60,
+        )
+
+        # 将 token 添加到用户的 token 列表中
+        token_list_key = cache_dao.make_auth_user_token_list_key(user.id)
+        await cache_dao.push_to_list(token_list_key, token)
+
+        logger.info(f"WeChat user {user.id} logged in successfully, openid: {openid}")
+
+        return UserLoginRespSchema(
+            user=UserDetailSchema(id=user.id, name=user.name, phone=user.phone),
+            token=token,
+        )
+
+    except ValueError as e:
+        logger.error(f"WeChat login error: {e}")
+        raise AppException(errors.BadRequest, message=str(e)) from e
+    except Exception as e:
+        logger.error(f"WeChat login unexpected error: {e}")
+        raise AppException(errors.InternalError, message="微信登录失败，请稍后重试") from e
+    finally:
+        # 关闭策略资源
+        await strategy.close()

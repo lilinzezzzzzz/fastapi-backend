@@ -3,6 +3,7 @@
 ## 概述
 
 本项目使用基于 Redis 的 Token 认证机制，而非 JWT。Token 存储在 Redis 中，支持：
+
 - 用户登录/登出
 - Token 自动过期（默认 30 分钟）
 - 用户元数据缓存
@@ -15,6 +16,7 @@
 **端点**: `POST /v1/auth/login`
 
 **请求体**:
+
 ```json
 {
   "username": "testuser",
@@ -23,6 +25,7 @@
 ```
 
 **响应**:
+
 ```json
 {
   "user": {
@@ -35,6 +38,7 @@
 ```
 
 **说明**:
+
 - Token 有效期为 30 分钟
 - Token 会存储在 Redis 中，key 格式：`token:{token}`
 - 用户的 token 列表也会存储，key 格式：`token_list:{user_id}`
@@ -46,11 +50,13 @@
 **端点**: `POST /v1/auth/logout`
 
 **请求头**:
-```
+
+```text
 Authorization: Bearer tk_abc123def456...
 ```
 
 **响应**:
+
 ```json
 {
   "message": "登出成功"
@@ -58,6 +64,7 @@ Authorization: Bearer tk_abc123def456...
 ```
 
 **说明**:
+
 - 从 Redis 删除 token
 - 从用户的 token 列表中移除该 token
 
@@ -68,11 +75,13 @@ Authorization: Bearer tk_abc123def456...
 **端点**: `GET /v1/auth/me`
 
 **请求头**:
-```
+
+```text
 Authorization: Bearer tk_abc123def456...
 ```
 
 **响应**:
+
 ```json
 {
   "id": 1,
@@ -82,6 +91,7 @@ Authorization: Bearer tk_abc123def456...
 ```
 
 **说明**:
+
 - 通过 auth 中间件自动验证 token
 - 从上下文获取 user_id
 - TODO: 可从数据库或缓存获取完整用户信息
@@ -91,6 +101,7 @@ Authorization: Bearer tk_abc123def456...
 ## Redis 数据结构
 
 ### Token 存储
+
 ```
 Key: token:{token_value}
 Type: String (JSON)
@@ -104,6 +115,7 @@ TTL: 1800 秒 (30 分钟)
 ```
 
 ### 用户 Token 列表
+
 ```
 Key: token_list:{user_id}
 Type: List
@@ -115,6 +127,7 @@ Value: ["token1", "token2", ...]
 ## 实现细节
 
 ### Token 生成
+
 ```python
 def generate_token() -> str:
     """生成随机 token"""
@@ -122,13 +135,16 @@ def generate_token() -> str:
 ```
 
 ### Token 验证流程
+
 1. Auth 中间件拦截请求
 2. 从 Redis 读取 token 对应的用户元数据
 3. 检查 token 是否在用户的 token 列表中
 4. 验证通过后，将 user_id 设置到上下文中
 
 ### 密码验证
+
 当前实现中，密码验证逻辑标记为 TODO。实际部署时应：
+
 - 使用 bcrypt 或 argon2 等加密算法存储密码
 - 在登录时校验密码哈希值
 

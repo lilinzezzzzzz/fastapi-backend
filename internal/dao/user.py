@@ -20,6 +20,24 @@ class UserDao(BaseDao[User]):
         count = await self.counter.eq_(User.phone, phone).count()
         return count > 0
 
+    async def get_by_wechat_openid(self, openid: str) -> User | None:
+        """通过微信 openid 查询用户"""
+        return await self.querier.eq_(User.wechat_openid, openid).first()
+
+    async def is_wechat_openid_exist(self, openid: str) -> bool:
+        """检查微信 openid 是否已存在"""
+        count = await self.counter.eq_(User.wechat_openid, openid).count()
+        return count > 0
+
+    async def get_by_alipay_user_id(self, user_id: str) -> User | None:
+        """通过支付宝用户 ID 查询用户"""
+        return await self.querier.eq_(User.alipay_user_id, user_id).first()
+
+    async def is_alipay_user_id_exist(self, user_id: str) -> bool:
+        """检查支付宝用户 ID 是否已存在"""
+        count = await self.counter.eq_(User.alipay_user_id, user_id).count()
+        return count > 0
+
 
 # 单例模式 (Singleton)
 # 在简单的应用中，直接实例化一个全局 dao 是没问题的

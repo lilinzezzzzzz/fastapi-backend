@@ -20,6 +20,33 @@ class UserRegisterReqSchema(BaseModel):
     phone: str | None = Field(None, description="手机号", pattern=r"^1[3-9]\d{9}$")
 
 
+class ThirdPartyLoginReqSchema(BaseModel):
+    """第三方登录请求基类"""
+
+    platform: str = Field(..., description="第三方平台名称", examples=["wechat", "alipay"])
+    code: str = Field(..., description="授权码", min_length=1, max_length=256)
+
+
+class WeChatLoginReqSchema(BaseModel):
+    """微信登录请求"""
+
+    code: str = Field(..., description="微信授权码", min_length=1, max_length=256)
+
+
+class AlipayLoginReqSchema(BaseModel):
+    """支付宝登录请求"""
+
+    auth_code: str = Field(..., description="支付宝授权码", min_length=1, max_length=256)
+
+
+class ThirdPartyBindPhoneReqSchema(BaseModel):
+    """第三方账号绑定手机号请求"""
+
+    platform: str = Field(..., description="第三方平台名称", examples=["wechat", "alipay"])
+    phone: str = Field(..., description="手机号", pattern=r"^1[3-9]\d{9}$")
+    sms_code: str = Field(..., description="短信验证码", min_length=4, max_length=8)
+
+
 class UserLoginRespSchema(BaseModel):
     """用户登录响应"""
 
