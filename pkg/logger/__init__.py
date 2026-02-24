@@ -13,11 +13,12 @@ pkg.logger - 统一的日志管理包
     # 之后在任何地方使用
     logger.info("Application started")
 """
-from datetime import UTC, time, timedelta
+from datetime import UTC, time, timedelta, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING  # noqa: F401
+from zoneinfo import ZoneInfo
 
-from pkg.logger.handler import LogFormat, LoggerHandler, RetentionType, RotationType
+from pkg.logger.handler import LogFormat, LoggerHandler, RetentionType, RotationType, TimezoneType
 from pkg.toolkit.types import lazy_proxy
 
 if TYPE_CHECKING:
@@ -50,7 +51,7 @@ def init_logger(
     rotation: RotationType = time(0, 0, 0, tzinfo=UTC),
     retention: RetentionType = timedelta(days=30),
     compression: str | None = None,
-    use_utc: bool = True,
+    timezone: TimezoneType = "UTC",
     enqueue: bool = True,
     log_format: LogFormat | str = LogFormat.TEXT,
     write_to_file: bool = True,
@@ -65,7 +66,7 @@ def init_logger(
     :param rotation: 轮转策略 (默认: 每天 00:00, UTC时间)
     :param retention: 保留策略 (默认: 30天)
     :param compression: 压缩格式 (e.g., "zip")
-    :param use_utc: 是否强制使用 UTC 时间
+    :param timezone: 日志时区，支持时区字符串（如 "UTC", "Asia/Shanghai"）、ZoneInfo 对象或 datetime.timezone（如 datetime.UTC），默认 "UTC"
     :param enqueue: 是否使用多进程安全的队列写入
     :param log_format: 日志格式 (LogFormat.JSON 或 LogFormat.TEXT，默认 LogFormat.TEXT)
     :param write_to_file: 是否写入文件
@@ -81,7 +82,7 @@ def init_logger(
         rotation=rotation,
         retention=retention,
         compression=compression,
-        use_utc=use_utc,
+        timezone=timezone,
         enqueue=enqueue,
         log_format=log_format,
     )
@@ -107,6 +108,7 @@ __all__ = [
     # 类型别名
     "RotationType",
     "RetentionType",
+    "TimezoneType",
     # 初始化函数
     "init_logger",
     "get_logger_manager",

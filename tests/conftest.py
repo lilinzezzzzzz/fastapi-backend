@@ -42,38 +42,67 @@ if str(PROJECT_ROOT) not in sys.path:
 # 2. Mock 外部依赖 (必须在导入内部模块之前)
 # ==========================================
 
-# Mock logger
-mock_logger = MagicMock()
-mock_logger.info = MagicMock()
-mock_logger.error = MagicMock()
-mock_logger.warning = MagicMock()
-mock_logger.success = MagicMock()
-mock_logger.debug = MagicMock()
-mock_logger.critical = MagicMock()
+# 检查是否跳过 logger mock（logger 测试需要真实的 LoggerHandler）
+import sys as _sys_check
 
-# Mock pkg.logger 模块
-mock_logger_module = types.ModuleType("pkg.logger")
-mock_logger_module.logger = mock_logger
-mock_logger_module.init_logger = MagicMock()
+_skip_logger_mock = False
+_skip_context_mock = False
+if _sys_check.argv:
+    for arg in _sys_check.argv:
+        if "logger/" in arg or "test_logger" in arg:
+            _skip_logger_mock = True
+        if "test_context" in arg:
+            _skip_context_mock = True
 
-# Mock LogFormat 枚举
-from enum import StrEnum
+if not _skip_logger_mock:
+    # Mock logger
+    mock_logger = MagicMock()
+    mock_logger.info = MagicMock()
+    mock_logger.error = MagicMock()
+    mock_logger.warning = MagicMock()
+    mock_logger.success = MagicMock()
+    mock_logger.debug = MagicMock()
+    mock_logger.critical = MagicMock()
 
+    # Mock pkg.logger 模块
+    mock_logger_module = types.ModuleType("pkg.logger")
+    mock_logger_module.logger = mock_logger
+    mock_logger_module.init_logger = MagicMock()
 
-class MockLogFormat(StrEnum):
-    JSON = "json"
-    TEXT = "text"
+    # Mock LogFormat 枚举
+    from enum import StrEnum
 
+    class MockLogFormat(StrEnum):
+        JSON = "json"
+        TEXT = "text"
 
-mock_logger_module.LogFormat = MockLogFormat
+    mock_logger_module.LogFormat = MockLogFormat
+    mock_logger_module.LoggerHandler = MagicMock  # Mock LoggerHandler class
 
-# 为了让 LazyProxy 正常工作，需要 mock 整个模块
-sys.modules["pkg.logger"] = mock_logger_module
+    # 为了让 LazyProxy 正常工作，需要 mock 整个模块
+    sys.modules["pkg.logger"] = mock_logger_module
+else:
+    # logger 测试需要真实的模块，创建一个简单的 mock_logger 供其他 fixture 使用
+    mock_logger = MagicMock()
+    mock_logger.info = MagicMock()
+    mock_logger.error = MagicMock()
+    mock_logger.warning = MagicMock()
+    mock_logger.success = MagicMock()
+    mock_logger.debug = MagicMock()
+    mock_logger.critical = MagicMock()
 
 # Mock pkg.toolkit.context 模块
-mock_context = types.ModuleType("pkg.toolkit.context")
-mock_context.get_user_id = MagicMock(return_value=999)
-sys.modules["pkg.toolkit.context"] = mock_context
+if not _skip_context_mock:
+    mock_context = types.ModuleType("pkg.toolkit.context")
+    mock_context.get_user_id = MagicMock(return_value=999)
+    mock_context.get_trace_id = MagicMock(return_value="test-trace-id")
+    mock_context.set_user_id = MagicMock()
+    mock_context.set_trace_id = MagicMock()
+    mock_context.init = MagicMock(return_value={})
+    mock_context.clear = MagicMock()
+    mock_context.set_val = MagicMock()
+    mock_context.get_val = MagicMock(return_value=None)
+    sys.modules["pkg.toolkit.context"] = mock_context
 
 # Mock snowflake ID 生成器
 _id_counter = 0

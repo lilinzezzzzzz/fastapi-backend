@@ -1,8 +1,9 @@
 import sys
-from datetime import UTC, time, timedelta
+from datetime import UTC, time, timedelta, timezone as dt_timezone
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import loguru
 
@@ -16,6 +17,7 @@ _DEFAULT_BASE_LOG_DIR = Path("/tmp/fastapi_logs")
 # 类型别名
 RotationType = str | int | time | timedelta
 RetentionType = str | int | timedelta
+TimezoneType = str | ZoneInfo | dt_timezone
 
 
 class LogFormat(StrEnum):
@@ -42,7 +44,7 @@ class LoggerHandler:
         rotation: RotationType = time(0, 0, 0, tzinfo=UTC),
         retention: RetentionType = timedelta(days=30),
         compression: str | None = None,
-        use_utc: bool = True,
+        timezone: TimezoneType = "UTC",
         enqueue: bool = True,
         log_format: LogFormat = LogFormat.TEXT,
     ):
@@ -55,7 +57,7 @@ class LoggerHandler:
         :param rotation: 轮转策略 (默认: 每天 00:00, UTC时间)
         :param retention: 保留策略 (默认: 30天)
         :param compression: 压缩格式 (e.g., "zip")
-        :param use_utc: 是否强制使用 UTC 时间 (影响日志内容及轮转触发时间)
+        :param timezone: 日志时区，支持时区字符串（如 "UTC", "Asia/Shanghai"）、ZoneInfo 对象或 datetime.timezone（如 datetime.UTC），默认 "UTC"
         :param enqueue: 是否使用多进程安全的队列写入
         :param log_format: 日志格式 (LogFormat.JSON 或 LogFormat.TEXT，默认 LogFormat.TEXT)
         """
@@ -70,7 +72,6 @@ class LoggerHandler:
         self.system_log_dir = (self.base_log_dir / system_subdir) if system_subdir else self.base_log_dir
         self.retention = retention
         self.compression = compression
-        self.use_utc = use_utc
         self.enqueue = enqueue
         self.log_format = log_format
 
@@ -80,13 +81,78 @@ class LoggerHandler:
         self.file_format = self._json_formatter if is_json else self._file_formatter
         self.colorize = not is_json
 
-        # --- 轮转策略的特殊处理 ---
-        # 如果强制使用 UTC，且传入的 rotation 是默认的无时区 time 对象，
-        # 则自动为其添加 UTC 时区，确保轮转时刻与日志时间一致。
-        if self.use_utc and isinstance(rotation, time) and rotation.tzinfo is None:
-            self.rotation = rotation.replace(tzinfo=UTC)
+        # --- 时区处理 ---
+        self.timezone = self._normalize_timezone(timezone)
+        self._is_utc = self.timezone.key == "UTC"
+
+        # --- 轮转策略处理 ---
+        self.rotation = self._normalize_rotation(rotation)
+
+    def _normalize_timezone(self, timezone: TimezoneType) -> ZoneInfo:
+        """
+        将不同类型的时区参数统一转换为 ZoneInfo 对象。
+
+        Args:
+            timezone: 时区参数，支持字符串、ZoneInfo 或 datetime.timezone
+
+        Returns:
+            ZoneInfo 对象
+
+        Raises:
+            ValueError: 不支持的时区类型（如非UTC的datetime.timezone）
+            TypeError: 无效的参数类型
+        """
+        if isinstance(timezone, str):
+            return ZoneInfo(timezone)
+        elif isinstance(timezone, ZoneInfo):
+            return timezone
+        elif isinstance(timezone, dt_timezone):
+            # datetime.timezone 类型（如 datetime.UTC）
+            tz_name = str(timezone)
+            if tz_name == "UTC":
+                return ZoneInfo("UTC")
+            else:
+                raise ValueError(
+                    f"Unsupported timezone: {timezone}. "
+                    f"Use ZoneInfo for non-UTC timezones, e.g., ZoneInfo('Asia/Shanghai')."
+                )
         else:
-            self.rotation = rotation
+            raise TypeError(f"timezone must be str, ZoneInfo, or datetime.timezone, got {type(timezone).__name__}")
+
+    def _normalize_rotation(self, rotation: RotationType) -> RotationType:
+        """
+        规范化轮转策略，处理 time 类型的时区问题。
+
+        对于 time 类型的 rotation：
+        - 无时区：自动使用 timezone 的时区
+        - 有时区：必须与 timezone 一致
+
+        Args:
+            rotation: 轮转策略参数
+
+        Returns:
+            规范化后的轮转策略
+
+        Raises:
+            ValueError: rotation 时区与 timezone 不一致
+        """
+        if not isinstance(rotation, time):
+            return rotation
+
+        if rotation.tzinfo is None:
+            # 无时区，自动使用 timezone 的时区
+            return rotation.replace(tzinfo=self.timezone)
+
+        # 有时区，检查是否与 timezone 一致
+        rotation_tz_name = getattr(rotation.tzinfo, "key", None) or str(rotation.tzinfo)
+        timezone_name = self.timezone.key or str(self.timezone)
+        if rotation_tz_name != timezone_name:
+            raise ValueError(
+                f"rotation timezone ({rotation_tz_name}) must match timezone ({timezone_name}). "
+                f"Use time({rotation.hour}, {rotation.minute}, {rotation.second}, tzinfo=self.timezone) "
+                f"or omit tzinfo to auto-use timezone."
+            )
+        return rotation
 
     def setup(self, *, write_to_file: bool = True, write_to_console: bool = True) -> "loguru.Logger":
         """
@@ -105,9 +171,10 @@ class LoggerHandler:
             },
         }
 
-        # 2. 根据实例属性决定是否挂载 UTC 补丁
-        if self.use_utc:
-            config_params["patcher"] = self._utc_time_patcher
+        # 2. 根据时区配置挂载 patcher
+        # 注意：patcher 影响日志文件名 {time:YYYY-MM-DD}.log 的时区
+        # 保持文件名时间与日志内容时间一致
+        config_params["patcher"] = self._make_timezone_patcher()
 
         self._logger.configure(**config_params)
 
@@ -141,9 +208,9 @@ class LoggerHandler:
 
             self._registered_namespaces[self.SYSTEM_LOG_NAMESPACE] = {"sink_registered": True}
 
-        mode_str = "UTC" if self.use_utc else "Local Time"
+        tz_name = self.timezone.key if hasattr(self.timezone, "key") else str(self.timezone)
         self._logger.info(
-            f"Logger initialized. Mode: {mode_str} | Format: {self.log_format} | Rotation: {self.rotation} | Level: {self.level}"
+            f"Logger initialized. Timezone: {tz_name} | Format: {self.log_format} | Rotation: {self.rotation} | Level: {self.level}"
         )
         self._is_initialized = True
         return self._logger
@@ -222,16 +289,40 @@ class LoggerHandler:
         # 返回绑定 log_namespace 的 logger
         return self._logger.bind(log_namespace=log_namespace)
 
+    # --- 时间格式化 ---
+
+    def _format_record_time(self, record: Any) -> str:
+        """
+        格式化日志记录的时间戳。
+
+        注意：_make_timezone_patcher 已经将 record["time"] 转换为目标时区。
+        此方法直接格式化时间，统一使用 ISO 8601 格式。
+
+        Args:
+            record: loguru 日志记录对象
+
+        Returns:
+            ISO 8601 格式的时间字符串
+        """
+        record_time = record["time"]
+
+        # 处理 naive datetime（loguru 默认会带时区，但为了健壮性做处理）
+        if record_time.tzinfo is None:
+            # 为 naive datetime 添加时区信息
+            record_time = record_time.replace(tzinfo=self.timezone)
+
+        return format_iso_datetime(record_time)
+
     # --- 格式化器 ---
 
-    @classmethod
-    def _console_formatter(cls, record: Any) -> str:
+    def _console_formatter(self, record: Any) -> str:
         """控制台格式化器，仅输出纯文本，不包含 json_content"""
-        # 获取 trace_id
-        trace_id = cls._get_trace_id(record)
+        # 获取 trace_id 和格式化时间
+        trace_id = self._get_trace_id(record)
+        formatted_time = self._format_record_time(record)
 
         fmt = (
-            "<green>{time:YYYY-MM-DD HH:mm:ss.SSSZ}</green> | "
+            f"<green>{formatted_time}</green> | "
             "<level>{level: <8}</level> | "
             "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
             f"<magenta>{trace_id}</magenta> | "
@@ -245,15 +336,15 @@ class LoggerHandler:
             fmt += "\n<cyan>{extra[json_content]}</cyan>"
         return fmt + "\n"
 
-    @classmethod
-    def _file_formatter(cls, record: Any) -> str:
+    def _file_formatter(self, record: Any) -> str:
         """
         File 文本动态格式化器 (log_format='text' 时使用)
         """
-        trace_id = cls._get_trace_id(record)
+        trace_id = self._get_trace_id(record)
+        formatted_time = self._format_record_time(record)
 
         fmt = (
-            "{time:YYYY-MM-DD HH:mm:ss.SSSZ} | "
+            f"{formatted_time} | "
             "{level: <8} | "
             "{name}:{function}:{line} | "
             f"{trace_id} | "
@@ -271,10 +362,10 @@ class LoggerHandler:
 
         return fmt + "\n"
 
-    @classmethod
-    def _json_formatter(cls, record: Any) -> str:
+    def _json_formatter(self, record: Any) -> str:
         """JSON Lines 格式化器 (log_format='json' 时使用)"""
-        trace_id = cls._get_trace_id(record)
+        trace_id = self._get_trace_id(record)
+        formatted_time = self._format_record_time(record)
 
         extra_data = record["extra"].copy()
         json_content = extra_data.pop("json_content", None)
@@ -284,7 +375,7 @@ class LoggerHandler:
             raise TypeError(f"json_content must be types or None. Got {type(json_content)}")
 
         log_record = {
-            "time": format_iso_datetime(record["time"]),
+            "time": formatted_time,
             "level": record["level"].name,
             "trace_id": trace_id,
             "location": f"{record['name']}.{record['function']}:{record['line']}",
@@ -301,9 +392,24 @@ class LoggerHandler:
         return "{extra[_json_out]}\n\n"
 
     # --- 辅助方法 ---
-    @staticmethod
-    def _utc_time_patcher(record: Any):
-        record["time"] = record["time"].astimezone(UTC)
+    def _make_timezone_patcher(self):
+        """
+        创建时区补丁函数。
+
+        此补丁将 record["time"] 转换为配置的目标时区。
+        影响：
+        1. 日志文件名 {time:YYYY-MM-DD}.log 的时区
+        2. 保持文件名时间与日志内容时间一致
+
+        Returns:
+            时区补丁函数
+        """
+        target_tz = self.timezone
+
+        def patcher(record: Any):
+            record["time"] = record["time"].astimezone(target_tz)
+
+        return patcher
 
     @staticmethod
     def _filter_system(record: Any) -> bool:

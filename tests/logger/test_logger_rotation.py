@@ -34,7 +34,7 @@ class TestLogRotationRetention:
         manager = LoggerHandler(
             base_log_dir=base_log_dir,
             system_subdir="system",  # 指定子目录
-            use_utc=True,
+            timezone="UTC",
             rotation=1,  # <--- 1 byte 轮转，达到后立即轮转
             retention=timedelta(days=30),  # <--- 30天保留
             enqueue=False  # 测试环境通常不需要多进程队列
@@ -70,7 +70,7 @@ class TestLogRotationRetention:
         manager = LoggerHandler(
             base_log_dir=base_log_dir,
             system_subdir="system",  # 指定子目录
-            use_utc=True,
+            timezone="UTC",
             rotation=timedelta(seconds=1),  # <--- 注入 1秒 轮转
             enqueue=False
         )
@@ -97,15 +97,61 @@ class TestLogRotationRetention:
         """
         测试构造函数的时区逻辑
         """
-        # 1. 默认情况: 传入 UTC=True, rotation=Naive Time -> 自动转 UTC
-        mgr1 = LoggerHandler(use_utc=True, rotation=time(0, 0, 0))
-        assert mgr1.rotation.tzinfo == UTC
+        from zoneinfo import ZoneInfo
 
-        # 2. 显式本地: 传入 UTC=False -> 保持 Naive
-        mgr2 = LoggerHandler(use_utc=False, rotation=time(0, 0, 0))
-        assert mgr2.rotation.tzinfo is None
+        # 1. 默认情况: timezone=UTC, rotation 无时区 -> 自动使用 UTC
+        mgr1 = LoggerHandler(timezone="UTC", rotation=time(0, 0, 0))
+        assert mgr1.rotation.tzinfo.key == "UTC"
 
-        # 3. 混合: 传入 UTC=True, 但 rotation 已经是 UTC -> 保持 UTC
+        # 2. 非UTC时区: timezone=Asia/Shanghai, rotation 无时区 -> 自动使用 Asia/Shanghai
+        mgr2 = LoggerHandler(timezone="Asia/Shanghai", rotation=time(0, 0, 0))
+        assert mgr2.rotation.tzinfo == ZoneInfo("Asia/Shanghai")
+
+        # 3. 混合: timezone=UTC, rotation 已带 UTC 时区 -> 正常
         custom_utc = time(12, 0, 0, tzinfo=UTC)
-        mgr3 = LoggerHandler(use_utc=True, rotation=custom_utc)
+        mgr3 = LoggerHandler(timezone="UTC", rotation=custom_utc)
         assert mgr3.rotation == custom_utc
+
+        # 4. 验证 timezone 属性 (使用 timedelta rotation 避免时区检查)
+        mgr4 = LoggerHandler(timezone="Asia/Shanghai", rotation=timedelta(days=1))
+        assert mgr4.timezone == ZoneInfo("Asia/Shanghai")
+
+        # 5. 验证字符串和 ZoneInfo 对象都可以
+        mgr5 = LoggerHandler(timezone=ZoneInfo("America/New_York"), rotation=timedelta(days=1))
+        assert mgr5.timezone == ZoneInfo("America/New_York")
+
+    def test_rotation_timezone_must_match(self):
+        """
+        测试 rotation 时区必须与 timezone 一致
+        """
+        from zoneinfo import ZoneInfo
+
+        import pytest
+
+        # rotation 时区与 timezone 不一致应该抛出 ValueError
+        with pytest.raises(ValueError, match="rotation timezone .* must match timezone"):
+            LoggerHandler(timezone="UTC", rotation=time(0, 0, 0, tzinfo=ZoneInfo("Asia/Shanghai")))
+
+        # timezone=Asia/Shanghai, rotation 带 UTC 时区 -> 抛出异常
+        with pytest.raises(ValueError, match="rotation timezone .* must match timezone"):
+            LoggerHandler(timezone="Asia/Shanghai", rotation=time(0, 0, 0, tzinfo=UTC))
+
+        # rotation 无时区，自动使用 timezone -> 正常
+        mgr = LoggerHandler(timezone="Asia/Shanghai", rotation=time(8, 0, 0))
+        assert mgr.rotation.tzinfo == ZoneInfo("Asia/Shanghai")
+        assert mgr.rotation.hour == 8
+
+    def test_datetime_utc_support(self):
+        """
+        测试 datetime.UTC 作为 timezone 参数
+        """
+        from datetime import UTC
+        from zoneinfo import ZoneInfo
+
+        # datetime.UTC 应该被正确转换为 ZoneInfo("UTC")
+        mgr = LoggerHandler(timezone=UTC, rotation=timedelta(days=1))
+        assert mgr.timezone == ZoneInfo("UTC")
+
+        # 与 rotation 搭配使用
+        mgr2 = LoggerHandler(timezone=UTC, rotation=time(0, 0, 0))
+        assert mgr2.rotation.tzinfo.key == "UTC"
