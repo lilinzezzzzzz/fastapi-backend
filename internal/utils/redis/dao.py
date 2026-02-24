@@ -53,5 +53,13 @@ class CacheDao:
         """向列表添加元素"""
         return await self._redis.push_to_list(key, value)
 
+    async def delete_key(self, key: str) -> int:
+        """删除键，返回删除的键数量"""
+        return await self._redis.delete_key(key)
+
+    async def set_dict(self, key: str, value: dict, ex: int | None = None) -> bool:
+        """设置字典类型的值，自动 JSON 序列化"""
+        return await self._redis.set_dict(key, value, ex=ex)
+
 
 cache_dao = CacheDao(redis_cli=redis_client)
