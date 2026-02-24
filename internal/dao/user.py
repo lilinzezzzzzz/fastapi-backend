@@ -13,7 +13,7 @@ class UserDao(BaseDao[User]):
 
     async def get_by_username(self, username: str) -> User | None:
         """根据用户名查询用户"""
-        return await self.querier.eq_(User.name, username).first()
+        return await self.querier.eq_(self.model_cls.username, username).first()
 
     async def is_phone_exist(self, phone: str) -> bool:
         # 利用你封装的 count

@@ -48,6 +48,16 @@ class BaseDao[T: ModelMixin]:
 
         return self._model_cls
 
+    @property
+    def session_provider(self) -> SessionProvider:
+        """获取写库 session 提供者（主库）"""
+        return self._session_provider
+
+    @property
+    def read_session_provider(self) -> SessionProvider:
+        """获取读库 session 提供者（只读副本），如果未配置则返回写库 session_provider"""
+        return self._read_session_provider
+
     def create(self, **kwargs) -> T:
         return self.model_cls.create(**kwargs)
 
