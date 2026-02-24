@@ -21,7 +21,7 @@ from pkg.logger import logger
 from pkg.third_party_auth import WeChatAuthStrategy, WeChatConfig
 from pkg.toolkit.context import get_user_id
 
-router = APIRouter(prefix="/auth", tags=["Authentication"])
+router = APIRouter(prefix="/auth", tags=["authentication"])
 
 # Token 配置
 TOKEN_EXPIRE_MINUTES = 30  # Token 有效期 30 分钟
