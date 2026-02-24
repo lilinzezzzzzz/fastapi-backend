@@ -1,1 +1,5 @@
-"""该目录主要用于处理各种连接"""
+"""基础设施层：数据库、缓存、向量存储等外部资源连接管理"""
+
+from internal.infra import redis, vector
+
+__all__ = ["redis", "vector"]

@@ -1,5 +1,5 @@
 from internal.core.exception import AppException, errors
-from internal.utils.redis.dao import cache_dao
+from internal.infra.redis import cache_dao
 
 
 async def verify_token(token: str) -> dict:

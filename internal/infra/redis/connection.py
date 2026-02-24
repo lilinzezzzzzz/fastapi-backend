@@ -1,3 +1,5 @@
+"""Redis 连接管理"""
+
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 

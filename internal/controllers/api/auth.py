@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Header
 
 from internal.config import settings
 from internal.core.exception import AppException, errors
+from internal.infra.redis import cache_dao
 from internal.schemas.user import (
     UserDetailSchema,
     UserLoginReqSchema,
@@ -16,7 +17,6 @@ from internal.schemas.user import (
     WeChatLoginReqSchema,
 )
 from internal.services.user import UserService, new_user_service
-from internal.utils.redis.dao import cache_dao
 from pkg.logger import logger
 from pkg.third_party_auth import WeChatAuthStrategy, WeChatConfig
 from pkg.toolkit.context import get_user_id
