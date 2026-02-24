@@ -1,3 +1,4 @@
+from internal.dao.third_party_account import third_party_account_dao
 from internal.dao.user import UserDao, user_dao
 from internal.models.user import User
 from internal.utils.password import PasswordHandler
@@ -7,6 +8,7 @@ from pkg.third_party_auth.base import ThirdPartyUserInfo
 class UserService:
     def __init__(self, dao: UserDao):
         self._user_dao = dao
+        self._third_party_dao = third_party_account_dao
 
     @staticmethod
     async def hello_world():
@@ -75,52 +77,48 @@ class UserService:
         根据第三方用户信息获取或创建用户
 
         Args:
-            platform: 平台名称 (wechat, alipay 等)
+            platform: 平台名称 (wechat, alipay, google, github 等)
             third_party_info: 第三方用户信息
 
         Returns:
             User: 用户对象
         """
-        # 根据平台查询对应的唯一标识
-        if platform == "wechat":
-            existing_user = await self._user_dao.get_by_wechat_openid(third_party_info.open_id)
-        elif platform == "alipay":
-            existing_user = await self._user_dao.get_by_alipay_user_id(third_party_info.open_id)
-        else:
-            raise ValueError(f"Unsupported third-party platform: {platform}")
+        # 查询第三方账号是否已存在
+        existing_account = await self._third_party_dao.get_by_platform_and_openid(
+            platform, third_party_info.open_id
+        )
 
-        # 如果用户已存在，直接返回
-        if existing_user:
-            return existing_user
+        # 如果账号已存在，返回关联的用户
+        if existing_account:
+            user = await self._user_dao.query_by_primary_id(existing_account.user_id)
+            if not user:
+                raise RuntimeError(f"User {existing_account.user_id} not found")
+            return user
 
-        # 否则创建新用户
+        # 否则创建新用户并绑定第三方账号
         username = third_party_info.nickname or f"{platform}_{third_party_info.open_id[:8]}"
 
-        # 构建用户数据
-        user_data = {
-            "username": username,
-            "account": f"{platform}_{third_party_info.open_id}",
-            "phone": "",  # 第三方登录默认无手机号，需要后续绑定
-            "password_hash": None,  # 无密码
-        }
-
-        # 根据平台设置对应字段
-        if platform == "wechat":
-            user_data.update({
-                "wechat_openid": third_party_info.open_id,
-                "wechat_unionid": third_party_info.union_id,
-                "wechat_avatar": third_party_info.avatar,
-                "wechat_nickname": third_party_info.nickname,
-            })
-        elif platform == "alipay":
-            user_data.update({
-                "alipay_user_id": third_party_info.open_id,
-                "alipay_avatar": third_party_info.avatar,
-                "alipay_nickname": third_party_info.nickname,
-            })
-
         # 创建用户
-        user = await self._user_dao.create(**user_data)
+        user = await self._user_dao.create(
+            username=username,
+            account=f"{platform}_{third_party_info.open_id}",
+            phone="",  # 第三方登录默认无手机号，需要后续绑定
+            password_hash=None,  # 无密码
+        )
+
+        # 创建第三方账号关联记录
+        await self._third_party_dao.create(
+            user_id=user.id,
+            platform=platform,
+            open_id=third_party_info.open_id,
+            union_id=third_party_info.union_id,
+            avatar=third_party_info.avatar,
+            nickname=third_party_info.nickname,
+            access_token=getattr(third_party_info, 'access_token', None),
+            refresh_token=getattr(third_party_info, 'refresh_token', None),
+            expires_at=getattr(third_party_info, 'expires_at', None),
+            extra_data=getattr(third_party_info, 'extra_data', None),
+        )
 
         return user
 
@@ -142,32 +140,39 @@ class UserService:
             ValueError: 当该第三方账号已被其他用户绑定时
         """
         # 检查该第三方账号是否已被绑定
-        if platform == "wechat":
-            if await self._user_dao.is_wechat_openid_exist(third_party_info.open_id):
-                raise ValueError("该微信账号已被其他账号绑定")
+        existing_account = await self._third_party_dao.get_by_platform_and_openid(
+            platform, third_party_info.open_id
+        )
 
-            # 更新用户微信信息
-            await user.update(
-                session_provider=self._user_dao.session_provider,
-                wechat_openid=third_party_info.open_id,
-                wechat_unionid=third_party_info.union_id,
-                wechat_avatar=third_party_info.avatar,
-                wechat_nickname=third_party_info.nickname,
-            )
+        if existing_account and existing_account.user_id != user.id:
+            raise ValueError(f"该{platform}账号已被其他用户绑定")
 
-        elif platform == "alipay":
-            if await self._user_dao.is_alipay_user_id_exist(third_party_info.open_id):
-                raise ValueError("该支付宝账号已被其他账号绑定")
-
-            # 更新用户支付宝信息
-            await user.update(
-                session_provider=self._user_dao.session_provider,
-                alipay_user_id=third_party_info.open_id,
-                alipay_avatar=third_party_info.avatar,
-                alipay_nickname=third_party_info.nickname,
+        # 如果已经绑定到当前用户，更新信息
+        if existing_account:
+            await existing_account.update(
+                session_provider=self._third_party_dao.session_provider,
+                union_id=third_party_info.union_id,
+                avatar=third_party_info.avatar,
+                nickname=third_party_info.nickname,
+                access_token=getattr(third_party_info, 'access_token', None),
+                refresh_token=getattr(third_party_info, 'refresh_token', None),
+                expires_at=getattr(third_party_info, 'expires_at', None),
+                extra_data=getattr(third_party_info, 'extra_data', None),
             )
         else:
-            raise ValueError(f"Unsupported third-party platform: {platform}")
+            # 创建新的绑定关系
+            await self._third_party_dao.create(
+                user_id=user.id,
+                platform=platform,
+                open_id=third_party_info.open_id,
+                union_id=third_party_info.union_id,
+                avatar=third_party_info.avatar,
+                nickname=third_party_info.nickname,
+                access_token=getattr(third_party_info, 'access_token', None),
+                refresh_token=getattr(third_party_info, 'refresh_token', None),
+                expires_at=getattr(third_party_info, 'expires_at', None),
+                extra_data=getattr(third_party_info, 'extra_data', None),
+            )
 
 
 async def new_user_service() -> UserService:

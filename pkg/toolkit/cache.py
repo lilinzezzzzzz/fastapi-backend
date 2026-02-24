@@ -38,8 +38,8 @@ def handle_redis_exception(func):
     return wrapper
 
 
-class CacheClient:
-    """Redis 缓存客户端工具类"""
+class RedisClient:
+    """Redis 客户端工具类"""
 
     def __init__(self, session_provider: SessionProvider):
         self.session_provider = session_provider

@@ -5,26 +5,26 @@ from redis.asyncio import ConnectionPool, Redis
 
 from internal.config import settings
 from pkg.logger import logger
-from pkg.toolkit.cache import CacheClient
+from pkg.toolkit.cache import RedisClient
 from pkg.toolkit.types import lazy_proxy
 
 # 全局变量，初始为 None
 _redis_pool: ConnectionPool | None = None
-_redis_client: Redis | None = None
-_cache: CacheClient | None = None
+_raw_redis: Redis | None = None  # 原始 Redis 客户端
+_redis_client: RedisClient | None = None  # 封装后的 Redis 客户端
 
 
-def _get_cache() -> CacheClient:
+def _get_redis_client() -> RedisClient:
     """
-    获取全局缓存客户端实例的 Helper 函数
-    替代直接 import cache_client 变量，防止 import 时为 None 的问题
+    获取全局 Redis 客户端实例的 Helper 函数
+    替代直接 import redis_client 变量，防止 import 时为 None 的问题
     """
-    if _cache is None:
-        raise RuntimeError("Redis/Cache is not initialized. Call init_redis() first.")
-    return _cache
+    if _redis_client is None:
+        raise RuntimeError("Redis is not initialized. Call init_redis() first.")
+    return _redis_client
 
 
-cache = lazy_proxy(_get_cache)
+redis_client = lazy_proxy(_get_redis_client)
 
 
 def init_async_redis() -> None:
@@ -32,7 +32,7 @@ def init_async_redis() -> None:
     初始化 Redis 连接池。
     应在 FastAPI lifespan 或 Celery worker_process_init 中调用。
     """
-    global _redis_pool, _redis_client, _cache
+    global _redis_pool, _raw_redis, _redis_client
 
     logger.info("Initializing Redis connection...")
 
@@ -45,38 +45,37 @@ def init_async_redis() -> None:
             max_connections=getattr(settings, "REDIS_MAX_CONNECTIONS", 20),
         )
 
-    if _cache is None:
-        # 创建客户端实例
-        _redis_client = Redis(connection_pool=_redis_pool)
+    # 创建原始 Redis 客户端实例
+    if _raw_redis is None:
+        _raw_redis = Redis(connection_pool=_redis_pool)
 
-    # 初始化缓存客户端封装 (假设 new_cache_client 接受 session_provider)
-    # 注意：我们传入 get_redis 函数本身，它是一个稳定的引用
-    if _cache is None:
-        _cache = CacheClient(session_provider=get_redis)
+    # 初始化封装后的 Redis 客户端
+    if _redis_client is None:
+        _redis_client = RedisClient(session_provider=get_redis)
 
     logger.success("Redis initialized successfully.")
 
 
 async def close_async_redis() -> None:
     """关闭 Redis 连接"""
-    global _redis_client, _redis_pool, _cache
+    global _raw_redis, _redis_pool, _redis_client
 
-    if _redis_client:
-        await _redis_client.close()  # 异步关闭客户端
+    if _raw_redis:
+        await _raw_redis.close()
         logger.warning("Redis connection closed.")
 
     # 清理引用
-    _redis_client = None
+    _raw_redis = None
     _redis_pool = None
-    _cache = None
+    _redis_client = None
 
 
 def reset_async_redis() -> None:
-    global _redis_client, _redis_pool, _cache
+    global _raw_redis, _redis_pool, _redis_client
 
-    _redis_client = None
+    _raw_redis = None
     _redis_pool = None
-    _cache = None
+    _redis_client = None
 
 
 @asynccontextmanager
@@ -84,13 +83,7 @@ async def get_redis() -> AsyncGenerator[Redis, None]:
     """
     Redis Session 获取上下文管理器
     """
-    if _redis_client is None:
+    if _raw_redis is None:
         raise RuntimeError("Redis is not initialized. Call init_redis() first.")
 
-    try:
-        yield _redis_client
-    except Exception as e:
-        # 这里通常不需要做太多回滚操作，Redis 操作多为原子的或即时的
-        # 但可以记录日志
-        logger.error(f"Redis operation failed: {e}")
-        raise e
+    yield _raw_redis

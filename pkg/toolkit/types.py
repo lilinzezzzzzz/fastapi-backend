@@ -215,10 +215,10 @@ def lazy_proxy[T](getter: Callable[[], T], **kwargs: Any) -> T:
     创建懒加载代理对象。
 
     用法:
-        cache = lazy_proxy(_get_cache)  # 类型推断为 CacheClient
+        cache = lazy_proxy(_get_cache)  # 类型推断为 RedisClient
 
     等价于:
-        cache: CacheClient = LazyProxy(_get_cache)
+        cache: RedisClient = LazyProxy(_get_cache)
     """
     return LazyProxy(getter)  # type: ignore[return-value]
 

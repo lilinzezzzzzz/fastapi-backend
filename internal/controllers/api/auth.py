@@ -75,14 +75,13 @@ async def login(
     # 构建用户元数据
     user_metadata = {
         "id": user.id,
-        "username": user.name,
+        "username": user.username,
         "phone": user.phone,
         "created_at": int(datetime.now(UTC).timestamp()),
     }
 
     # 存储 token 到 Redis (key: token, value: user_metadata)
-    token_key = cache_dao.make_auth_token_key(token)
-    await cache_dao.set_dict(token_key, user_metadata, ex=TOKEN_EXPIRE_MINUTES * 60)
+    await cache_dao.set_auth_user_metadata(token, user_metadata, ex=TOKEN_EXPIRE_MINUTES * 60)
 
     # 将 token 添加到用户的 token 列表中 (用于登出时校验和批量管理)
     token_list_key = cache_dao.make_auth_user_token_list_key(user.id)
@@ -91,7 +90,7 @@ async def login(
     logger.info(f"User {user.id} logged in successfully, token: {token[:10]}...")
 
     return UserLoginRespSchema(
-        user=UserDetailSchema(id=user.id, name=user.name, phone=user.phone),
+        user=UserDetailSchema(id=user.id, name=user.username, phone=user.phone),
         token=token,
     )
 
