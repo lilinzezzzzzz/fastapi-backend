@@ -56,6 +56,17 @@ mock_logger_module = types.ModuleType("pkg.logger")
 mock_logger_module.logger = mock_logger
 mock_logger_module.init_logger = MagicMock()
 
+# Mock LogFormat 枚举
+from enum import StrEnum
+
+
+class MockLogFormat(StrEnum):
+    JSON = "json"
+    TEXT = "text"
+
+
+mock_logger_module.LogFormat = MockLogFormat
+
 # 为了让 LazyProxy 正常工作，需要 mock 整个模块
 sys.modules["pkg.logger"] = mock_logger_module
 

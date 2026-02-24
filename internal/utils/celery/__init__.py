@@ -99,6 +99,11 @@ celery_client.register_worker_hooks(on_startup=_worker_startup, on_shutdown=_wor
 # 导出原生 App 对象供 Celery CLI 使用
 celery_app: Celery = celery_client.app
 
+# 导出任务函数供外部使用
+from internal.utils.celery.tasks import number_sum  # noqa: E402
+
+__all__ = ["celery_app", "celery_client", "number_sum"]
+
 
 # =========================================================
 # 4. FastAPI 集成辅助函数
