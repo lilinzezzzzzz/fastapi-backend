@@ -15,7 +15,7 @@ class TestLogRotationRetention:
         # 1. 准备路径和旧文件
         base_log_dir = tmp_path / "logs"
         base_log_dir.mkdir(parents=True, exist_ok=True)
-        log_dir = base_log_dir / "system"
+        log_dir = base_log_dir / "default"
         log_dir.mkdir(parents=True, exist_ok=True)
         print(f"log_dir: {log_dir}")
 
@@ -33,7 +33,7 @@ class TestLogRotationRetention:
         # 使用 1 byte 轮转触发 retention 检查
         manager = LoggerHandler(
             base_log_dir=base_log_dir,
-            system_subdir="system",  # 指定子目录
+            use_subdir=True,  # 使用子目录
             timezone="UTC",
             rotation=1,  # <--- 1 byte 轮转，达到后立即轮转
             retention=timedelta(days=30),  # <--- 30天保留
@@ -69,14 +69,14 @@ class TestLogRotationRetention:
         # 1. 实例化 (注入 1秒 轮转策略)
         manager = LoggerHandler(
             base_log_dir=base_log_dir,
-            system_subdir="system",  # 指定子目录
+            use_subdir=True,  # 使用子目录
             timezone="UTC",
             rotation=timedelta(seconds=1),  # <--- 注入 1秒 轮转
             enqueue=False
         )
 
         logger = manager.setup(write_to_console=False)
-        log_dir = base_log_dir / "system"
+        log_dir = base_log_dir / "default"
         print(f"log_dir: {log_dir}")
 
         # 2. 第一条日志
@@ -155,3 +155,73 @@ class TestLogRotationRetention:
         # 与 rotation 搭配使用
         mgr2 = LoggerHandler(timezone=UTC, rotation=time(0, 0, 0))
         assert mgr2.rotation.tzinfo.key == "UTC"
+
+    def test_use_subdir_parameter(self, tmp_path):
+        """
+        测试 use_subdir 参数
+        """
+        base_log_dir = tmp_path / "logs"
+        base_log_dir.mkdir(parents=True, exist_ok=True)
+
+        # 1. use_subdir=True: 日志按 namespace 存放在子目录
+        mgr1 = LoggerHandler(
+            base_log_dir=base_log_dir,
+            use_subdir=True,  # 显式指定使用子目录
+            rotation=timedelta(days=1),
+            enqueue=False
+        )
+        logger1 = mgr1.setup(write_to_console=False)
+        logger1.info("test")
+
+        # 默认日志应该在 base_log_dir/default 下
+        default_log_dir = base_log_dir / "default"
+        assert default_log_dir.exists()
+        assert len(list(default_log_dir.glob("*.log"))) >= 1
+
+        # 2. use_subdir=False: 所有日志在 base_log_dir 下
+        base_log_dir2 = tmp_path / "logs2"
+        base_log_dir2.mkdir(parents=True, exist_ok=True)
+
+        mgr2 = LoggerHandler(
+            base_log_dir=base_log_dir2,
+            use_subdir=False,
+            rotation=timedelta(days=1),
+            enqueue=False
+        )
+        logger2 = mgr2.setup(write_to_console=False)
+        logger2.info("test")
+
+        # 系统日志应该直接在 base_log_dir 下
+        assert not (base_log_dir2 / "default").exists()
+        assert len(list(base_log_dir2.glob("*.log"))) >= 1
+
+        # 3. 动态 logger 的子目录行为
+        mgr3 = LoggerHandler(
+            base_log_dir=tmp_path / "logs3",
+            use_subdir=True,
+            rotation=timedelta(days=1),
+            enqueue=False
+        )
+        mgr3.setup(write_to_console=False, write_to_file=False)
+        dynamic_logger = mgr3.get_dynamic_logger("my_module")
+        dynamic_logger.info("test dynamic")
+
+        # 动态日志应该在 base_log_dir/my_module 下
+        my_module_dir = tmp_path / "logs3" / "my_module"
+        assert my_module_dir.exists(), f"目录不存在: {my_module_dir}"
+
+        # 4. use_subdir=False 时的动态 logger
+        mgr4 = LoggerHandler(
+            base_log_dir=tmp_path / "logs4",
+            use_subdir=False,
+            rotation=timedelta(days=1),
+            enqueue=False
+        )
+        mgr4.setup(write_to_console=False, write_to_file=False)
+        dynamic_logger2 = mgr4.get_dynamic_logger("another_module")
+        dynamic_logger2.info("test dynamic")
+
+        # 动态日志也应该在 base_log_dir 下（不创建子目录）
+        another_module_dir = tmp_path / "logs4" / "another_module"
+        assert not another_module_dir.exists(), f"不应存在子目录: {another_module_dir}"
+        assert len(list((tmp_path / "logs4").glob("*.log"))) >= 1

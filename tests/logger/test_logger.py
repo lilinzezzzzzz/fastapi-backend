@@ -23,7 +23,7 @@ def setup_logging(tmp_path):
     # 创建新的 LoggerHandler 实例
     _test_manager = LoggerHandler(
         base_log_dir=base_log_dir,
-        system_subdir="system",
+        use_subdir=True,  # 测试中使用子目录
     )
     _test_manager.setup(write_to_file=True, write_to_console=False)
 
@@ -66,23 +66,23 @@ def find_text_log(file_path, target_message: str) -> bool:
     return target_message in content
 
 
-def test_system_logging(setup_logging):
+def test_default_logging(setup_logging):
     """
-    测试系统默认日志 (System Log)
-    注意：根据最新代码，System Log 固定为文本格式，不是 JSON。
+    测试默认日志 (Default Log)
+    注意：根据最新代码，Default Log 固定为文本格式，不是 JSON。
     """
     base_log_dir = setup_logging
-    msg = "System start sequence"
+    msg = "Default logger start sequence"
 
     # 使用测试 manager 的 logger
     assert _test_manager is not None
     _test_manager._logger.info(msg)
     loguru_logger.complete()
 
-    # 路径变更：default -> system, 文件名不再包含 app_ 前缀
-    expected = base_log_dir / "system" / f"{get_today_str()}.log"
+    # 路径：logs/default/YYYY-MM-DD.log (use_subdir=True)
+    expected = base_log_dir / "default" / f"{get_today_str()}.log"
 
-    assert expected.exists(), f"系统日志文件未创建: {expected}"
+    assert expected.exists(), f"默认日志文件未创建: {expected}"
 
     # 验证文本内容
     assert find_text_log(expected, msg), "未在文本日志中找到目标消息"
@@ -117,10 +117,10 @@ def test_create_failure_fallback(setup_logging, monkeypatch):
     # 模拟 mkdir 抛出权限错误
     # 注意：我们要 Patch 的是 LoggerHandler 内部调用的静态方法 _ensure_dir
     def mock_ensure_dir(path):
-        # 只针对 device_error 的路径抛错，避免影响 system log 的创建
+        # 只针对 device_error 的路径抛错，避免影响 default log 的创建
         if dev_id in str(path):
             raise PermissionError("Mock permission denied")
-        # 其他路径正常创建 (比如 system log)
+        # 其他路径正常创建 (比如 default log)
         if not path.exists():
             path.mkdir(parents=True, exist_ok=True)
 
@@ -135,15 +135,14 @@ def test_create_failure_fallback(setup_logging, monkeypatch):
     # 验证：设备目录不应该存在（因为创建失败）
     assert not (base_log_dir / dev_id).exists()
 
-    # 验证：日志应该出现在 system 目录
-    system_log = base_log_dir / "system" / f"{get_today_str()}.log"
-    assert system_log.exists()
+    # 验证：日志应该出现在 default 目录
+    default_log = base_log_dir / "default" / f"{get_today_str()}.log"
+    assert default_log.exists()
 
-    # 注意：降级到 system log 后，格式与 System Logger 一致
-    # 同时 context log_namespace 会变成 "system"
-    assert find_text_log(system_log, msg), "未在系统降级日志中找到消息"
+    # 注意：降级到 default log 后，格式与 Default Logger 一致
+    # 同时 context log_namespace 会变成 "default"
+    assert find_text_log(default_log, msg), "未在降级日志中找到消息"
 
-    # 如果你想验证它是作为 "system" 命名空间记录的，需要去 parse 文本日志的格式
-    # 文本格式包含: ... | {extra[log_namespace]} - {message}
-    content = system_log.read_text(encoding="utf-8")
-    assert f"system - {msg}" in content or f"| system - {msg}" in content
+    # 验证它是作为 "default" 命名空间记录的
+    content = default_log.read_text(encoding="utf-8")
+    assert f"default - {msg}" in content or f"| default - {msg}" in content

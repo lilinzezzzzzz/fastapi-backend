@@ -33,14 +33,14 @@ class LoggerHandler:
     配置在实例化 (__init__) 时传入，并在 setup() 时生效。
     """
 
-    SYSTEM_LOG_NAMESPACE: str = "system"
+    DEFAULT_LOG_NAMESPACE: str = "default"
 
     def __init__(
         self,
         *,
         level: str = "INFO",
         base_log_dir: Path | None = None,
-        system_subdir: str | None = None,
+        use_subdir: bool = False,
         rotation: RotationType = time(0, 0, 0, tzinfo=UTC),
         retention: RetentionType = timedelta(days=30),
         compression: str | None = None,
@@ -53,7 +53,7 @@ class LoggerHandler:
 
         :param level: 日志等级 (e.g., "INFO", "DEBUG")
         :param base_log_dir: 日志存放的根目录，默认为当前文件父级路径下的 logs 目录
-        :param system_subdir: 系统日志子目录名，传 None 则直接存在 base_log_dir 下
+        :param use_subdir: 是否使用子目录分隔日志，True 则按 log_namespace 创建子目录，False 则所有日志存放在 base_log_dir 下
         :param rotation: 轮转策略 (默认: 每天 00:00, UTC时间)
         :param retention: 保留策略 (默认: 30天)
         :param compression: 压缩格式 (e.g., "zip")
@@ -69,7 +69,7 @@ class LoggerHandler:
         # --- 配置属性 ---
         self.level = level
         self.base_log_dir = base_log_dir or _DEFAULT_BASE_LOG_DIR
-        self.system_log_dir = (self.base_log_dir / system_subdir) if system_subdir else self.base_log_dir
+        self.use_subdir = use_subdir
         self.retention = retention
         self.compression = compression
         self.enqueue = enqueue
@@ -154,6 +154,21 @@ class LoggerHandler:
             )
         return rotation
 
+    def _get_log_dir(self, log_namespace: str) -> Path:
+        """
+        获取指定命名空间的日志目录。
+
+        Args:
+            log_namespace: 日志命名空间
+
+        Returns:
+            日志目录路径
+        """
+        if self.use_subdir:
+            return self.base_log_dir / log_namespace
+        else:
+            return self.base_log_dir
+
     def setup(self, *, write_to_file: bool = True, write_to_console: bool = True) -> "loguru.Logger":
         """
         应用配置并初始化系统日志。
@@ -166,7 +181,7 @@ class LoggerHandler:
         config_params: dict[str, Any] = {
             "extra": {
                 "trace_id": "-",
-                "log_namespace": self.SYSTEM_LOG_NAMESPACE,
+                "log_namespace": self.DEFAULT_LOG_NAMESPACE,
                 "json_content": None,
             },
         }
@@ -192,8 +207,9 @@ class LoggerHandler:
 
         # 4. File 输出 (System Log)
         if write_to_file:
-            self._ensure_dir(self.system_log_dir)
-            sink_path = self.system_log_dir / "{time:YYYY-MM-DD}.log"
+            log_dir = self._get_log_dir(self.DEFAULT_LOG_NAMESPACE)
+            self._ensure_dir(log_dir)
+            sink_path = log_dir / "{time:YYYY-MM-DD}.log"
 
             self._logger.add(
                 sink=sink_path,
@@ -206,7 +222,7 @@ class LoggerHandler:
                 filter=self._filter_system,
             )
 
-            self._registered_namespaces[self.SYSTEM_LOG_NAMESPACE] = {"sink_registered": True}
+            self._registered_namespaces[self.DEFAULT_LOG_NAMESPACE] = {"sink_registered": True}
 
         tz_name = self.timezone.key if hasattr(self.timezone, "key") else str(self.timezone)
         self._logger.info(
@@ -250,7 +266,8 @@ class LoggerHandler:
         # 1. 检查并添加文件 Sink
         if not config["sink_registered"]:
             try:
-                self._ensure_dir(log_dir := self.base_log_dir / log_namespace)
+                log_dir = self._get_log_dir(log_namespace)
+                self._ensure_dir(log_dir)
                 sink_path = log_dir / "{time:YYYY-MM-DD}.log"
 
                 self._logger.add(
@@ -270,7 +287,7 @@ class LoggerHandler:
 
             except Exception as e:
                 self._logger.error(f"System: Failed to register sink for '{log_namespace}'. Error: {e}")
-                return self._logger.bind(log_namespace=self.SYSTEM_LOG_NAMESPACE, original_namespace=log_namespace)
+                return self._logger.bind(log_namespace=self.DEFAULT_LOG_NAMESPACE, original_namespace=log_namespace)
 
         # 2. 检查并添加控制台 Sink
         if write_to_console and not config["write_to_console"]:
@@ -413,13 +430,12 @@ class LoggerHandler:
 
     @staticmethod
     def _filter_system(record: Any) -> bool:
-        return record["extra"].get("log_namespace") == LoggerHandler.SYSTEM_LOG_NAMESPACE
+        return record["extra"].get("log_namespace") == LoggerHandler.DEFAULT_LOG_NAMESPACE
 
     @staticmethod
     def _ensure_dir(path: Path):
-        if not path.parent.exists():
-            raise FileNotFoundError(f"Parent directory does not exist: {path.parent}")
-        path.mkdir(exist_ok=True)
+        """确保目录存在，如果父目录不存在则自动创建"""
+        path.mkdir(parents=True, exist_ok=True)
 
     @classmethod
     def _get_trace_id(cls, record: Any) -> str:

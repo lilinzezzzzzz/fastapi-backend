@@ -13,10 +13,10 @@ pkg.logger - 统一的日志管理包
     # 之后在任何地方使用
     logger.info("Application started")
 """
-from datetime import UTC, time, timedelta, timezone
+
+from datetime import UTC, time, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING  # noqa: F401
-from zoneinfo import ZoneInfo
+from typing import TYPE_CHECKING
 
 from pkg.logger.handler import LogFormat, LoggerHandler, RetentionType, RotationType, TimezoneType
 from pkg.toolkit.types import lazy_proxy
@@ -47,7 +47,7 @@ def init_logger(
     *,
     level: str = "INFO",
     base_log_dir: Path | None = None,
-    system_subdir: str | None = None,
+    use_subdir: bool = False,
     rotation: RotationType = time(0, 0, 0, tzinfo=UTC),
     retention: RetentionType = timedelta(days=30),
     compression: str | None = None,
@@ -62,7 +62,7 @@ def init_logger(
 
     :param level: 日志等级 (e.g., "INFO", "DEBUG")
     :param base_log_dir: 日志存放的根目录
-    :param system_subdir: 系统日志子目录名，传 None 则直接存在 base_log_dir 下
+    :param use_subdir: 是否使用子目录分隔日志，True 则按 log_namespace 创建子目录，False 则所有日志存放在 base_log_dir 下
     :param rotation: 轮转策略 (默认: 每天 00:00, UTC时间)
     :param retention: 保留策略 (默认: 30天)
     :param compression: 压缩格式 (e.g., "zip")
@@ -78,7 +78,7 @@ def init_logger(
     _logger_manager = LoggerHandler(
         level=level,
         base_log_dir=base_log_dir,
-        system_subdir=system_subdir,
+        use_subdir=use_subdir,
         rotation=rotation,
         retention=retention,
         compression=compression,
