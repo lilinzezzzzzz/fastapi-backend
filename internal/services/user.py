@@ -1,7 +1,7 @@
 from internal.dao.user import UserDao, user_dao
 from internal.models.user import User
 from internal.utils.password import PasswordHandler
-from internal.utils.third_party_auth.base import ThirdPartyUserInfo
+from pkg.third_party_auth.base import ThirdPartyUserInfo
 
 
 class UserService:

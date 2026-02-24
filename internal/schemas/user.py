@@ -1,4 +1,3 @@
-from typing import Annotated
 
 from pydantic import BaseModel, Field
 
@@ -55,7 +54,7 @@ class UserLoginRespSchema(BaseModel):
 
 
 class UserListReqSchema(BaseModel):
-    name: Annotated[..., Field(min_length=1, max_length=20)]
+    name: str = Field(min_length=1, max_length=20)
 
 
 class UserDetailSchema(BaseModel):
