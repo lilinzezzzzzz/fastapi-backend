@@ -86,7 +86,7 @@ class TestCeleryTasks:
         测试 Celery App 配置是否正确加载
         """
         # 检查任务是否已注册
-        assert "internal.celery.tasks.number_sum" in celery_app.tasks
+        assert "internal.utils.celery.tasks.number_sum" in celery_app.tasks
 
         # 检查配置
         assert celery_app.conf.task_default_queue == "default"
@@ -96,7 +96,7 @@ class TestCeleryTasks:
         """
         测试任务路由配置
         """
-        task_name = "internal.celery.tasks.number_sum"
+        task_name = "internal.utils.celery.tasks.number_sum"
 
         # 获取任务路由信息
         route = celery_app.conf.task_routes.get(task_name)
@@ -110,7 +110,7 @@ class TestCeleryTasks:
         测试使用 celery_client.submit() 提交任务
         """
         task_result = celery_client.submit(
-            task_name="internal.celery.tasks.number_sum",
+            task_name="internal.utils.celery.tasks.number_sum",
             args=(50, 60),
         )
 
@@ -126,7 +126,7 @@ class TestCeleryTasks:
         测试使用 celery_client.submit() 提交任务，并指定队列和优先级
         """
         task_result = celery_client.submit(
-            task_name="internal.celery.tasks.number_sum",
+            task_name="internal.utils.celery.tasks.number_sum",
             args=(100, 100),
             queue="default",  # 使用默认队列
             priority=5,
@@ -143,7 +143,7 @@ class TestCeleryTasks:
         测试使用 celery_client 查询任务状态
         """
         task_result = celery_client.submit(
-            task_name="internal.celery.tasks.number_sum",
+            task_name="internal.utils.celery.tasks.number_sum",
             args=(1, 2),
         )
 
@@ -167,7 +167,7 @@ class TestCeleryTasks:
         """
         custom_id = "test-custom-task-id-12345"
         task_result = celery_client.submit(
-            task_name="internal.celery.tasks.number_sum",
+            task_name="internal.utils.celery.tasks.number_sum",
             args=(10, 10),
             task_id=custom_id,
         )
@@ -189,7 +189,7 @@ class TestCeleryTasks:
 
         start_time = time.time()
         task_result = celery_client.submit(
-            task_name="internal.celery.tasks.number_sum",
+            task_name="internal.utils.celery.tasks.number_sum",
             args=(5, 5),
             countdown=2,  # 延迟 2 秒执行
         )
@@ -278,7 +278,7 @@ class TestCeleryTasks:
         """
         # 提交一个延迟执行的任务
         task_result = celery_client.submit(
-            task_name="internal.celery.tasks.number_sum",
+            task_name="internal.utils.celery.tasks.number_sum",
             args=(100, 100),
             countdown=60,  # 60 秒后执行
         )
@@ -354,7 +354,7 @@ if __name__ == "__main__":
     直接运行测试
     运行前需要：
     1. 启动 Redis: docker-compose up redis
-    2. 启动 Celery Worker: celery -A internal.infra.celery.celery_app worker -l info -c 1 -Q default,celery_queue
+    2. 启动 Celery Worker: celery -A internal.utils.celery.celery_app worker -l info -c 1 -Q default,celery_queue
     3. 运行测试: pytest tests/test_celery_tasks.py -v
     """
     sys.exit(pytest.main(["-s", "-v", "--log-cli-level=INFO", __file__]))

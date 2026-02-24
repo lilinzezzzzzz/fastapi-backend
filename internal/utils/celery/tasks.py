@@ -5,7 +5,7 @@ from internal.utils.celery import celery_client
 from pkg.logger import logger
 
 
-@celery_client.app.task(bind=True, name="internal.infra.celery.register.number_sum")
+@celery_client.app.task(bind=True, name="internal.utils.celery.tasks.number_sum")
 def number_sum(self, x: int | list[int], y: int):
     """
     示例异步任务任务
