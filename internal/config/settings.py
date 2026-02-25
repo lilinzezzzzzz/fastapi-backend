@@ -62,6 +62,14 @@ class Settings(BaseSettings):
     OTEL_OTLP_ENDPOINT: str = ""  # OTLP 导出端点，为空则只使用 Console 导出
     OTEL_CONSOLE_EXPORT: bool = True  # 是否启用 Console 导出（开发调试用）
 
+    # --- Database Read Replica (可选，不配置则不启用读写分离) ---
+    DB_READ_HOST: str | None = None
+    DB_READ_PORT: int | None = None
+    DB_READ_USERNAME: str | None = None
+    DB_READ_PASSWORD: SecretStr | None = None
+    DB_READ_DATABASE: str | None = None
+    DB_READ_SERVICE_NAME: str | None = None  # Oracle 专用
+
     # --- Redis ---
     REDIS_HOST: str
     REDIS_PORT: int = 6379
@@ -146,6 +154,65 @@ class Settings(BaseSettings):
                 password = quote_plus(password)
                 return f"{driver}://{self.DB_USERNAME}:{password}@{self.DB_HOST}:{self.DB_PORT}/?service_name={self.DB_SERVICE_NAME}"
             return f"{driver}://{self.DB_USERNAME}@{self.DB_HOST}:{self.DB_PORT}/?service_name={self.DB_SERVICE_NAME}"
+        else:
+            raise ValueError(f"Unsupported database type: {self.DB_TYPE}")
+
+    @property
+    def sqlalchemy_read_database_uri(self) -> str | None:
+        """
+        根据数据库类型动态生成只读副本的连接 URI。
+        未配置的字段自动 fallback 到主库同名字段。
+        如果 DB_READ_HOST 未设置，返回 None 表示不启用读写分离。
+        """
+        if self.DB_READ_HOST is None:
+            return None
+
+        driver = DB_DRIVER_MAP.get(self.DB_TYPE)
+        if not driver:
+            raise ValueError(f"Unsupported database type: {self.DB_TYPE}")
+
+        # 未设置的字段 fallback 到主库
+        host = self.DB_READ_HOST
+        port = self.DB_READ_PORT or self.DB_PORT
+        username = self.DB_READ_USERNAME or self.DB_USERNAME
+        password = (
+            self.DB_READ_PASSWORD.get_secret_value()
+            if self.DB_READ_PASSWORD is not None
+            else self.DB_PASSWORD.get_secret_value()
+        )
+        database = self.DB_READ_DATABASE or self.DB_DATABASE
+        service_name = self.DB_READ_SERVICE_NAME or self.DB_SERVICE_NAME
+
+        if self.DB_TYPE == "mysql":
+            return str(
+                MySQLDsn.build(
+                    scheme=driver,
+                    username=username,
+                    password=password,
+                    host=host,
+                    port=port,
+                    path=database,
+                    query="charset=utf8mb4",
+                )
+            )
+        elif self.DB_TYPE == "postgresql":
+            return str(
+                PostgresDsn.build(
+                    scheme=driver,
+                    username=username,
+                    password=password,
+                    host=host,
+                    port=port,
+                    path=database,
+                )
+            )
+        elif self.DB_TYPE == "oracle":
+            if password:
+                from urllib.parse import quote_plus
+
+                password = quote_plus(password)
+                return f"{driver}://{username}:{password}@{host}:{port}/?service_name={service_name}"
+            return f"{driver}://{username}@{host}:{port}/?service_name={service_name}"
         else:
             raise ValueError(f"Unsupported database type: {self.DB_TYPE}")
 

@@ -1,8 +1,9 @@
 import sys
-from datetime import UTC, time, timedelta
+from datetime import UTC, time, timedelta, timezone as dt_timezone
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import loguru
 
@@ -16,6 +17,7 @@ _DEFAULT_BASE_LOG_DIR = Path("/tmp/fastapi_logs")
 # 类型别名
 RotationType = str | int | time | timedelta
 RetentionType = str | int | timedelta
+TimezoneType = str | ZoneInfo | dt_timezone
 
 # OTel LoggingHandler 实例（延迟初始化）
 _otel_log_handler: Any = None
@@ -35,61 +37,125 @@ class LoggerHandler:
     """
 
     SYSTEM_LOG_NAMESPACE: str = "system"
-
+    DEFAULT_LOG_NAMESPACE: str = "default"
+    
     def __init__(
         self,
         *,
         level: str = "INFO",
         base_log_dir: Path | None = None,
-        system_subdir: str | None = None,
+        use_subdir: bool = False,
         rotation: RotationType = time(0, 0, 0, tzinfo=UTC),
         retention: RetentionType = timedelta(days=30),
         compression: str | None = None,
-        use_utc: bool = True,
+        timezone: TimezoneType = "UTC",
         enqueue: bool = True,
         log_format: LogFormat = LogFormat.TEXT,
     ):
         """
         构造函数：接收所有配置参数并存储为实例属性。
-
+    
         :param level: 日志等级 (e.g., "INFO", "DEBUG")
         :param base_log_dir: 日志存放的根目录，默认为当前文件父级路径下的 logs 目录
-        :param system_subdir: 系统日志子目录名，传 None 则直接存在 base_log_dir 下
-        :param rotation: 轮转策略 (默认: 每天 00:00, UTC时间)
-        :param retention: 保留策略 (默认: 30天)
+        :param use_subdir: 是否使用子目录分隔日志，True 则按 log_namespace 创建子目录，False 则所有日志存放在 base_log_dir 下
+        :param rotation: 轮转策略 (默认：每天 00:00, UTC 时间)
+        :param retention: 保留策略 (默认：30 天)
         :param compression: 压缩格式 (e.g., "zip")
-        :param use_utc: 是否强制使用 UTC 时间 (影响日志内容及轮转触发时间)
+        :param timezone: 日志时区，支持时区字符串（如 "UTC", "Asia/Shanghai"）、ZoneInfo 对象或 datetime.timezone（如 datetime.UTC），默认 "UTC"
         :param enqueue: 是否使用多进程安全的队列写入
         :param log_format: 日志格式 (LogFormat.JSON 或 LogFormat.TEXT，默认 LogFormat.TEXT)
         """
-
+    
         self._logger = loguru.logger
         self._registered_namespaces: dict[str, dict[str, Any]] = {}
         self._is_initialized = False
-
+    
         # --- 配置属性 ---
         self.level = level
         self.base_log_dir = base_log_dir or _DEFAULT_BASE_LOG_DIR
-        self.system_log_dir = (self.base_log_dir / system_subdir) if system_subdir else self.base_log_dir
+        self.use_subdir = use_subdir
         self.retention = retention
         self.compression = compression
-        self.use_utc = use_utc
         self.enqueue = enqueue
         self.log_format = log_format
-
+    
         # --- 根据 log_format 确定格式化器 ---
         is_json = self.log_format == LogFormat.JSON
         self.console_format = self._json_formatter if is_json else self._console_formatter
         self.file_format = self._json_formatter if is_json else self._file_formatter
         self.colorize = not is_json
+    
+        # --- 时区处理 ---
+        self.timezone = self._normalize_timezone(timezone)
+        self._is_utc = self.timezone.key == "UTC"
+    
+        # --- 轮转策略处理 ---
+        self.rotation = self._normalize_rotation(rotation)
 
-        # --- 轮转策略的特殊处理 ---
-        # 如果强制使用 UTC，且传入的 rotation 是默认的无时区 time 对象，
-        # 则自动为其添加 UTC 时区，确保轮转时刻与日志时间一致。
-        if self.use_utc and isinstance(rotation, time) and rotation.tzinfo is None:
-            self.rotation = rotation.replace(tzinfo=UTC)
+    def _normalize_timezone(self, timezone: TimezoneType) -> ZoneInfo:
+        """
+        将不同类型的时区参数统一转换为 ZoneInfo 对象。
+
+        Args:
+            timezone: 时区参数，支持字符串、ZoneInfo 或 datetime.timezone
+
+        Returns:
+            ZoneInfo 对象
+
+        Raises:
+            ValueError: 不支持的时区类型（如非 UTC 的 datetime.timezone）
+            TypeError: 无效的参数类型
+        """
+        if isinstance(timezone, str):
+            return ZoneInfo(timezone)
+        elif isinstance(timezone, ZoneInfo):
+            return timezone
+        elif isinstance(timezone, dt_timezone):
+            # datetime.timezone 类型（如 datetime.UTC）
+            tz_name = str(timezone)
+            if tz_name == "UTC":
+                return ZoneInfo("UTC")
+            else:
+                raise ValueError(
+                    f"Unsupported timezone: {timezone}. "
+                    f"Use ZoneInfo for non-UTC timezones, e.g., ZoneInfo('Asia/Shanghai')."
+                )
         else:
-            self.rotation = rotation
+            raise TypeError(f"timezone must be str, ZoneInfo, or datetime.timezone, got {type(timezone).__name__}")
+
+    def _normalize_rotation(self, rotation: RotationType) -> RotationType:
+        """
+        规范化轮转策略，处理 time 类型的时区问题。
+
+        对于 time 类型的 rotation：
+        - 无时区：自动使用 timezone 的时区
+        - 有时区：必须与 timezone 一致
+
+        Args:
+            rotation: 轮转策略参数
+
+        Returns:
+            规范化后的轮转策略
+
+        Raises:
+            ValueError: rotation 时区与 timezone 不一致
+        """
+        if not isinstance(rotation, time):
+            return rotation
+
+        if rotation.tzinfo is None:
+            # 无时区，自动使用 timezone 的时区
+            return rotation.replace(tzinfo=self.timezone)
+
+        # 有时区，检查是否与 timezone 一致
+        rotation_tz_name = getattr(rotation.tzinfo, "key", None) or str(rotation.tzinfo)
+        timezone_name = self.timezone.key or str(self.timezone)
+        if rotation_tz_name != timezone_name:
+            raise ValueError(
+                f"rotation timezone ({rotation_tz_name}) must match LoggerHandler timezone ({timezone_name}). "
+                f"Use rotation=time(0, 0, 0, tzinfo={self.timezone}) or set timezone='{rotation_tz_name}'."
+            )
+        return rotation
 
     def setup(self, *, write_to_file: bool = True, write_to_console: bool = True, enable_otel_bridge: bool = True) -> "loguru.Logger":
         """
@@ -146,15 +212,15 @@ class LoggerHandler:
                 filter=self._filter_system,
             )
 
-            self._registered_namespaces[self.SYSTEM_LOG_NAMESPACE] = {"sink_registered": True}
+            self._registered_namespaces[self.DEFAULT_LOG_NAMESPACE] = {"sink_registered": True}
 
         # 5. OTel 日志桥接（将 loguru 日志转发到 OTel Logs Backend）
         if enable_otel_bridge:
             self._setup_otel_bridge()
 
-        mode_str = "UTC" if self.use_utc else "Local Time"
+        tz_name = self.timezone.key if hasattr(self.timezone, "key") else str(self.timezone)
         self._logger.info(
-            f"Logger initialized. Mode: {mode_str} | Format: {self.log_format} | Rotation: {self.rotation} | Level: {self.level}"
+            f"Logger initialized. Timezone: {tz_name} | Format: {self.log_format} | Rotation: {self.rotation} | Level: {self.level}"
         )
         self._is_initialized = True
         return self._logger
@@ -194,7 +260,7 @@ class LoggerHandler:
         # 1. 检查并添加文件 Sink
         if not config["sink_registered"]:
             try:
-                self._ensure_dir(log_dir := self.base_log_dir / log_namespace)
+                log_dir = self._get_log_dir(log_namespace)
                 sink_path = log_dir / "{time:YYYY-MM-DD}.log"
 
                 self._logger.add(
@@ -320,11 +386,25 @@ class LoggerHandler:
     def _filter_system(record: Any) -> bool:
         return record["extra"].get("log_namespace") == LoggerHandler.SYSTEM_LOG_NAMESPACE
 
+    def _get_log_dir(self, log_namespace: str) -> Path:
+        """
+        获取指定命名空间的日志目录。
+
+        Args:
+            log_namespace: 日志命名空间
+
+        Returns:
+            日志目录路径
+        """
+        if self.use_subdir:
+            return self.base_log_dir / log_namespace
+        else:
+            return self.base_log_dir
+
     @staticmethod
     def _ensure_dir(path: Path):
-        if not path.parent.exists():
-            raise FileNotFoundError(f"Parent directory does not exist: {path.parent}")
-        path.mkdir(exist_ok=True)
+        """确保目录存在，如果父目录不存在则自动创建"""
+        path.mkdir(parents=True, exist_ok=True)
 
     def _setup_otel_bridge(self) -> None:
         """

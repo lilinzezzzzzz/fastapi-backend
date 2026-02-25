@@ -18,13 +18,13 @@ from pkg.toolkit.celery import CeleryClient
 
 # 需要加载的任务模块 (Python 模块路径)
 CELERY_INCLUDE_MODULES = [
-    "internal.infra.celery.register",
+    "internal.utils.celery.tasks",
 ]
 
 # 任务路由配置 (决定任务去哪个队列)
 CELERY_TASK_ROUTES = {
     # Celery 任务统一走 celery_queue
-    "internal.infra.celery.register.*": {"queue": "celery_queue"},
+    "internal.utils.celery.tasks.*": {"queue": "celery_queue"},
     # 定时任务统一走 cron_queue
     "task_sum_every_15_min": {"queue": "cron_queue"},
 }
@@ -34,13 +34,13 @@ CELERY_TASK_ROUTES = {
 STATIC_BEAT_SCHEDULE = {
     # 案例 1：Cron 风格 - 每隔 15 分钟执行一次
     "task_sum_every_15_min": {
-        "task": "internal.infra.celery.register.number_sum",
+        "task": "internal.utils.celery.tasks.number_sum",
         "schedule": crontab(minute="*/15"),
         "args": (10, 20),
     },
     # 案例 2：Interval 风格 - 每 30 秒执行一次
     "task_heartbeat_30s": {
-        "task": "internal.infra.celery.register.number_sum",
+        "task": "internal.utils.celery.tasks.number_sum",
         "schedule": 30.0,
         "args": (1, 1),
     },
@@ -98,6 +98,11 @@ celery_client.register_worker_hooks(on_startup=_worker_startup, on_shutdown=_wor
 
 # 导出原生 App 对象供 Celery CLI 使用
 celery_app: Celery = celery_client.app
+
+# 导出任务函数供外部使用
+from internal.utils.celery.tasks import number_sum  # noqa: E402
+
+__all__ = ["celery_app", "celery_client", "number_sum"]
 
 
 # =========================================================
@@ -166,13 +171,13 @@ def run_in_async[T](coro_func: Callable[[], Coroutine[None, None, T]], trace_id:
 # =========================================================
 1. 启动任务
 # 开发环境 - 基础启动
-celery -A internal.infra.celery.initialization.celery_app worker -l info -c 1 -Q default,celery_queue
+celery -A internal.utils.celery.celery_app worker -l info -c 1 -Q default,celery_queue
 
 # 开发环境 - 指定并发数（容器资源有限时建议限制）
-celery -A internal.infra.celery.initialization.celery_app worker -l info -c 2 -Q default,celery_queue
+celery -A internal.utils.celery.celery_app worker -l info -c 2 -Q default,celery_queue
 
 # 生产环境 - 推荐配置
-celery -A internal.infra.celery.initialization.celery_app worker \
+celery -A internal.utils.celery.celery_app worker \
     -l info \
     -c 4 \
     --max-tasks-per-child 1000 \
@@ -180,5 +185,5 @@ celery -A internal.infra.celery.initialization.celery_app worker \
     -Q default,celery_queue
 
 # 2. 启动 Beat (派发定时任务):
-# celery -A internal.infra.celery.initialization.celery_app beat -l info
+# celery -A internal.utils.celery.celery_app beat -l info
 """
