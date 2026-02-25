@@ -97,10 +97,25 @@ def set_trace_id(trace_id: str):
 
 
 def get_trace_id() -> str:
-    # 这里不需要 try-except LookupError 了，因为 context.get 内部处理了
     trace_id = _ctx_manager.get("trace_id")
 
-    if trace_id is None or trace_id == "unknown":
-        raise LookupError("trace_id is unknown or not set")
+    if not is_valid_trace_id(trace_id):
+        raise LookupError(f"trace_id is invalid or not set, current value: {repr(trace_id)}")
 
     return trace_id
+
+
+def is_valid_trace_id(trace_id: Any) -> bool:
+    """
+    判断 trace_id 是否有效
+
+    Args:
+        trace_id: 待检查的 trace_id
+
+    Returns:
+        bool: 如果 trace_id 有效返回 True，否则返回 False
+    """
+    if not isinstance(trace_id, str):
+        return False
+
+    return trace_id not in ("unknown", "-")

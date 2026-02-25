@@ -450,9 +450,12 @@ class LoggerHandler:
         """
         trace_id = record["extra"].get("trace_id")
 
-        # 如果 trace_id 为 None 或 "-"，尝试从 context 获取
-        if trace_id is None:
-            trace_id = context.get_trace_id()
+        # 如果 trace_id 无效，尝试从 context 获取
+        if not context.is_valid_trace_id(trace_id):
+            try:
+                return context.get_trace_id()
+            except LookupError:
+                return "-"
 
-        # 如果仍然没有，返回 "-"
+        # 确保返回有效的 trace_id
         return trace_id
