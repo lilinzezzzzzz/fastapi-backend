@@ -38,7 +38,7 @@ class LoggerHandler:
 
     SYSTEM_LOG_NAMESPACE: str = "system"
     DEFAULT_LOG_NAMESPACE: str = "default"
-    
+
     def __init__(
         self,
         *,
@@ -54,7 +54,7 @@ class LoggerHandler:
     ):
         """
         构造函数：接收所有配置参数并存储为实例属性。
-    
+
         :param level: 日志等级 (e.g., "INFO", "DEBUG")
         :param base_log_dir: 日志存放的根目录，默认为当前文件父级路径下的 logs 目录
         :param use_subdir: 是否使用子目录分隔日志，True 则按 log_namespace 创建子目录，False 则所有日志存放在 base_log_dir 下
@@ -65,11 +65,11 @@ class LoggerHandler:
         :param enqueue: 是否使用多进程安全的队列写入
         :param log_format: 日志格式 (LogFormat.JSON 或 LogFormat.TEXT，默认 LogFormat.TEXT)
         """
-    
+
         self._logger = loguru.logger
         self._registered_namespaces: dict[str, dict[str, Any]] = {}
         self._is_initialized = False
-    
+
         # --- 配置属性 ---
         self.level = level
         self.base_log_dir = base_log_dir or _DEFAULT_BASE_LOG_DIR
@@ -78,17 +78,17 @@ class LoggerHandler:
         self.compression = compression
         self.enqueue = enqueue
         self.log_format = log_format
-    
+
         # --- 根据 log_format 确定格式化器 ---
         is_json = self.log_format == LogFormat.JSON
         self.console_format = self._json_formatter if is_json else self._console_formatter
         self.file_format = self._json_formatter if is_json else self._file_formatter
         self.colorize = not is_json
-    
+
         # --- 时区处理 ---
         self.timezone = self._normalize_timezone(timezone)
         self._is_utc = self.timezone.key == "UTC"
-    
+
         # --- 轮转策略处理 ---
         self.rotation = self._normalize_rotation(rotation)
 
