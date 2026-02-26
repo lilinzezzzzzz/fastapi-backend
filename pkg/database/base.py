@@ -194,9 +194,8 @@ class ModelMixin(Base):
         self._fill_ins_update_fields()
 
         try:
-            async with session_provider() as sess:
-                async with sess.begin():
-                    sess.add(self)
+            async with session_provider() as sess, sess.begin():
+                sess.add(self)
         except Exception as e:
             raise RuntimeError(f"{self.__class__.__name__} update error: {e}") from e
 
@@ -298,9 +297,8 @@ class ModelMixin(Base):
             raise ValueError(f"session_provider is required when execute=True ({error_context})")
 
         try:
-            async with session_provider() as sess:
-                async with sess.begin():
-                    await sess.execute(stmt)
+            async with session_provider() as sess, sess.begin():
+                await sess.execute(stmt)
         except Exception as e:
             raise RuntimeError(f"{error_context} failed: {e}") from e
 
