@@ -157,6 +157,9 @@ line-ending = "auto"
 # 导入分组设置
 combine-as-imports = true
 
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Query", "fastapi.Path", "fastapi.Header", "fastapi.Depends", "fastapi.Body", "fastapi.File"]
+
 [tool.pytest.ini_options]
 markers = [
     "integration: 集成测试，需要完整的 Celery Worker 和 Redis 环境",
