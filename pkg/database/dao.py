@@ -188,7 +188,8 @@ class BaseDao[T: ModelMixin]:
             active_count = await dao.col_counter(Model.id).eq_(Model.status, "active").count()
         """
         # 构建 COUNT 语句
-        expr = func.count(distinct(count_column)) if is_distinct else func.count(count_column)
+        target = distinct(count_column) if is_distinct else count_column
+        expr = func.count(target)
         custom_stmt = select(expr).select_from(self.model_cls)
 
         return CountBuilder(

@@ -116,7 +116,8 @@ class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
 
         self._stmt = custom_stmt if custom_stmt is not None else select(self._model_cls)
 
-        if include_deleted is False and self._model_cls.has_deleted_at_column():
+        # 默认不包含已删除数据，除非明确指定 include_deleted=True
+        if include_deleted is not True and self._model_cls.has_deleted_at_column():
             self._apply_delete_at_is_none()
 
         if initial_where is not None:
@@ -228,13 +229,14 @@ class CountBuilder[T: ModelMixin](BaseBuilder[T]):
     ):
         super().__init__(model_cls, session_provider=session_provider)
 
-        # 如果提供了 custom_stmt，直接使用；否则默认统计主键 id
+        # 如果提供了 custom_stmt，直接使用；否则默认统计所有行数 COUNT(*)
         if custom_stmt is not None:
             self._stmt = custom_stmt
         else:
-            self._stmt = select(func.count(self._model_cls.id))
+            self._stmt = select(func.count())
 
-        if include_deleted is False and self._model_cls.has_deleted_at_column():
+        # 默认不包含已删除数据，除非明确指定 include_deleted=True
+        if include_deleted is not True and self._model_cls.has_deleted_at_column():
             self._apply_delete_at_is_none()
 
     @property
