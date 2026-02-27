@@ -1,6 +1,7 @@
 from collections.abc import Awaitable, Callable
+from typing import cast
 
-from sqlalchemy import Subquery, select
+from sqlalchemy import Subquery, distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute, aliased
 
@@ -85,6 +86,72 @@ class BaseDao[T: ModelMixin]:
         alias = aliased(self.model_cls, subquery)
         return QueryBuilder(self.model_cls, session_provider=self._read_session_provider, custom_stmt=select(alias))
 
+    # --- Column Queriers (只查询指定列) ---
+    def col_querier(
+        self,
+        *columns: InstrumentedAttribute,
+        include_deleted: bool = False,
+    ) -> QueryBuilder[T]:
+        """创建只查询指定列的查询器（从读库查询）
+
+        Args:
+            *columns: 要查询的列
+            include_deleted: 是否包含已删除记录
+
+        Returns:
+            QueryBuilder，只查询指定列（无默认排序）
+
+        Example:
+            # 只查询 id 列
+            ids = await dao.col_querier(Model.id).eq_(Model.org_id, 1).all()
+
+            # 查询多列
+            rows = await dao.col_querier(Model.id, Model.name).eq_(Model.org_id, 1).all()
+        """
+        if not columns:
+            raise ValueError("At least one column must be specified")
+
+        # 构建列查询的 custom_stmt
+        custom_stmt = select(*columns).select_from(self.model_cls)
+
+        return QueryBuilder(
+            self.model_cls,
+            session_provider=self._read_session_provider,
+            include_deleted=include_deleted,
+            custom_stmt=custom_stmt,
+        )
+
+    def col_write_querier(
+        self,
+        *columns: InstrumentedAttribute,
+        include_deleted: bool = False,
+    ) -> QueryBuilder[T]:
+        """创建只查询指定列的查询器（强制从主库查询，用于写后读一致性场景）
+
+        Args:
+            *columns: 要查询的列
+            include_deleted: 是否包含已删除记录
+
+        Returns:
+            QueryBuilder，只查询指定列（无默认排序）
+
+        Example:
+            # 写入后立即读取验证
+            row = await dao.col_write_querier(Model.id, Model.status).eq_(Model.id, new_id).first()
+        """
+        if not columns:
+            raise ValueError("At least one column must be specified")
+
+        # 构建列查询的 custom_stmt
+        custom_stmt = select(*columns).select_from(self.model_cls)
+
+        return QueryBuilder(
+            self.model_cls,
+            session_provider=self._session_provider,
+            include_deleted=include_deleted,
+            custom_stmt=custom_stmt,
+        )
+
     # --- Write Queriers (强制读主库，用于写后读一致性场景) ---
     @property
     def write_querier(self) -> QueryBuilder[T]:
@@ -104,12 +171,30 @@ class BaseDao[T: ModelMixin]:
         return CountBuilder(self.model_cls, session_provider=self._read_session_provider, include_deleted=False)
 
     def col_counter(self, count_column: InstrumentedAttribute, *, is_distinct: bool = False) -> CountBuilder[T]:
+        """创建统计指定列的计数器
+
+        Args:
+            count_column: 要统计的列
+            is_distinct: 是否去重统计（COUNT DISTINCT）
+
+        Returns:
+            CountBuilder，统计指定列的数量
+
+        Example:
+            # 统计部门数量
+            dept_count = await dao.col_counter(Model.dept_id, is_distinct=True).eq_(Model.org_id, 1).count()
+
+            # 统计活跃用户数
+            active_count = await dao.col_counter(Model.id).eq_(Model.status, "active").count()
+        """
+        # 构建 COUNT 语句
+        expr = func.count(distinct(count_column)) if is_distinct else func.count(count_column)
+        custom_stmt = select(expr).select_from(self.model_cls)
+
         return CountBuilder(
             self.model_cls,
             session_provider=self._read_session_provider,
-            count_column=count_column,
-            is_distinct=is_distinct,
-            include_deleted=False,
+            custom_stmt=custom_stmt,
         )
 
     # --- Updaters ---
@@ -128,10 +213,12 @@ class BaseDao[T: ModelMixin]:
         qb = qb.eq_(self.model_cls.id, primary_id)
         if creator_id and self.model_cls.has_creator_id_column():
             qb = qb.where(self.model_cls.get_creator_id_column() == creator_id)
-        return await qb.first()
+        result = await qb.first()
+        return cast(T | None, result)
 
     async def query_by_ids(self, ids: list[int]) -> list[T]:
-        return await self.querier.in_(self.model_cls.id, ids).all()
+        result = await self.querier.in_(self.model_cls.id, ids).all()
+        return cast(list[T], result)
 
 
 async def execute_transaction(

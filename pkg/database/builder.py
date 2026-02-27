@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Self, cast
 
-from sqlalchemy import ClauseElement, ColumnElement, Delete, Select, Update, distinct, func, or_, select, update
+from sqlalchemy import ClauseElement, ColumnElement, Delete, Select, Update, func, or_, select, update
 from sqlalchemy.orm import InstrumentedAttribute, Mapped
 
 from pkg.database.base import ModelMixin, SessionProvider
@@ -128,6 +128,36 @@ class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
             raise RuntimeError("Statement is not a Select")
         return self._stmt
 
+    # --- 字段选择 ---
+    def with_columns(self, *cols: InstrumentedAttribute) -> Self:
+        """指定要查询的字段并构造 Select 语句
+
+        Args:
+            *cols: 要查询的字段列表
+
+        Returns:
+            Self: 支持链式调用
+
+        Example:
+            >>> await QueryBuilder(User).with_columns(User.id, User.name).all()
+            # SELECT id, name FROM users
+        """
+        if not cols:
+            raise ValueError("At least one column must be specified")
+
+        # 保存原有的 WHERE 条件
+        original_where = self._stmt.whereclause
+
+        # 从原始语句中提取表信息并构造新的 Select
+        from_table = self._stmt.select_from_set[0] if self._stmt.select_from_set else self._model_cls
+        self._stmt = select(*cols).select_from(from_table)
+
+        # 恢复原有的 WHERE 条件
+        if original_where is not None:
+            self._stmt = self._stmt.where(original_where)
+
+        return self
+
     # --- 排序与分组 ---
     def distinct_(self, *cols: InstrumentedAttribute) -> Self:
         self._stmt = self.select_stmt.distinct(*cols)
@@ -151,20 +181,37 @@ class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
         self._stmt = self.select_stmt.offset((page - 1) * limit).limit(limit)
         return self
 
-    async def all(self) -> list[T]:
+    async def all(self) -> list[T] | list[tuple]:
         try:
             async with self._session_provider() as sess:
                 result = await sess.execute(self.select_stmt)
                 await sess.commit()
+
+                # 通过检查 SELECT 语句的列数来判断是否是指定字段查询
+                # 如果只选择了部分列（不是整个模型），返回元组列表
+                stmt_columns_count = len(self.select_stmt.selected_columns)
+                model_columns_count = len(self._model_cls.__table__.columns)
+
+                if stmt_columns_count < model_columns_count:
+                    # 指定字段查询，返回元组列表
+                    return cast(list[tuple], result.all())
                 return cast(list[T], result.scalars().all())
         except Exception as e:
             raise RuntimeError(f"Error when querying all data, {self._model_cls.__name__}: {e}") from e
 
-    async def first(self) -> T | None:
+    async def first(self) -> T | tuple | None:
         try:
             async with self._session_provider() as sess:
                 result = await sess.execute(self.select_stmt)
                 await sess.commit()
+
+                # 通过检查 SELECT 语句的列数来判断是否是指定字段查询
+                stmt_columns_count = len(self.select_stmt.selected_columns)
+                model_columns_count = len(self._model_cls.__table__.columns)
+
+                if stmt_columns_count < model_columns_count:
+                    # 指定字段查询，返回元组
+                    return cast(tuple, result.first())
                 return result.scalars().first()
         except Exception as e:
             raise RuntimeError(f"Error when querying first data, {self._model_cls.__name__}: {e}") from e
@@ -176,14 +223,16 @@ class CountBuilder[T: ModelMixin](BaseBuilder[T]):
         model_cls: type[T],
         *,
         session_provider: SessionProvider,
-        count_column: InstrumentedAttribute | None = None,
-        is_distinct: bool = False,
-        include_deleted: bool = None,
+        custom_stmt: Select | None = None,
+        include_deleted: bool | None = None,
     ):
         super().__init__(model_cls, session_provider=session_provider)
-        col = count_column if count_column is not None else self._model_cls.id
-        expr = func.count(distinct(col)) if is_distinct else func.count(col)
-        self._stmt = select(expr)
+
+        # 如果提供了 custom_stmt，直接使用；否则默认统计主键 id
+        if custom_stmt is not None:
+            self._stmt = custom_stmt
+        else:
+            self._stmt = select(func.count(self._model_cls.id))
 
         if include_deleted is False and self._model_cls.has_deleted_at_column():
             self._apply_delete_at_is_none()
@@ -270,14 +319,20 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
 
         return self._update_stmt.values(**self._update_dict).execution_options(synchronize_session=False)
 
-    async def execute(self):
+    async def execute(self) -> int:
+        """执行更新操作
+
+        Returns:
+            int: 受影响的行数，可用于乐观锁检测（0 表示更新失败，数据可能已被其他事务修改）
+        """
         if not self._update_dict:
-            return
+            return 0
 
         try:
             async with self._session_provider() as sess:
-                await sess.execute(self.update_stmt)
+                result = await sess.execute(self.update_stmt)
                 await sess.commit()
+                return result.rowcount
         except Exception as e:
             raise RuntimeError(f"Error when updating data, {self._model_cls.__name__}: {e}") from e
 
