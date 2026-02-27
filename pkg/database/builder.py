@@ -184,40 +184,68 @@ class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
         self._stmt = self.select_stmt.offset((page - 1) * limit).limit(limit)
         return self
 
-    async def all(self) -> list[T] | list[tuple]:
+    async def all(self) -> list[T]:
+        """查询所有完整模型对象
+
+        Returns:
+            模型对象列表
+
+        Example:
+            users = await dao.querier.eq_(User.status, "active").all()
+        """
         try:
             async with self._session_provider() as sess:
                 result = await sess.execute(self.select_stmt)
                 await sess.commit()
-
-                # 通过检查 SELECT 语句的列数来判断是否是指定字段查询
-                # 如果只选择了部分列（不是整个模型），返回元组列表
-                stmt_columns_count = len(self.select_stmt.selected_columns)
-                model_columns_count = len(self._model_cls.__table__.columns)
-
-                if stmt_columns_count < model_columns_count:
-                    # 指定字段查询，返回元组列表
-                    return cast(list[tuple], result.all())
                 return cast(list[T], result.scalars().all())
         except Exception as e:
             raise RuntimeError(f"Error when querying all data, {self._model_cls.__name__}: {e}") from e
 
-    async def first(self) -> T | tuple | None:
+    async def first(self) -> T | None:
+        """查询第一条完整模型对象
+
+        Returns:
+            模型对象或 None
+
+        Example:
+            user = await dao.querier.eq_(User.id, 1).first()
+        """
         try:
             async with self._session_provider() as sess:
                 result = await sess.execute(self.select_stmt)
                 await sess.commit()
-
-                # 通过检查 SELECT 语句的列数来判断是否是指定字段查询
-                stmt_columns_count = len(self.select_stmt.selected_columns)
-                model_columns_count = len(self._model_cls.__table__.columns)
-
-                if stmt_columns_count < model_columns_count:
-                    # 指定字段查询，返回元组
-                    return cast(tuple, result.first())
                 return result.scalars().first()
         except Exception as e:
             raise RuntimeError(f"Error when querying first data, {self._model_cls.__name__}: {e}") from e
+
+    async def values(self) -> list[tuple]:
+        """返回列查询的元组列表
+
+        用于 col_querier() 场景，返回元组列表：
+        - 单列查询：返回单元素元组列表
+        - 多列查询：返回多元素元组列表
+
+        Returns:
+            元组列表
+
+        Example:
+            # 单列查询
+            ids = await dao.col_querier(Model.id).eq_(Model.org_id, 1).values()
+            # 返回：[(1,), (2,), (3,)]
+
+            # 多列查询
+            rows = await dao.col_querier(Model.id, Model.name).eq_(...).values()
+            # 返回：[(1, "Alice"), (2, "Bob")]
+        """
+        try:
+            async with self._session_provider() as sess:
+                result = await sess.execute(self.select_stmt)
+                await sess.commit()
+                return cast(list[tuple], result.all())
+        except Exception as e:
+            raise RuntimeError(
+                f"Error when querying values, {self._model_cls.__name__}: {e}"
+            ) from e
 
 
 class CountBuilder[T: ModelMixin](BaseBuilder[T]):
