@@ -129,37 +129,39 @@ class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
             raise RuntimeError("Statement is not a Select")
         return self._stmt
 
-    # --- 字段选择 ---
-    def with_columns(self, *cols: InstrumentedAttribute) -> Self:
-        """指定要查询的字段并构造 Select 语句
+    # --- 排序与分组 ---
+    def group_by_(self, *cols: InstrumentedAttribute | Mapped) -> Self:
+        """添加 GROUP BY 子句
 
         Args:
-            *cols: 要查询的字段列表
+            *cols: 分组字段列表
 
         Returns:
             Self: 支持链式调用
 
         Example:
-            >>> await QueryBuilder(User).with_columns(User.id, User.name).all()
-            # SELECT id, name FROM users
+            # 按部门分组统计
+            await QueryBuilder(User).group_by_(User.dept_id).all()
         """
-        if not cols:
-            raise ValueError("At least one column must be specified")
-
-        # 保存原有的 WHERE 条件
-        original_where = self._stmt.whereclause
-
-        # 从原始语句中提取表信息并构造新的 Select
-        from_table = self._stmt.select_from_set[0] if self._stmt.select_from_set else self._model_cls
-        self._stmt = select(*cols).select_from(from_table)
-
-        # 恢复原有的 WHERE 条件
-        if original_where is not None:
-            self._stmt = self._stmt.where(original_where)
-
+        self._stmt = self.select_stmt.group_by(*cols)
         return self
 
-    # --- 排序与分组 ---
+    def order_by_expr_(self, expr: ClauseElement) -> Self:
+        """按表达式排序
+
+        Args:
+            expr: 排序表达式，如 func.max(Model.updated_at).desc()
+
+        Returns:
+            Self: 支持链式调用
+
+        Example:
+            # 按 MAX(updated_at) 降序排序
+            qb.group_by(Model.dept_id).order_by_expr(func.max(Model.updated_at).desc())
+        """
+        self._stmt = self.select_stmt.order_by(expr)
+        return self
+
     def distinct_(self, *cols: InstrumentedAttribute) -> Self:
         self._stmt = self.select_stmt.distinct(*cols)
         return self
