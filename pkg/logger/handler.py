@@ -83,7 +83,6 @@ class LoggerHandler:
 
         # --- 时区处理 ---
         self.timezone = self._normalize_timezone(timezone)
-        self._is_utc = self.timezone.key == "UTC"
 
         # --- 轮转策略处理 ---
         self.rotation = self._normalize_rotation(rotation)
