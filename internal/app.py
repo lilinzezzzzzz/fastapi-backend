@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 
+from internal import BASE_LOG_DIR
 from internal.config import init_settings, settings
 from internal.infra.database import close_async_db, init_async_db
 from internal.infra.redis import close_async_redis, init_async_redis
@@ -83,7 +84,10 @@ async def lifespan(_app: FastAPI):
     init_settings()
 
     # 初始化日志（使用配置中的格式）
-    init_logger(log_format=settings.LOG_FORMAT)
+    init_logger(
+        log_format=settings.LOG_FORMAT,
+        base_log_dir=BASE_LOG_DIR
+        )
     # 初始化 DB（使用配置中的 echo）
     init_async_db(echo=settings.DB_ECHO)
     # 初始化 Redis

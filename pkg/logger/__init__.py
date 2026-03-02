@@ -47,7 +47,6 @@ def init_logger(
     *,
     level: str = "INFO",
     base_log_dir: Path | None = None,
-    use_subdir: bool = False,
     rotation: RotationType = time(0, 0, 0, tzinfo=UTC),
     retention: RetentionType = timedelta(days=30),
     compression: str | None = None,
@@ -56,6 +55,7 @@ def init_logger(
     log_format: LogFormat | str = LogFormat.TEXT,
     write_to_file: bool = True,
     write_to_console: bool = True,
+    use_subdir: bool = False,
 ) -> "Logger":
     """
     初始化应用层 Logger。
