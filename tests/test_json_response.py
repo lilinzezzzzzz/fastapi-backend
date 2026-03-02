@@ -1,9 +1,8 @@
 import sys
 import uuid
-import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Optional
 
 import pytest
 from fastapi import FastAPI
@@ -22,7 +21,6 @@ except ImportError:
 from pkg.toolkit.json import orjson_dumps, orjson_dumps_bytes, orjson_loads
 from pkg.toolkit.response import (
     AppError,
-    AppStatus,
     CustomORJSONResponse,
     error_response,
     success_list_response,

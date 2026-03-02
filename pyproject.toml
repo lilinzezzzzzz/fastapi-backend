@@ -75,6 +75,7 @@ dependencies = [
     "opentelemetry-instrumentation-sqlalchemy>=0.41b0",
     "opentelemetry-instrumentation-redis>=0.41b0",
     "opentelemetry-instrumentation-logging>=0.41b0",
+    "zvec>=0.2.0",
 ]
 
 # 分组依赖 —— 开发环境才需要
