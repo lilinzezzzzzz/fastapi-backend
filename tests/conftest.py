@@ -528,7 +528,7 @@ def cleanup_after_test():
 
     # 重置配置
     try:
-        from internal.config.loader import reset_settings
+        from internal.config import reset_settings
 
         reset_settings()
     except ImportError:
