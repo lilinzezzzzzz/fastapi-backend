@@ -2,6 +2,69 @@
 
 This file provides guidance to Qoder (qoder.com) when working with code in this repository.
 
+## Role & Context
+
+* **User Role:** Senior Python Backend Development Engineer
+* **Tech Stack:**
+  * Backend: FastAPI, SQLAlchemy 2.0, Pydantic v2, Celery
+  * Database: MySQL, PostgreSQL, Oracle, Redis
+  * Tools: uv, ruff, mypy, pytest
+
+## Coding Standards
+
+### Python
+
+* **Style:**
+  * Pythonic, Pydantic v2, PEP 8 compliant
+  * Line length: 120 characters
+  * Use double quotes for strings
+  * Python 3.12+ syntax (PEP 695 generic syntax, `type[T]`)
+* **Type Safety:**
+  * All functions must have type annotations
+  * Use Pydantic models for request/response schemas
+  * Prefer `basedpyright` or `mypy` for type checking
+* **Database:**
+  * Prefer SQLAlchemy ORM over raw SQL
+  * Use SQLAlchemy 2.0 style with type annotations
+  * All models extend `ModelMixin` with Snowflake IDs
+* **API Design:**
+  * Use FastAPI for REST APIs
+  * DAO pattern for database access (`internal/dao/`)
+  * Service layer for business logic (`internal/services/`)
+* **Runtime:**
+  * Use `uv` for dependency management
+  * `uv sync` for development, `uv sync --no-dev --frozen` for production
+
+### Architecture
+
+* **Layered Architecture:** controllers → services → dao → infra
+* **Dependency Direction:** Higher layers depend on lower layers, never the reverse
+* **Core Layer:** Only for shared utilities (exceptions, error codes), no business logic
+* **Infra Layer:** Only for connection management, no DAOs or business logic
+
+### Code Quality
+
+* Run `ruff check .` and `ruff format .` before committing
+* Pre-commit hooks automatically run ruff
+* Type checking enforced with `mypy .`
+
+## Git Commit Specification
+
+* **Format:** `<type>(<scope>): <subject>`
+* **Types:** feat, fix, chore, docs, style, refactor, test, perf, ci
+* **Examples:**
+  * `feat(auth): add JWT token refresh endpoint`
+  * `fix(dao): resolve connection pool leak in async sessions`
+  * `refactor(tasks): reorganize Celery tasks to dedicated layer`
+* **Language:** Commit messages in English, code comments in Chinese for business logic
+
+## Response Preferences
+
+* **Language:** Respond in Chinese (中文)
+* **Conciseness:** Be direct, avoid unnecessary explanations
+* **Solution-Oriented:** Prioritize robustness and maintainability
+* **File Operations:** Always use `search_replace` for edits, never create new files unless explicitly required
+
 ## Project Overview
 
 FastAPI backend application built with Python 3.12+ using a layered architecture pattern. The project uses `uv` for dependency management and includes Celery for async task processing, Redis for caching, and SQLAlchemy for database operations with support for MySQL, PostgreSQL, and Oracle.
@@ -88,14 +151,13 @@ celery -A internal.utils.celery.celery_app worker \
   - `dtos/` - Data Transfer Objects for internal data structures
   - `middlewares/` - ASGI middleware (auth, logging, etc.)
   - `config/` - Configuration management with environment-based loading
-  - `core/` - Core utilities (auth, exceptions)
+  - `core/` - Core utilities (exceptions, error codes)
   - `infra/` - Infrastructure layer (database, redis connection management)
-  - `tasks/` - Shared task logic (reusable by Celery and APScheduler)
+  - `tasks/` - Task scheduling layer (Celery tasks, Beat schedule)
   - `utils/` - Internal utilities
-    - `celery/` - Celery app initialization and task registration
+    - `celery/` - Celery client configuration and lifecycle hooks
     - `apscheduler/` - APScheduler configuration
     - `redis/` - Redis utilities
-    - `vector/` - Vector database utilities
     - `anyio_task.py` - AnyIO task handler
     - `signature.py` - Signature authentication
     - `snowflake.py` - Snowflake ID generator
@@ -189,22 +251,24 @@ Each controller module defines routers that are aggregated in `__init__.py` and 
 The project supports three async task strategies with distinct use cases:
 
 - **Celery**: Distributed task queue for long-running tasks
-  - Task definitions in `internal/tasks/`, registered via `internal/utils/celery/tasks.py`
-  - Initialization in `internal/utils/celery/__init__.py` with worker lifecycle hooks
-  - Worker startup: `python scripts/run_celery_worker.py` or use Celery CLI directly
-  - Use `run_in_async()` helper to execute async code within Celery tasks (handles event loop creation)
-  - Supports dynamic queue routing via `CELERY_TASK_ROUTES`
+  - Task definitions in `internal/tasks/celery_tasks.py`
+  - Schedule config in `internal/tasks/scheduler.py`
+  - Client initialization in `internal/utils/celery/__init__.py`
+  - Worker startup: `python scripts/run_celery_worker.py` or `./scripts/run_celery_worker.sh`
+  - Use `run_in_async()` helper to execute async code within Celery tasks
 
-- **APScheduler**: Scheduled/periodic tasks (integrated with Celery Beat)
-  - Static schedules defined in `STATIC_BEAT_SCHEDULE` in `internal/utils/celery/__init__.py`
+- **APScheduler**: Scheduled/periodic tasks
+  - Task registration in `internal/utils/apscheduler/__init__.py`
   - Supports both cron and interval-based scheduling
-  - Beat scheduler: `celery -A internal.utils.celery.celery_app beat -l info`
 
 - **AnyIO Tasks**: Background tasks within FastAPI request lifecycle
   - Managed by `AnyioTaskHandler` in `pkg/toolkit/async_task.py`
-  - Initialized during app lifespan, auto-cleaned on shutdown
-  - Supports task tracking, cancellation, timeout, and concurrency limiting
   - Use for request-scoped async operations (e.g., fire-and-forget notifications)
+
+**Task Types:**
+1. Independent business logic: Call services layer, task is just scheduling wrapper
+2. Coordinate multiple services: Compose calls to multiple services
+3. Pure tech ops: Heartbeat, cache warmup (no services needed)
 
 **Pattern**: Use AnyIO for lightweight request-scoped tasks, Celery for distributed/long-running operations, and APScheduler for periodic jobs.
 
