@@ -7,8 +7,8 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header
 
 from internal.config import settings
-from internal.core.exception import AppException, errors
-from internal.infra.redis import cache_dao
+from internal.core import AppException, errors
+from internal.dao.cache import cache_dao
 from internal.schemas.user import (
     UserDetailSchema,
     UserLoginReqSchema,

@@ -1,3 +1,8 @@
+"""APScheduler 定时任务管理
+
+任务定义在 internal/tasks/ 目录，此处仅负责调度注册
+"""
+
 from pkg.logger import logger
 from pkg.toolkit.apscheduler import ApsSchedulerManager
 from pkg.toolkit.types import lazy_proxy
@@ -18,10 +23,19 @@ def init_apscheduler():
 
 
 def _register_tasks(manager: ApsSchedulerManager):
-    """注册定时任务"""
-    from internal.utils.apscheduler.tasks import handle_number_sum
+    """注册定时任务
 
-    manager.register_cron(handle_number_sum, cron_kwargs={"minute": "*/15", "second": 0})
+    从 internal/tasks 导入任务函数并注册到 APScheduler
+    """
+    from internal.tasks import number_sum
+
+    # 示例：每 15 分钟执行一次
+    manager.register_cron(number_sum, cron_kwargs={"minute": "*/15", "second": 0})
+
+    # 其他任务示例（按需启用）
+    # from internal.tasks import clean_expired_tokens, heartbeat, warmup_cache
+    # manager.register_interval(heartbeat, seconds=30)
+    # manager.register_cron(clean_expired_tokens, cron_kwargs={"hour": 3, "minute": 0})
 
 
 def _get_apscheduler_manager() -> ApsSchedulerManager:
@@ -31,3 +45,5 @@ def _get_apscheduler_manager() -> ApsSchedulerManager:
 
 
 apscheduler_manager = lazy_proxy(_get_apscheduler_manager)
+
+__all__ = ["apscheduler_manager", "init_apscheduler"]

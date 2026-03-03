@@ -1,50 +1,30 @@
 from collections.abc import Callable, Coroutine
 from pathlib import Path
+from typing import TypeVar
 
 import anyio
 from celery import Celery
-from celery.schedules import crontab
 
 from internal.config import init_settings, settings
 from internal.infra.database import close_async_db, init_async_db, reset_async_db
 from internal.infra.redis import close_async_redis, init_async_redis, reset_async_redis
+from internal.tasks import (
+    CELERY_INCLUDE_MODULES,
+    CELERY_TASK_ROUTES,
+    STATIC_BEAT_SCHEDULE,
+)
 from pkg.logger import init_logger, logger
 from pkg.toolkit import context
 from pkg.toolkit.celery import CeleryClient
 
-# =========================================================
-# 1. 基础配置定义
-# =========================================================
-
-# 需要加载的任务模块 (Python 模块路径)
-CELERY_INCLUDE_MODULES = [
-    "internal.utils.celery.tasks",
+__all__ = [
+    "celery_app",
+    "celery_client",
+    "run_in_async",
+    "check_celery_health",
 ]
 
-# 任务路由配置 (决定任务去哪个队列)
-CELERY_TASK_ROUTES = {
-    # Celery 任务统一走 celery_queue
-    "internal.utils.celery.tasks.*": {"queue": "celery_queue"},
-    # 定时任务统一走 cron_queue
-    "task_sum_every_15_min": {"queue": "cron_queue"},
-}
-
-# 静态定时任务表 (Beat Schedule)
-# 注意：Key 是任务的唯一标识，Value 中的 'task' 必须与 @task(name=...) 一致
-STATIC_BEAT_SCHEDULE = {
-    # 案例 1：Cron 风格 - 每隔 15 分钟执行一次
-    "task_sum_every_15_min": {
-        "task": "internal.utils.celery.tasks.number_sum",
-        "schedule": crontab(minute="*/15"),
-        "args": (10, 20),
-    },
-    # 案例 2：Interval 风格 - 每 30 秒执行一次
-    "task_heartbeat_30s": {
-        "task": "internal.utils.celery.tasks.number_sum",
-        "schedule": 30.0,
-        "args": (1, 1),
-    },
-}
+T = TypeVar("T")
 
 
 # =========================================================
@@ -98,12 +78,6 @@ celery_client.register_worker_hooks(on_startup=_worker_startup, on_shutdown=_wor
 
 # 导出原生 App 对象供 Celery CLI 使用
 celery_app: Celery = celery_client.app
-
-# 导出任务函数供外部使用
-from internal.utils.celery.tasks import number_sum  # noqa: E402
-
-__all__ = ["celery_app", "celery_client", "number_sum"]
-
 
 # =========================================================
 # 4. FastAPI 集成辅助函数

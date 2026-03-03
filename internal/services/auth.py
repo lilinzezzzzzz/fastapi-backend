@@ -1,5 +1,7 @@
-from internal.core.exception import AppException, errors
-from internal.infra.redis import cache_dao
+"""认证服务层"""
+
+from internal.core import AppException, errors
+from internal.dao.cache import cache_dao
 
 
 async def verify_token(token: str) -> dict:

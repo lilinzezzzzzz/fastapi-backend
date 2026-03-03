@@ -1,4 +1,4 @@
-"""Redis 数据访问对象"""
+"""Redis 缓存数据访问对象"""
 
 from internal.infra.redis.connection import redis_client
 from pkg.logger import logger
@@ -8,7 +8,7 @@ from pkg.toolkit.redis_client import RedisClient
 
 class CacheDao:
     """
-    Redis 数据访问对象
+    Redis 缓存数据访问对象
     """
 
     def __init__(self, redis_cli: RedisClient):

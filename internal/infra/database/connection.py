@@ -1,3 +1,5 @@
+"""数据库连接管理"""
+
 import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager

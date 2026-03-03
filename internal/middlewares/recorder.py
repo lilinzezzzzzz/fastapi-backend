@@ -6,7 +6,7 @@ from fastapi.responses import Response
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from internal.core.exception import AppException, errors
+from internal.core import AppException, errors
 from pkg.logger import logger
 from pkg.toolkit import context
 from pkg.toolkit.exc import get_business_exec_tb, get_unexpected_exec_tb
