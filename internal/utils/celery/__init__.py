@@ -1,3 +1,14 @@
+"""Celery 客户端配置与生命周期管理
+
+职责：
+- Celery 客户端初始化（celery_app, celery_client）
+- Worker 生命周期钩子（启动/关闭）
+- 异步代码执行辅助（run_in_async）
+- 健康检查（check_celery_health）
+
+任务定义在 internal/tasks/ 目录，此处仅负责调度配置。
+"""
+
 from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import TypeVar
