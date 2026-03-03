@@ -1,27 +1,47 @@
+"""通用装饰器模块
+
+提供异步生成器计时等装饰器。
+此模块不依赖项目日志，默认使用标准库 logging。
+"""
+
+import logging
 import time
-from collections.abc import AsyncGenerator, AsyncIterable, Callable
+from collections.abc import AsyncGenerator, Callable
 from functools import wraps
-from typing import Any, cast
+from typing import Any
 
-import anyio
-from starlette.requests import Request
+from loguru import Logger as LoguruLogger
 
-from pkg.logger import logger
-from pkg.toolkit.response import wrap_sse_data
+# 默认日志器（标准库）
+_default_logger = logging.getLogger(__name__)
+
+# 支持的日志器类型
+LoggerType = logging.Logger | LoguruLogger
 
 
-def async_generator_timer(slow_threshold: float = 5.0):
+def async_generator_timer(
+    slow_threshold: float = 5.0,
+    *,
+    logger: LoggerType | None = None,
+):
     """
     异步生成器计时装饰器，用于统计 Handler.handle 方法或普通异步生成器函数的执行时间。
 
     Args:
         slow_threshold: 慢执行阈值（秒），超过此时间会记录警告日志
+        logger: 可选的日志器实例，默认使用标准库 logging
 
-    Usage:
-        @async_generator_timer(slow_threshold=5.0)
-        async def handle(self, messages, **kwargs):
-            ...
+    Examples:
+        # 使用默认标准库 logging
+        @async_generator_timer()
+        async def handle(): ...
+
+        # 注入项目日志
+        from pkg.logger import logger as app_logger
+        @async_generator_timer(logger=app_logger)
+        async def handle(): ...
     """
+    _logger = logger or _default_logger
 
     def decorator(func: Callable[..., AsyncGenerator[Any, None]]):
         @wraps(func)
@@ -34,64 +54,17 @@ def async_generator_timer(slow_threshold: float = 5.0):
 
             start_time = time.perf_counter()
 
-            logger.info(f"Starting {handler_name}...")
+            _logger.info(f"Starting {handler_name}...")
             try:
                 async for response in func(*args, **kwargs):
                     yield response
             finally:
                 elapsed = time.perf_counter() - start_time
                 if elapsed > slow_threshold:
-                    logger.info(f"SLOW: {handler_name} took {elapsed:.3f}s (threshold: {slow_threshold}s)")
+                    _logger.warning(f"SLOW: {handler_name} took {elapsed:.3f}s (threshold: {slow_threshold}s)")
                 else:
-                    logger.info(f"Completed {handler_name} in {elapsed:.3f}s")
+                    _logger.info(f"Completed {handler_name} in {elapsed:.3f}s")
 
         return wrapper
 
     return decorator
-
-
-async def stream_with_chunk_control[T](
-    _: Request,
-    generator: AsyncIterable[T],
-    chunk_timeout: float,
-    is_sse: bool = True,
-) -> AsyncIterable[T]:
-    """
-    基于 AnyIO 的单 Chunk 超时控制。
-    总超时由 Middleware 统一控制。
-    """
-    iterator = generator.__aiter__()
-
-    while True:
-        try:
-            # 使用 anyio.fail_after 仅控制获取下一个 chunk 的等待时间
-            with anyio.fail_after(chunk_timeout):
-                item = await iterator.__anext__()
-
-            yield item
-
-        except StopAsyncIteration:
-            break
-
-        except TimeoutError:
-            # 仅处理 Chunk 生成超时（卡顿）
-            logger.warning(f"[Stream Timeout] Chunk generation timed out after {chunk_timeout}s")
-
-            if is_sse:
-                err_data = {"code": 408, "message": f"Stream chunk timed out. No data received for {chunk_timeout}s"}
-                yield cast(T, wrap_sse_data(err_data))
-
-            # 单个 Chunk 超时通常意味着上游服务卡死，建议中断流
-            break
-
-        except anyio.get_cancelled_exc_class() as e:
-            # 处理 Middleware 触发的总超时取消 或 客户端断连
-            # 当 Middleware 的 fail_after 触发时，会向这里注入 CancelledError
-            logger.info(f"Stream cancelled (Client disconnected or Global Timeout). Msg: {str(e)}")
-            raise e  # 必须抛出，以便 Middleware 或 Server 正确关闭连接
-
-        except Exception as e:
-            logger.error(f"Stream generation error: {e}", exc_info=True)
-            if is_sse:
-                yield cast(T, wrap_sse_data({"code": 500, "message": str(e)}))
-            break

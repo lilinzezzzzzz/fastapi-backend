@@ -1,5 +1,7 @@
 """全局错误码定义"""
 
+from typing import Any
+
 from pkg.toolkit.response import AppError
 
 
@@ -16,9 +18,40 @@ class GlobalErrors:
     NotFound = AppError(40004, {"zh": "资源不存在", "en": "Not Found"})
     PayloadTooLarge = AppError(40005, {"zh": "请求载荷过大", "en": "Payload Too Large"})
     UnprocessableEntity = AppError(40006, {"zh": "无法处理的实体", "en": "Unprocessable Entity"})
+    StreamTimeout = AppError(40800, {"zh": "流超时", "en": "Stream Timeout"})
 
     # 服务端错误 (50000 - 59999)
     InternalServerError = AppError(50000, {"zh": "服务器内部错误", "en": "Internal Server Error"})
+    StreamError = AppError(50001, {"zh": "流处理错误", "en": "Stream Error"})
 
 
 errors = GlobalErrors()
+
+
+# =========================================================
+# 流处理异常
+# =========================================================
+
+
+class StreamTimeoutError(Exception):
+    """流超时异常
+
+    当流中的 chunk 生成超时时抛出。
+    """
+
+    def __init__(self, message: str, timeout: float, context: dict[str, Any] | None = None):
+        super().__init__(message)
+        self.timeout = timeout
+        self.context = context or {}
+
+
+class StreamError(Exception):
+    """流处理异常
+
+    当流处理过程中发生错误时抛出。
+    """
+
+    def __init__(self, message: str, original_error: Exception, context: dict[str, Any] | None = None):
+        super().__init__(message)
+        self.original_error = original_error
+        self.context = context or {}

@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 from internal.core import AppException, errors
 from internal.utils.anyio_task import anyio_task_manager
-from pkg.decorators import stream_with_chunk_control
+from internal.utils.stream import stream_with_chunk_control
 from pkg.logger import logger
 from pkg.toolkit.response import success_response
 
@@ -107,6 +107,6 @@ async def fake_stream_generator():
 @router.get("/chat/sse-stream/timeout", summary="测试SSE超时控制")
 async def chat_endpoint(request: Request):
     wrapped_generator = stream_with_chunk_control(
-        request, generator=fake_stream_generator(), chunk_timeout=2.0, is_sse=True
+        generator=fake_stream_generator(), chunk_timeout=2.0, is_sse=True
     )
     return StreamingResponse(wrapped_generator, media_type="text/event-stream")
