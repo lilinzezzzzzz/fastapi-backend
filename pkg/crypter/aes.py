@@ -1,6 +1,6 @@
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet
 
-from pkg.crypter.base import BaseCryptoUtil, EncryptionAlgorithm, register_algorithm
+from pkg.crypter import BaseCryptoUtil, EncryptionAlgorithm, register_algorithm
 
 
 @register_algorithm(EncryptionAlgorithm.AES)
@@ -21,7 +21,7 @@ class AESCipher(BaseCryptoUtil):
                 f"Invalid AES key. Key must be 32 url-safe base64-encoded bytes.\n"
                 f"Original error: {e}\n"
                 f"Tip: You can use AESCipher.generate_key() to get a valid key."
-            )
+            ) from e
 
     @staticmethod
     def generate_key() -> str:
@@ -39,8 +39,8 @@ class AESCipher(BaseCryptoUtil):
         try:
             decrypted_bytes = self._fernet.decrypt(cipher_text.encode("utf-8"))
             return decrypted_bytes.decode("utf-8")
-        except InvalidToken:
-            raise ValueError("Decryption failed: Invalid token or wrong key")
+        except Exception as e:
+            raise ValueError("Decryption failed: Invalid token or wrong key") from e
 
 
 def aes_encrypt(plaintext: str, secret_key: str | bytes) -> str:
