@@ -13,7 +13,16 @@ from pkg.database.builder import CountBuilder, QueryBuilder, UpdateBuilder
 
 
 class BaseDao[T: ModelMixin]:
-    _model_cls: type[T] | None = None  # 类型提示
+    """
+    数据访问对象基类，提供通用的 CRUD 操作。
+
+    建议:
+        在子类中访问模型字段时，建议使用 self.model_cls 而非直接引用具体的模型类名。
+
+        例如: self.model_cls.phone 而非 User.phone
+    """
+
+    _model_cls: type[T] | None = None
 
     def __init__(
         self,
