@@ -1,6 +1,6 @@
 from collections.abc import Awaitable, Callable
 
-from sqlalchemy import Subquery, select
+from sqlalchemy import Subquery, distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute, aliased
 
@@ -63,8 +63,41 @@ class BaseDao[T: ModelMixin]:
 
     @property
     def querier(self) -> QueryBuilder[T]:
-        return QueryBuilder(self.model_cls, session_provider=self._read_session_provider, include_deleted=False).desc_(
-            self.model_cls.updated_at
+        return QueryBuilder(
+            self.model_cls,
+            session_provider=self._read_session_provider,
+            include_deleted=False,
+        ).desc_(self.model_cls.updated_at)
+
+    def col_querier(
+        self,
+        *columns: InstrumentedAttribute,
+        include_deleted: bool = False,
+    ) -> QueryBuilder[T]:
+        """创建只查询指定列的查询器
+
+        Args:
+            columns: 要查询的列
+            include_deleted: 是否包含已删除记录
+
+        Returns:
+            QueryBuilder，只查询指定列（无默认排序）
+
+        Example:
+            # 只查询 id 列
+            ids = await dao.col_querier(Model.id).eq_(Model.org_id, 1).values()
+
+            # 查询多列
+            rows = await dao.col_querier(Model.id, Model.name).eq_(...).values()
+        """
+        # 构建列查询的 custom_stmt
+        custom_stmt = select(*columns).select_from(self.model_cls) if columns else None
+
+        return QueryBuilder(
+            self.model_cls,
+            session_provider=self._session_provider,
+            include_deleted=include_deleted,
+            custom_stmt=custom_stmt,
         )
 
     @property
@@ -101,15 +134,43 @@ class BaseDao[T: ModelMixin]:
     # --- Counters ---
     @property
     def counter(self) -> CountBuilder[T]:
-        return CountBuilder(self.model_cls, session_provider=self._read_session_provider, include_deleted=False)
-
-    def col_counter(self, count_column: InstrumentedAttribute, *, is_distinct: bool = False) -> CountBuilder[T]:
         return CountBuilder(
             self.model_cls,
-            session_provider=self._read_session_provider,
-            count_column=count_column,
-            is_distinct=is_distinct,
+            session_provider=self._session_provider,
             include_deleted=False,
+        )
+
+    def col_counter(
+        self,
+        count_column: InstrumentedAttribute,
+        *,
+        is_distinct: bool = False,
+    ) -> CountBuilder[T]:
+        """创建统计指定列的计数器
+
+        Args:
+            count_column: 要统计的列
+            is_distinct: 是否去重统计（COUNT DISTINCT）
+
+        Returns:
+            CountBuilder，统计指定列的数量
+
+        Example:
+            # 统计部门数量
+            dept_count = await dao.col_counter(Model.dept_id, is_distinct=True).eq_(Model.org_id, 1).count()
+
+            # 统计活跃用户数
+            active_count = await dao.col_counter(Model.id).eq_(Model.status, "active").count()
+        """
+        # 构建 COUNT 表达式
+        target = distinct(count_column) if is_distinct else count_column
+        expr = func.count(target)
+        custom_stmt = select(expr).select_from(self.model_cls)
+
+        return CountBuilder(
+            self.model_cls,
+            session_provider=self._session_provider,
+            custom_stmt=custom_stmt,
         )
 
     # --- Updaters ---

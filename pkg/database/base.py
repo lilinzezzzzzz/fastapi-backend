@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Self
 
-from sqlalchemy import BigInteger, DateTime, Executable, Insert, insert, inspect
+from sqlalchemy import BigInteger, DateTime, Executable, Insert, insert, inspect, update
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, InstrumentedAttribute, Mapped, mapped_column
 
@@ -153,13 +153,13 @@ class ModelMixin(Base):
     # 单例操作 (CRUD)
     # ==========================================================================
 
-    async def save(self, session_provider: SessionProvider | None = None, execute: bool = True) -> Insert | None:
+    async def insert(self, session_provider: SessionProvider | None = None, execute: bool = True) -> Insert | None:
         """[Strict Insert] 仅用于保存新对象。"""
         state = inspect(self)
 
         if not state.transient:
             raise RuntimeError(
-                f"save() is strictly for INSERT operations. "
+                f"insert() is strictly for INSERT operations. "
                 f"Object {self.__class__.__name__}(id={self.id}) is already persistent/detached. "
                 f"Please use update() instead."
             )
@@ -170,42 +170,83 @@ class ModelMixin(Base):
         stmt = insert(self.__class__).values(data)
 
         return await self._execute_or_return(
-            stmt, session_provider, execute, error_context=f"{self.__class__.__name__} save(insert)"
+            stmt, session_provider, execute, error_context=f"{self.__class__.__name__} insert"
         )
 
-    async def update(self, session_provider: SessionProvider | None = None, **kwargs) -> Self:
-        """[Strict Update] 仅用于更新已存在的对象。"""
+    def update(self, **kwargs: Any) -> Self:
+        """[Strict Update] 仅用于更新已存在对象的字段值（不执行 SQL）。
+
+        Args:
+            **kwargs: 可以是字符串字段名或 InstrumentedAttribute 属性
+
+        Example:
+            # 使用字符串字段名
+            obj.update(name="Alice", age=25)
+
+            # 使用模型属性 (InstrumentedAttribute)
+            from internal.models import Model
+            obj.update(Model.name, "Alice")  # 不支持这种用法
+            obj.update(**{Model.name.key: "Alice"})  # 推荐用这种方式
+        """
         state = inspect(self)
 
         if state.transient:
             raise RuntimeError(
                 f"update() is strictly for UPDATE operations on existing records. "
                 f"Object {self.__class__.__name__} is new (transient). "
-                f"Please use save() or insert_instances() first."
+                f"Please use insert() first."
             )
 
-        if session_provider is None:
-            raise ValueError(f"{self.__class__.__name__} update requires session_provider")
+        for key, value in kwargs.items():
+            # 如果 key 是 InstrumentedAttribute，提取其字符串名称
+            if isinstance(key, InstrumentedAttribute):
+                column_name = key.key
+            else:
+                column_name = key
 
-        for column_name, value in kwargs.items():
             if self.has_column(column_name):
                 setattr(self, column_name, value)
 
-        self._fill_ins_update_fields()
-
-        try:
-            async with session_provider() as sess:
-                async with sess.begin():
-                    sess.add(self)
-        except Exception as e:
-            raise RuntimeError(f"{self.__class__.__name__} update error: {e}") from e
-
         return self
+
+    async def save(self, session_provider: SessionProvider | None = None, execute: bool = True) -> Self | Insert | None:
+        """[Save] 保存对象（新对象则插入，已存在则更新）。"""
+        state = inspect(self)
+
+        if state.transient:
+            # 新对象：执行插入
+            self._fill_ins_insert_fields()
+            data = self._extract_db_values()
+            stmt = insert(self.__class__).values(data)
+            return await self._execute_or_return(
+                stmt, session_provider, execute, error_context=f"{self.__class__.__name__} save(insert)"
+            )
+        else:
+            # 已存在对象：执行更新
+            self._fill_ins_update_fields()
+
+            if session_provider is None:
+                raise ValueError(f"{self.__class__.__name__} save(update) requires session_provider")
+
+            # 直接使用 update() 语句执行更新（因为 ID 一定存在）
+            data = self._extract_db_values()
+            stmt = (
+                update(self.__class__)
+                .where(self.__class__.id == self.id)
+                .values(data)
+            )
+
+            await self._execute_or_return(
+                stmt, session_provider, execute=True, error_context=f"{self.__class__.__name__} save(update)"
+            )
+
+            return self
 
     async def soft_delete(self, session_provider: SessionProvider) -> None:
         if self.has_deleted_at_column():
-            # update 方法会自动调用 _fill_ins_update_fields 处理 updated_at
-            await self.update(session_provider, **{self.deleted_at_column_name(): utc_now_naive()})
+            # 使用 update() 设置字段，然后用 save() 持久化
+            self.update(**{self.deleted_at_column_name(): utc_now_naive()})
+            await self.save(session_provider=session_provider)
 
     async def restore(self, session_provider: SessionProvider) -> None:
         """
@@ -215,7 +256,8 @@ class ModelMixin(Base):
             # 恢复时：
             # 1. deleted_at 设为 None
             # 2. update() 会自动将 updated_at 设为当前时间（符合逻辑，因为数据状态变了）
-            await self.update(session_provider, **{self.deleted_at_column_name(): None})
+            self.update(**{self.deleted_at_column_name(): None})
+            await self.save(session_provider=session_provider)
 
     # ==========================================================================
     # 字段补全辅助方法

@@ -169,6 +169,44 @@ class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
         except Exception as e:
             raise RuntimeError(f"Error when querying first data, {self._model_cls.__name__}: {e}") from e
 
+    async def values(self) -> list[tuple]:
+        """返回列查询的元组列表
+
+        用于 col_querier() 场景，返回元组列表：
+        - 单列查询：返回单元素元组列表
+        - 多列查询：返回多元素元组列表
+
+        Returns:
+            元组列表
+
+        Example:
+            # 单列查询
+            ids = await dao.col_querier(Model.id).eq_(Model.org_id, 1).values()
+            # 返回：[(1,), (2,), (3,)]
+
+            # 多列查询
+            rows = await dao.col_querier(Model.id, Model.name).eq_(...).values()
+            # 返回：[(1, "Alice"), (2, "Bob")]
+        """
+        try:
+            async with self._session_provider() as sess:
+                result = await sess.execute(self.stmt)
+                await sess.commit()
+                return cast(list[tuple], result.all())
+        except Exception as e:
+            raise RuntimeError(f"Error when querying values, {self._model_cls.__name__}: {e}") from e
+
+    async def exists(self) -> bool:
+        """Check if any record matches the current query conditions
+
+        Returns:
+            True if at least one record matches, False otherwise
+
+        Example:
+            has_active = await dao.querier.eq_(Model.status, "active").exists()
+        """
+        return await self.first() is not None
+
 
 class CountBuilder[T: ModelMixin](BaseBuilder[T]):
     def __init__(
@@ -176,16 +214,18 @@ class CountBuilder[T: ModelMixin](BaseBuilder[T]):
         model_cls: type[T],
         *,
         session_provider: SessionProvider,
-        count_column: InstrumentedAttribute | None = None,
-        is_distinct: bool = False,
-        include_deleted: bool = None,
+        custom_stmt: Select | None = None,
+        include_deleted: bool | None = None,
     ):
         super().__init__(model_cls, session_provider=session_provider)
-        col = count_column if count_column is not None else self._model_cls.id
-        expr = func.count(distinct(col)) if is_distinct else func.count(col)
-        self._stmt = select(expr)
 
-        if include_deleted is False and self._model_cls.has_deleted_at_column():
+        # 如果提供了 custom_stmt，直接使用；否则默认统计主键 id
+        if custom_stmt is not None:
+            self._stmt = custom_stmt
+        else:
+            self._stmt = select(func.count(self._model_cls.id))
+
+        if include_deleted is not True and self._model_cls.has_deleted_at_column():
             self._apply_delete_at_is_none()
 
     @property
