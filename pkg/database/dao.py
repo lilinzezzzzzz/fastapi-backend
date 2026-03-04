@@ -194,6 +194,31 @@ class BaseDao[T: ModelMixin]:
     async def query_by_ids(self, ids: list[int]) -> list[T]:
         return await self.querier.in_(self.model_cls.id, ids).all()
 
+    # --- Instance Operations (代理方法，自动传入 session_provider) ---
+    async def insert(self, instance: T) -> None:
+        """插入新实例（代理 instance.insert()）"""
+        await instance.insert(self._session_provider)
+
+    async def save(self, instance: T) -> T | None:
+        """保存实例（代理 instance.save()）
+
+        新对象则插入，已存在则更新。
+
+        Returns:
+            已存在对象返回更新后的实例，新对象返回 None
+        """
+        result = await instance.save(self._session_provider)
+        # save() 对已存在对象返回 Self，对新对象返回 None（execute=True 时）
+        return result if isinstance(result, self.model_cls) else None
+
+    async def soft_delete(self, instance: T) -> None:
+        """软删除实例（代理 instance.soft_delete()）"""
+        await instance.soft_delete(self._session_provider)
+
+    async def restore(self, instance: T) -> None:
+        """恢复已删除的实例（代理 instance.restore()）"""
+        await instance.restore(self._session_provider)
+
 
 async def execute_transaction(
     session_provider: SessionProvider,
