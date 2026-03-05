@@ -12,7 +12,7 @@ from pkg.toolkit.types import lazy_proxy
 
 # 全局变量，初始为 None
 _redis_pool: ConnectionPool | None = None
-_raw_redis: Redis | None = None  # 原始 Redis 客户端
+_raw_redis: Redis[str] | None = None  # 原始 Redis 客户端
 _redis_client: RedisClient | None = None  # 封装后的 Redis 客户端
 
 
@@ -49,7 +49,7 @@ def init_async_redis() -> None:
 
     # 创建原始 Redis 客户端实例
     if _raw_redis is None:
-        _raw_redis = Redis(connection_pool=_redis_pool)
+        _raw_redis = Redis[str](connection_pool=_redis_pool, decode_responses=True)
 
     # 初始化封装后的 Redis 客户端
     if _redis_client is None:
@@ -81,7 +81,7 @@ def reset_async_redis() -> None:
 
 
 @asynccontextmanager
-async def get_redis() -> AsyncGenerator[Redis, None]:
+async def get_redis() -> AsyncGenerator[Redis[str], None]:
     """
     Redis Session 获取上下文管理器
     """
