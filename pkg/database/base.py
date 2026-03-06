@@ -89,65 +89,8 @@ class ModelMixin(Base):
         clean_kwargs = {k: v for k, v in kwargs.items() if k in valid_cols}
 
         ins = cls(**clean_kwargs)
-        ins._fill_ins_insert_fields()
+        ins.fill_ins_insert_fields()
         return ins
-
-    # ==========================================================================
-    # 批量操作 (Batch)
-    # ==========================================================================
-
-    @classmethod
-    async def insert_rows(
-        cls, *, rows: list[dict[str, Any]], session_provider: SessionProvider, execute: bool = True
-    ) -> Insert | None:
-        """[Batch Dict] 高性能批量插入字典。"""
-        if not rows:
-            return None
-
-        defaults = cls._get_context_defaults()
-        db_values = [cls._fill_dict_insert_fields(row, defaults) for row in rows]
-
-        stmt = insert(cls).values(db_values)
-
-        if not execute:
-            return stmt
-
-        return await cls._execute_or_return(
-            stmt, session_provider, execute, error_context=f"{cls.__name__} insert_rows"
-        )
-
-    @classmethod
-    async def insert_instances(
-        cls,
-        *,
-        items: list["ModelMixin"],
-        session_provider: SessionProvider | None = None,
-        execute: bool = True,
-    ) -> Insert | None:
-        """
-        [Batch Instance] 高性能批量插入对象实例。
-
-        Args:
-            items: 要插入的实例列表
-            session_provider: 会话提供者（execute=True 时必填）
-            execute: 是否执行 SQL，False 时仅返回 Insert 语句
-
-        Returns:
-            execute=False 时返回 Insert 语句，否则返回 None
-        """
-        if not items:
-            return None
-
-        db_values = []
-        for ins in items:
-            ins._fill_ins_insert_fields()
-            db_values.append(ins._extract_db_values())
-
-        stmt = insert(cls).values(db_values)
-
-        return await cls._execute_or_return(
-            stmt, session_provider, execute, error_context=f"{cls.__name__} insert_instances"
-        )
 
     # ==========================================================================
     # 单例操作 (CRUD)
@@ -164,8 +107,8 @@ class ModelMixin(Base):
                 f"Please use update() instead."
             )
 
-        self._fill_ins_insert_fields()
-        data = self._extract_db_values()
+        self.fill_ins_insert_fields()
+        data = self.extract_db_values()
 
         stmt = insert(self.__class__).values(data)
 
@@ -216,7 +159,7 @@ class ModelMixin(Base):
                 data[column_name] = value
 
         # 补全更新字段
-        self._fill_ins_update_fields(data)
+        self.fill_ins_update_fields(data)
 
         if not execute:
             return self
@@ -257,12 +200,12 @@ class ModelMixin(Base):
     # ==========================================================================
 
     @staticmethod
-    def _get_context_defaults() -> ContextDefaults:
+    def get_context_defaults() -> ContextDefaults:
         return ContextDefaults(now=utc_now_naive(), user_id=context.get_user_id())
 
-    def _fill_ins_insert_fields(self):
+    def fill_ins_insert_fields(self):
         """[Instance Insert] 补全实例插入所需的字段"""
-        defaults = self._get_context_defaults()
+        defaults = self.get_context_defaults()
 
         if not self.id:
             self.id = snowflake_id_generator.generate()
@@ -278,9 +221,9 @@ class ModelMixin(Base):
         if self.has_updater_id_column() and not self.updater_id:
             self.updater_id = None
 
-    def _fill_ins_update_fields(self, data: dict[str, Any]) -> None:
+    def fill_ins_update_fields(self, data: dict[str, Any]) -> None:
         """[Instance Update] 补全实例更新所需的字段"""
-        defaults = self._get_context_defaults()
+        defaults = self.get_context_defaults()
 
         if self.has_updated_at_column():
             setattr(self, self.updated_at_column_name(), defaults.now)
@@ -291,7 +234,7 @@ class ModelMixin(Base):
             data[self.updater_id_column_name()] = defaults.user_id
 
     @classmethod
-    def _fill_dict_insert_fields(cls, raw_data: dict[str, Any], defaults: ContextDefaults) -> dict[str, Any]:
+    def fill_dict_insert_fields(cls, raw_data: dict[str, Any], defaults: ContextDefaults) -> dict[str, Any]:
         """[Dict Insert] 补全字典插入所需的字段"""
         data = raw_data.copy()
 
@@ -310,7 +253,7 @@ class ModelMixin(Base):
         valid_cols = set(cls.get_column_names())
         return {k: v for k, v in data.items() if k in valid_cols}
 
-    def _extract_db_values(self) -> dict[str, Any]:
+    def extract_db_values(self) -> dict[str, Any]:
         """[Instance -> Dict]"""
         values = {}
         valid_cols = set(self.get_column_names())

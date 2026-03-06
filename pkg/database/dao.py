@@ -1,6 +1,7 @@
 from collections.abc import Awaitable, Callable
+from typing import Any
 
-from sqlalchemy import Subquery, distinct, func, select
+from sqlalchemy import Insert, Subquery, distinct, func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute, aliased
 
@@ -23,6 +24,10 @@ class BaseDao[T: ModelMixin]:
     """
 
     _model_cls: type[T] | None = None
+
+    # ==========================================================================
+    # 初始化与属性
+    # ==========================================================================
 
     def __init__(
         self,
@@ -67,16 +72,42 @@ class BaseDao[T: ModelMixin]:
         """获取读库 session 提供者（只读副本），如果未配置则返回写库 session_provider"""
         return self._read_session_provider
 
+    # ==========================================================================
+    # 工厂方法
+    # ==========================================================================
+
     def create(self, **kwargs) -> T:
         return self.model_cls.create(**kwargs)
 
+    # ==========================================================================
+    # 查询器（读库）
+    # ==========================================================================
+
     @property
     def querier(self) -> QueryBuilder[T]:
+        """默认查询器（排除已删除，按更新时间倒序）"""
         return QueryBuilder(
             self.model_cls,
             session_provider=self._read_session_provider,
             include_deleted=False,
         ).desc_(self.model_cls.updated_at)
+
+    @property
+    def querier_inc_deleted(self) -> QueryBuilder[T]:
+        """包含已删除记录的查询器（按更新时间倒序）"""
+        return QueryBuilder(self.model_cls, session_provider=self._read_session_provider, include_deleted=True).desc_(
+            self.model_cls.updated_at
+        )
+
+    @property
+    def querier_unsorted(self) -> QueryBuilder[T]:
+        """无排序查询器（排除已删除）"""
+        return QueryBuilder(self.model_cls, session_provider=self._read_session_provider, include_deleted=False)
+
+    @property
+    def querier_inc_deleted_unsorted(self) -> QueryBuilder[T]:
+        """无排序查询器（包含已删除）"""
+        return QueryBuilder(self.model_cls, session_provider=self._read_session_provider, include_deleted=True)
 
     def col_querier(
         self,
@@ -99,50 +130,43 @@ class BaseDao[T: ModelMixin]:
             # 查询多列
             rows = await dao.col_querier(Model.id, Model.name).eq_(...).values()
         """
-        # 构建列查询的 custom_stmt
         custom_stmt = select(*columns).select_from(self.model_cls) if columns else None
 
         return QueryBuilder(
             self.model_cls,
-            session_provider=self._session_provider,
+            session_provider=self._read_session_provider,
             include_deleted=include_deleted,
             custom_stmt=custom_stmt,
         )
 
-    @property
-    def querier_inc_deleted(self) -> QueryBuilder[T]:
-        return QueryBuilder(self.model_cls, session_provider=self._read_session_provider, include_deleted=True).desc_(
-            self.model_cls.updated_at
-        )
-
-    @property
-    def querier_unsorted(self) -> QueryBuilder[T]:
-        return QueryBuilder(self.model_cls, session_provider=self._read_session_provider, include_deleted=False)
-
-    @property
-    def querier_inc_deleted_unsorted(self) -> QueryBuilder[T]:
-        return QueryBuilder(self.model_cls, session_provider=self._read_session_provider, include_deleted=True)
-
     def sub_querier(self, subquery: Subquery) -> QueryBuilder[T]:
+        """创建子查询查询器"""
         alias = aliased(self.model_cls, subquery)
         return QueryBuilder(self.model_cls, session_provider=self._read_session_provider, custom_stmt=select(alias))
 
-    # --- Write Queriers (强制读主库，用于写后读一致性场景) ---
+    # ==========================================================================
+    # 查询器（写库 - 强制读主库，用于写后读一致性场景）
+    # ==========================================================================
+
     @property
     def write_querier(self) -> QueryBuilder[T]:
-        """强制从主库查询（用于写后读一致性场景）"""
+        """强制从主库查询（按更新时间倒序）"""
         return QueryBuilder(self.model_cls, session_provider=self._session_provider, include_deleted=False).desc_(
             self.model_cls.updated_at
         )
 
     @property
     def write_querier_unsorted(self) -> QueryBuilder[T]:
-        """强制从主库查询，不排序"""
+        """强制从主库查询（无排序）"""
         return QueryBuilder(self.model_cls, session_provider=self._session_provider, include_deleted=False)
 
-    # --- Counters ---
+    # ==========================================================================
+    # 计数器
+    # ==========================================================================
+
     @property
     def counter(self) -> CountBuilder[T]:
+        """默认计数器（排除已删除）"""
         return CountBuilder(
             self.model_cls,
             session_provider=self._session_provider,
@@ -171,7 +195,6 @@ class BaseDao[T: ModelMixin]:
             # 统计活跃用户数
             active_count = await dao.col_counter(Model.id).eq_(Model.status, "active").count()
         """
-        # 构建 COUNT 表达式
         target = distinct(count_column) if is_distinct else count_column
         expr = func.count(target)
         custom_stmt = select(expr).select_from(self.model_cls)
@@ -182,18 +205,27 @@ class BaseDao[T: ModelMixin]:
             custom_stmt=custom_stmt,
         )
 
-    # --- Updaters ---
+    # ==========================================================================
+    # 更新器
+    # ==========================================================================
+
     @property
     def updater(self) -> UpdateBuilder[T]:
+        """创建更新构建器"""
         return UpdateBuilder(model_cls=self.model_cls, session_provider=self._session_provider)
 
     def ins_updater(self, ins: T) -> UpdateBuilder[T]:
+        """创建基于实例的更新构建器"""
         return UpdateBuilder(model_ins=ins, session_provider=self._session_provider)
 
-    # --- Common Methods ---
+    # ==========================================================================
+    # 通用查询方法
+    # ==========================================================================
+
     async def query_by_primary_id(
         self, primary_id: int, *, creator_id: int = None, include_deleted: bool = False
     ) -> T | None:
+        """根据主键 ID 查询单条记录"""
         qb = self.querier_inc_deleted if include_deleted else self.querier
         qb = qb.eq_(self.model_cls.id, primary_id)
         if creator_id and self.model_cls.has_creator_id_column():
@@ -201,15 +233,19 @@ class BaseDao[T: ModelMixin]:
         return await qb.first()
 
     async def query_by_ids(self, ids: list[int]) -> list[T]:
+        """根据主键 ID 列表批量查询"""
         return await self.querier.in_(self.model_cls.id, ids).all()
 
-    # --- Instance Operations (代理方法，自动传入 session_provider) ---
+    # ==========================================================================
+    # 实例操作（代理方法，自动传入 session_provider）
+    # ==========================================================================
+
     async def insert(self, instance: T) -> None:
-        """插入新实例（代理 instance.insert()）"""
+        """插入新实例"""
         await instance.insert(self._session_provider)
 
     async def update(self, instance: T, **kwargs) -> T:
-        """更新实例字段并持久化（代理 instance.update()）
+        """更新实例字段并持久化
 
         Args:
             instance: 要更新的实例
@@ -221,12 +257,85 @@ class BaseDao[T: ModelMixin]:
         return await instance.update(self._session_provider, **kwargs)
 
     async def soft_delete(self, instance: T) -> None:
-        """软删除实例（代理 instance.soft_delete()）"""
+        """软删除实例"""
         await instance.soft_delete(self._session_provider)
 
     async def restore(self, instance: T) -> None:
-        """恢复已删除的实例（代理 instance.restore()）"""
+        """恢复已删除的实例"""
         await instance.restore(self._session_provider)
+
+    # ==========================================================================
+    # 批量操作 (Batch)
+    # ==========================================================================
+
+    async def insert_rows(
+        self, *, rows: list[dict[str, Any]], execute: bool = True
+    ) -> Insert | None:
+        """[Batch Dict] 高性能批量插入字典。
+
+        Args:
+            rows: 要插入的字典列表
+            execute: 是否执行 SQL，False 时仅返回 Insert 语句
+
+        Returns:
+            execute=False 时返回 Insert 语句，否则返回 None
+
+        Example:
+            # 批量插入字典
+            rows = [{"username": f"user{i}"} for i in range(10)]
+            await dao.insert_rows(rows=rows)
+
+            # 仅构建 SQL，不执行
+            stmt = await dao.insert_rows(rows=rows, execute=False)
+        """
+        if not rows:
+            return None
+
+        defaults = self.model_cls.get_context_defaults()
+        db_values = [self.model_cls.fill_dict_insert_fields(row, defaults) for row in rows]
+
+        stmt = insert(self.model_cls).values(db_values)
+
+        if not execute:
+            return stmt
+
+        return await self.model_cls._execute_or_return(
+            stmt, self._session_provider, execute, error_context=f"{self.model_cls.__name__} insert_rows"
+        )
+
+    async def insert_instances(
+        self, *, items: list[T], execute: bool = True
+    ) -> Insert | None:
+        """[Batch Instance] 高性能批量插入对象实例。
+
+        Args:
+            items: 要插入的实例列表
+            execute: 是否执行 SQL，False 时仅返回 Insert 语句
+
+        Returns:
+            execute=False 时返回 Insert 语句，否则返回 None
+
+        Example:
+            # 批量插入实例
+            users = [dao.create(username=f"user{i}") for i in range(10)]
+            await dao.insert_instances(items=users)
+
+            # 仅构建 SQL，不执行
+            stmt = await dao.insert_instances(items=users, execute=False)
+        """
+        if not items:
+            return None
+
+        db_values = []
+        for ins in items:
+            ins.fill_ins_insert_fields()
+            db_values.append(ins.extract_db_values())
+
+        stmt = insert(self.model_cls).values(db_values)
+
+        return await self.model_cls._execute_or_return(
+            stmt, self._session_provider, execute, error_context=f"{self.model_cls.__name__} insert_instances"
+        )
 
 
 async def execute_transaction(

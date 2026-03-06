@@ -164,7 +164,7 @@ async def test_batch_insert_instances(user_dao, db_session):
     """测试批量对象插入"""
     users = [User.create(username=f"user_{i}") for i in range(5)]
 
-    await User.insert_instances(items=users, session_provider=db_session)
+    await user_dao.insert_instances(items=users)
 
     count = await user_dao.counter.count()
     assert count == 5
@@ -179,7 +179,7 @@ async def test_batch_insert_rows(user_dao, db_session):
     """测试批量字典插入"""
     rows = [{"username": "dict_1"}, {"username": "dict_2"}]
 
-    await User.insert_rows(rows=rows, session_provider=db_session)
+    await user_dao.insert_rows(rows=rows)
 
     count = await user_dao.counter.count()
     assert count == 2
@@ -189,9 +189,8 @@ async def test_batch_insert_rows(user_dao, db_session):
 async def test_query_builder(user_dao, db_session):
     """测试查询构建器"""
     # 准备数据
-    await User.insert_rows(
-        rows=[{"username": f"u{i}"} for i in range(1, 6)],
-        session_provider=db_session
+    await user_dao.insert_rows(
+        rows=[{"username": f"u{i}"} for i in range(1, 6)]
     )
 
     # Test IN with values
