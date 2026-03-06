@@ -72,6 +72,17 @@ class BaseDao[T: ModelMixin]:
         """获取读库 session 提供者（只读副本），如果未配置则返回写库 session_provider"""
         return self._read_session_provider
 
+    def _assert_instance_model_match(self, instance: ModelMixin) -> None:
+        if instance.__class__ is not self.model_cls:
+            raise TypeError(
+                f"{self.__class__.__name__} expects instance of {self.model_cls.__name__}, "
+                f"got {instance.__class__.__name__}"
+            )
+
+    def _assert_instances_model_match(self, items: list[ModelMixin]) -> None:
+        for item in items:
+            self._assert_instance_model_match(item)
+
     # ==========================================================================
     # 工厂方法
     # ==========================================================================
@@ -216,6 +227,7 @@ class BaseDao[T: ModelMixin]:
 
     def ins_updater(self, ins: T) -> UpdateBuilder[T]:
         """创建基于实例的更新构建器"""
+        self._assert_instance_model_match(ins)
         return UpdateBuilder(model_ins=ins, session_provider=self._session_provider)
 
     # ==========================================================================
@@ -248,6 +260,7 @@ class BaseDao[T: ModelMixin]:
 
     async def insert(self, instance: T) -> None:
         """插入新实例"""
+        self._assert_instance_model_match(instance)
         await self._execute_stmt(
             instance.build_insert_stmt(),
             error_context=f"{self.model_cls.__name__} insert",
@@ -269,6 +282,7 @@ class BaseDao[T: ModelMixin]:
         Returns:
             更新后的实例
         """
+        self._assert_instance_model_match(instance)
         await self._execute_stmt(
             instance.build_update_stmt(updates=updates, **kwargs),
             error_context=f"{self.model_cls.__name__} update",
@@ -277,6 +291,7 @@ class BaseDao[T: ModelMixin]:
 
     async def soft_delete(self, instance: T) -> None:
         """软删除实例"""
+        self._assert_instance_model_match(instance)
         await self._execute_stmt(
             instance.build_soft_delete_stmt(),
             error_context=f"{self.model_cls.__name__} soft_delete",
@@ -284,6 +299,7 @@ class BaseDao[T: ModelMixin]:
 
     async def restore(self, instance: T) -> None:
         """恢复已删除的实例"""
+        self._assert_instance_model_match(instance)
         await self._execute_stmt(
             instance.build_restore_stmt(),
             error_context=f"{self.model_cls.__name__} restore",
@@ -326,6 +342,7 @@ class BaseDao[T: ModelMixin]:
         if not items:
             return None
 
+        self._assert_instances_model_match(items)
         db_values = [ins.prepare_insert_values() for ins in items]
         return insert(self.model_cls).values(db_values)
 

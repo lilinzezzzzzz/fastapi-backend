@@ -79,6 +79,11 @@ class User(ModelMixin):
     email: Mapped[str] = mapped_column(String(100), nullable=True)
 
 
+class Admin(ModelMixin):
+    __tablename__ = "admins"
+    username: Mapped[str] = mapped_column(String(50))
+
+
 class UserDao(BaseDao[User]):
     pass
 
@@ -193,6 +198,30 @@ def test_build_batch_insert_statements(user_dao):
     instances_stmt = user_dao.build_insert_instances_stmt(items=users)
     assert instances_stmt is not None
     assert users[0].id is not None
+
+
+@pytest.mark.asyncio
+async def test_instance_model_must_match_dao_model(user_dao):
+    admin = Admin.create(username="root")
+
+    with pytest.raises(TypeError) as exc:
+        await user_dao.insert(admin)
+    assert "expects instance of User" in str(exc.value)
+
+    with pytest.raises(TypeError):
+        await user_dao.update(admin, username="root2")
+
+    with pytest.raises(TypeError):
+        await user_dao.soft_delete(admin)
+
+    with pytest.raises(TypeError):
+        await user_dao.restore(admin)
+
+    with pytest.raises(TypeError):
+        user_dao.ins_updater(admin)
+
+    with pytest.raises(TypeError):
+        user_dao.build_insert_instances_stmt(items=[User.create(username="ok"), admin])
 
 
 @pytest.mark.asyncio
