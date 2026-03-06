@@ -4,7 +4,7 @@ from pkg.toolkit.types import lazy_proxy
 _aliyun_oss: AliyunOSSBackend | None = None
 
 
-def init_aliyun_oss(bucket_name: str, access_key: str, secret_key: str, endpoint: str = None, region: str = None):
+def init_aliyun_oss(bucket_name: str, access_key: str, secret_key: str, endpoint: str, region: str):
     global _aliyun_oss
     _aliyun_oss = AliyunOSSBackend(
         bucket_name=bucket_name, access_key=access_key, secret_key=secret_key, endpoint=endpoint, region=region

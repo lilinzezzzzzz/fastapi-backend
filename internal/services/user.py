@@ -59,7 +59,7 @@ class UserService:
         password_hash = PasswordHandler.hash_password(password)
 
         # 创建用户
-        user = await self._user_dao.create(
+        user = self._user_dao.create(
             username=username,
             account=account,
             phone=phone,
@@ -68,11 +68,7 @@ class UserService:
 
         return user
 
-    async def get_or_create_user_by_third_party(
-        self,
-        platform: str,
-        third_party_info: ThirdPartyUserInfo
-    ) -> User:
+    async def get_or_create_user_by_third_party(self, platform: str, third_party_info: ThirdPartyUserInfo) -> User:
         """
         根据第三方用户信息获取或创建用户
 
@@ -84,9 +80,7 @@ class UserService:
             User: 用户对象
         """
         # 查询第三方账号是否已存在
-        existing_account = await self._third_party_dao.get_by_platform_and_openid(
-            platform, third_party_info.open_id
-        )
+        existing_account = await self._third_party_dao.get_by_platform_and_openid(platform, third_party_info.open_id)
 
         # 如果账号已存在，返回关联的用户
         if existing_account:
@@ -99,7 +93,7 @@ class UserService:
         username = third_party_info.nickname or f"{platform}_{third_party_info.open_id[:8]}"
 
         # 创建用户
-        user = await self._user_dao.create(
+        user = self._user_dao.create(
             username=username,
             account=f"{platform}_{third_party_info.open_id}",
             phone="",  # 第三方登录默认无手机号，需要后续绑定
@@ -107,27 +101,22 @@ class UserService:
         )
 
         # 创建第三方账号关联记录
-        await self._third_party_dao.create(
+        self._third_party_dao.create(
             user_id=user.id,
             platform=platform,
             open_id=third_party_info.open_id,
             union_id=third_party_info.union_id,
             avatar=third_party_info.avatar,
             nickname=third_party_info.nickname,
-            access_token=getattr(third_party_info, 'access_token', None),
-            refresh_token=getattr(third_party_info, 'refresh_token', None),
-            expires_at=getattr(third_party_info, 'expires_at', None),
-            extra_data=getattr(third_party_info, 'extra_data', None),
+            access_token=getattr(third_party_info, "access_token", None),
+            refresh_token=getattr(third_party_info, "refresh_token", None),
+            expires_at=getattr(third_party_info, "expires_at", None),
+            extra_data=getattr(third_party_info, "extra_data", None),
         )
 
         return user
 
-    async def bind_third_party_account(
-        self,
-        user: User,
-        platform: str,
-        third_party_info: ThirdPartyUserInfo
-    ) -> None:
+    async def bind_third_party_account(self, user: User, platform: str, third_party_info: ThirdPartyUserInfo) -> None:
         """
         将第三方账号绑定到现有用户
 
@@ -140,9 +129,7 @@ class UserService:
             ValueError: 当该第三方账号已被其他用户绑定时
         """
         # 检查该第三方账号是否已被绑定
-        existing_account = await self._third_party_dao.get_by_platform_and_openid(
-            platform, third_party_info.open_id
-        )
+        existing_account = await self._third_party_dao.get_by_platform_and_openid(platform, third_party_info.open_id)
 
         if existing_account and existing_account.user_id != user.id:
             raise ValueError(f"该{platform}账号已被其他用户绑定")
@@ -154,24 +141,24 @@ class UserService:
                 union_id=third_party_info.union_id,
                 avatar=third_party_info.avatar,
                 nickname=third_party_info.nickname,
-                access_token=getattr(third_party_info, 'access_token', None),
-                refresh_token=getattr(third_party_info, 'refresh_token', None),
-                expires_at=getattr(third_party_info, 'expires_at', None),
-                extra_data=getattr(third_party_info, 'extra_data', None),
+                access_token=getattr(third_party_info, "access_token", None),
+                refresh_token=getattr(third_party_info, "refresh_token", None),
+                expires_at=getattr(third_party_info, "expires_at", None),
+                extra_data=getattr(third_party_info, "extra_data", None),
             )
         else:
             # 创建新的绑定关系
-            await self._third_party_dao.create(
+            self._third_party_dao.create(
                 user_id=user.id,
                 platform=platform,
                 open_id=third_party_info.open_id,
                 union_id=third_party_info.union_id,
                 avatar=third_party_info.avatar,
                 nickname=third_party_info.nickname,
-                access_token=getattr(third_party_info, 'access_token', None),
-                refresh_token=getattr(third_party_info, 'refresh_token', None),
-                expires_at=getattr(third_party_info, 'expires_at', None),
-                extra_data=getattr(third_party_info, 'extra_data', None),
+                access_token=getattr(third_party_info, "access_token", None),
+                refresh_token=getattr(third_party_info, "refresh_token", None),
+                expires_at=getattr(third_party_info, "expires_at", None),
+                extra_data=getattr(third_party_info, "extra_data", None),
             )
 
 

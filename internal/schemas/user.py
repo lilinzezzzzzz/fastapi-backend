@@ -1,4 +1,3 @@
-
 from pydantic import BaseModel, Field
 
 from internal.schemas import BaseListResponse
@@ -64,5 +63,4 @@ class UserDetailSchema(BaseModel):
 
 
 class UserListResponseSchema(BaseListResponse):
-    total: int
     items: list[UserDetailSchema]
