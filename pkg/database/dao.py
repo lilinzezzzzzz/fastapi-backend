@@ -23,7 +23,7 @@ class BaseDao[T: ModelMixin]:
         例如: self.model_cls.phone 而非 User.phone
     """
 
-    _model_cls: type[T] | None = None
+    _model_cls: type[T]
 
     # ==========================================================================
     # 初始化与属性
@@ -34,33 +34,24 @@ class BaseDao[T: ModelMixin]:
         *,
         session_provider: SessionProvider,
         read_session_provider: SessionProvider | None = None,
-        model_cls: type[T] | None = None,
     ):
         """
         Args:
             session_provider: 写库 session 提供者（主库）
             read_session_provider: 读库 session 提供者（只读副本）。
                 如果为 None，读操作自动 fallback 到写库的 session_provider。
-            model_cls: 模型类，可通过构造函数传入或在子类中定义 _model_cls
         """
         self._session_provider = session_provider
         self._read_session_provider = read_session_provider or session_provider
 
-        # 1. 优先使用构造函数传入的 model_cls
-        if model_cls:
-            self._model_cls = model_cls
-
-        # 2. 如果没传，检查是否在类定义中设置了 _model_cls
-        # 使用 getattr 防止 AttributeError
-        elif not getattr(self, "_model_cls", None):
-            raise ValueError(f"DAO {self.__class__.__name__} must define _model_cls or pass it to __init__")
+        _ = self.model_cls
 
     @property
     def model_cls(self) -> type[T]:
-        if self._model_cls is None:
-            raise ValueError(f"DAO {self.__class__.__name__} must define _model_cls or pass it to __init__")
-
-        return self._model_cls
+        model_cls: type[T] | None = getattr(type(self), "_model_cls", None)
+        if model_cls is None:
+            raise ValueError(f"DAO {self.__class__.__name__} must define _model_cls")
+        return model_cls
 
     @property
     def session_provider(self) -> SessionProvider:

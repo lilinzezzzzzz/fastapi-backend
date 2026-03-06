@@ -114,7 +114,7 @@ async def db_session():
 def user_dao(db_session):
     # 这里 db_session 是异步 fixture，user_dao 是同步 fixture
     # pytest-asyncio 能够处理这种依赖，只要 db_session 定义正确
-    return UserDao(session_provider=db_session, model_cls=User)
+    return UserDao(session_provider=db_session)
 
 
 # ==========================================

@@ -106,7 +106,7 @@ async def db_session():
 
 @pytest.fixture
 def user_dao(db_session):
-    return UserDao(session_provider=db_session, model_cls=User)
+    return UserDao(session_provider=db_session)
 
 
 # ==========================================
