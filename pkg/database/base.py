@@ -1,10 +1,10 @@
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Self
 
-from sqlalchemy import BigInteger, DateTime, Executable, Insert, insert, inspect, update
+from sqlalchemy import BigInteger, DateTime, Executable, Insert, Update, insert, inspect, update
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, InstrumentedAttribute, Mapped, mapped_column
 
@@ -93,107 +93,80 @@ class ModelMixin(Base):
         return ins
 
     # ==========================================================================
-    # 单例操作 (CRUD)
+    # 单例写操作（仅构造语句，不直接执行）
     # ==========================================================================
 
-    async def insert(self, session_provider: SessionProvider | None = None, execute: bool = True) -> Insert | None:
-        """[Strict Insert] 仅用于保存新对象。"""
+    def build_insert_stmt(self) -> Insert:
+        """[Strict Insert] 构造新对象的 INSERT 语句。"""
         state = inspect(self)
 
         if not state.transient:
             raise RuntimeError(
-                f"insert() is strictly for INSERT operations. "
+                f"build_insert_stmt() is strictly for INSERT operations. "
                 f"Object {self.__class__.__name__}(id={self.id}) is already persistent/detached. "
-                f"Please use update() instead."
+                f"Please use build_update_stmt() instead."
             )
 
+        return insert(self.__class__).values(self.prepare_insert_values())
+
+    def prepare_insert_values(self) -> dict[str, Any]:
+        """补全实例插入字段并返回可用于 INSERT 的列值。"""
         self.fill_ins_insert_fields()
-        data = self.extract_db_values()
+        return self.extract_db_values()
 
-        stmt = insert(self.__class__).values(data)
+    @staticmethod
+    def normalize_update_column_name(column: str | InstrumentedAttribute) -> str:
+        if isinstance(column, InstrumentedAttribute):
+            return column.key
+        return column
 
-        return await self.execute_or_return(
-            stmt, session_provider, execute, error_context=f"{self.__class__.__name__} insert"
-        )
-
-    async def update(
+    def apply_updates(
         self,
-        session_provider: SessionProvider | None = None,
-        execute: bool = True,
+        updates: Mapping[str | InstrumentedAttribute, Any] | None = None,
         **kwargs: Any,
-    ) -> Self:
-        """[Strict Update] 更新已存在对象的字段值并可选执行 SQL。
-
-        Args:
-            session_provider: 会话提供者（execute=True 时必填）
-            execute: 是否执行 SQL，False 时仅更新对象属性
-            **kwargs: 要更新的字段名和值
-
-        Example:
-            # 仅更新对象属性（不执行 SQL）
-            await obj.update(execute=False, name="Alice", age=25)
-
-            # 更新对象属性并执行 SQL
-            await obj.update(session_provider=..., name="Alice", age=25)
-        """
+    ) -> dict[str, Any]:
+        """更新实例字段并返回可用于 UPDATE 的列值。"""
         state = inspect(self)
 
         if state.transient:
             raise RuntimeError(
-                f"update() is strictly for UPDATE operations on existing records. "
+                f"build_update_stmt() is strictly for UPDATE operations on existing records. "
                 f"Object {self.__class__.__name__} is new (transient). "
-                f"Please use insert() first."
+                f"Please use build_insert_stmt() first."
             )
 
-        # 构建更新数据
-        data = {}
-        for key, value in kwargs.items():
-            # 如果 key 是 InstrumentedAttribute，提取其字符串名称
-            if isinstance(key, InstrumentedAttribute):
-                column_name = key.key
-            else:
-                column_name = key
+        data: dict[str, Any] = {}
+        raw_updates = dict(updates or {})
+        raw_updates.update(kwargs)
 
+        for key, value in raw_updates.items():
+            column_name = self.normalize_update_column_name(key)
             if self.has_column(column_name):
                 setattr(self, column_name, value)
                 data[column_name] = value
 
-        # 补全更新字段
         self.fill_ins_update_fields(data)
+        return data
 
-        if not execute:
-            return self
+    def build_update_stmt(
+        self,
+        updates: Mapping[str | InstrumentedAttribute, Any] | None = None,
+        **kwargs: Any,
+    ) -> Update:
+        """[Strict Update] 构造已存在对象的 UPDATE 语句，并同步实例字段。"""
+        data = self.apply_updates(updates=updates, **kwargs)
+        return update(self.__class__).where(self.__class__.id == self.id).values(data)
 
-        if session_provider is None:
-            raise ValueError(f"{self.__class__.__name__} update() requires session_provider when execute=True")
+    def build_soft_delete_stmt(self) -> Update | None:
+        if not self.has_deleted_at_column():
+            return None
+        return self.build_update_stmt(**{self.deleted_at_column_name(): utc_now_naive()})
 
-        # 执行 SQL 更新
-        stmt = (
-            update(self.__class__)
-            .where(self.__class__.id == self.id)
-            .values(data)
-        )
-
-        await self.execute_or_return(
-            stmt, session_provider, execute=True, error_context=f"{self.__class__.__name__} update"
-        )
-
-        return self
-
-    async def soft_delete(self, session_provider: SessionProvider) -> None:
-        if self.has_deleted_at_column():
-            await self.update(
-                session_provider=session_provider,
-                **{self.deleted_at_column_name(): utc_now_naive()},
-            )
-
-    async def restore(self, session_provider: SessionProvider) -> None:
-        """[Soft Delete] 恢复已删除的对象"""
-        if self.has_deleted_at_column():
-            await self.update(
-                session_provider=session_provider,
-                **{self.deleted_at_column_name(): None},
-            )
+    def build_restore_stmt(self) -> Update | None:
+        """[Soft Delete] 构造恢复已删除对象的 UPDATE 语句。"""
+        if not self.has_deleted_at_column():
+            return None
+        return self.build_update_stmt(**{self.deleted_at_column_name(): None})
 
     # ==========================================================================
     # 字段补全辅助方法
@@ -263,28 +236,16 @@ class ModelMixin(Base):
         return values
 
     @staticmethod
-    async def execute_or_return[ExecT: Executable](
-        stmt: ExecT, session_provider: SessionProvider | None, execute: bool, error_context: str
-    ) -> ExecT | None:
+    async def execute_stmt(stmt: Executable, session_provider: SessionProvider, error_context: str) -> None:
         """
-        统一处理 SQL 语句的执行逻辑：
-        - 如果 execute=False，直接返回语句对象（保持原类型）。
-        - 如果 execute=True，校验 session_provider 并执行事务，返回 None。
+        统一执行 SQL 语句。
         """
-        if not execute:
-            return stmt
-
-        if session_provider is None:
-            raise ValueError(f"session_provider is required when execute=True ({error_context})")
-
         try:
             async with session_provider() as sess:
                 async with sess.begin():
                     await sess.execute(stmt)
         except Exception as e:
             raise RuntimeError(f"{error_context} failed: {e}") from e
-
-        return None
 
     def to_dict(self, *, exclude_column: list[str] = None) -> dict[str, Any]:
         return {

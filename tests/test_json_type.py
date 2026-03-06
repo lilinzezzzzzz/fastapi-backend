@@ -18,7 +18,7 @@ from sqlalchemy.dialects import mysql, oracle, postgresql, sqlite
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import Mapped, mapped_column
 
-from pkg.database.base import Base, JSONType, ModelMixin, new_async_session_maker
+from pkg.database import Base, JSONType, ModelMixin, new_async_session_maker
 
 
 # ==========================================
@@ -31,6 +31,14 @@ class JsonModel(ModelMixin):
     config: Mapped[dict] = mapped_column(JSONType(), default=dict)
     tags: Mapped[list] = mapped_column(JSONType(), default=list)
     extra: Mapped[dict | None] = mapped_column(JSONType(), nullable=True)
+
+
+async def persist_json_model(db_session, model: JsonModel) -> None:
+    await JsonModel.execute_stmt(
+        model.build_insert_stmt(),
+        db_session,
+        error_context=f"{JsonModel.__name__} insert",
+    )
 
 
 # ==========================================
@@ -112,14 +120,25 @@ class TestBindParam:
         assert result is None
 
     def test_native_json_passthrough(self):
-        """原生 JSON 数据库应直接传递对象"""
+        """PostgreSQL/Oracle 原生 JSON 应直接传递对象。"""
         json_type = JSONType()
         data = {"key": "value", "nested": {"a": 1}}
 
-        for dialect_name in ("postgresql", "mysql", "sqlite"):
+        for dialect_name in ("postgresql", "oracle"):
             dialect = make_dialect(dialect_name)
             result = json_type.process_bind_param(data, dialect)
             assert result == data, f"{dialect_name} should passthrough"
+
+    def test_mysql_sqlite_serialize(self):
+        """MySQL/SQLite 在当前实现下会先序列化为 JSON 字符串。"""
+        json_type = JSONType()
+        data = {"key": "value", "nested": {"a": 1}}
+
+        for dialect_name in ("mysql", "sqlite"):
+            dialect = make_dialect(dialect_name)
+            result = json_type.process_bind_param(data, dialect)
+            assert isinstance(result, str)
+            assert '"key"' in result
 
     def test_oracle_native_passthrough(self):
         """Oracle 21c+ 原生模式应直接传递对象"""
@@ -251,7 +270,7 @@ async def test_json_crud(db_session):
         config={"debug": True, "version": "1.0"},
         tags=["python", "fastapi"],
     )
-    await model.insert(db_session)
+    await persist_json_model(db_session, model)
 
     # Read
     async with db_session() as session:
@@ -266,7 +285,7 @@ async def test_json_mutable_tracking(db_session):
     """测试 MutableDict/MutableList 变更追踪"""
     # 创建并保存
     model = JsonModel.create(name="mutable_test", config={"count": 0}, tags=[])
-    await model.insert(db_session)
+    await persist_json_model(db_session, model)
 
     # 修改 JSON 字段
     async with db_session() as session:
@@ -289,7 +308,7 @@ async def test_json_nullable_field(db_session):
     """测试可空 JSON 字段"""
     # 测试 None 值
     model1 = JsonModel.create(name="nullable_none", extra=None)
-    await model1.insert(db_session)
+    await persist_json_model(db_session, model1)
 
     async with db_session() as session:
         result = await session.get(JsonModel, model1.id)
@@ -297,7 +316,7 @@ async def test_json_nullable_field(db_session):
 
     # 测试有值
     model2 = JsonModel.create(name="nullable_with_value", extra={"meta": "data"})
-    await model2.insert(db_session)
+    await persist_json_model(db_session, model2)
 
     async with db_session() as session:
         result = await session.get(JsonModel, model2.id)
@@ -319,7 +338,7 @@ async def test_json_complex_nested(db_session):
     }
 
     model = JsonModel.create(name="complex", config=complex_config)
-    await model.insert(db_session)
+    await persist_json_model(db_session, model)
 
     async with db_session() as session:
         result = await session.get(JsonModel, model.id)

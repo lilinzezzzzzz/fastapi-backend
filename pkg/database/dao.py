@@ -1,7 +1,7 @@
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
-from sqlalchemy import Insert, Subquery, distinct, func, insert, select
+from sqlalchemy import Executable, Insert, Subquery, distinct, func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute, aliased
 
@@ -237,100 +237,115 @@ class BaseDao[T: ModelMixin]:
         return await self.querier.in_(self.model_cls.id, ids).all()
 
     # ==========================================================================
-    # 实例操作（代理方法，自动传入 session_provider）
+    # 实例操作（执行模型构造出的写语句）
     # ==========================================================================
+
+    async def _execute_stmt(self, stmt: Executable | None, *, error_context: str) -> None:
+        if stmt is None:
+            return
+
+        await self.model_cls.execute_stmt(stmt, self._session_provider, error_context=error_context)
 
     async def insert(self, instance: T) -> None:
         """插入新实例"""
-        await instance.insert(self._session_provider)
+        await self._execute_stmt(
+            instance.build_insert_stmt(),
+            error_context=f"{self.model_cls.__name__} insert",
+        )
 
-    async def update(self, instance: T, **kwargs) -> T:
+    async def update(
+        self,
+        instance: T,
+        updates: Mapping[str | InstrumentedAttribute, Any] | None = None,
+        **kwargs: Any,
+    ) -> T:
         """更新实例字段并持久化
 
         Args:
             instance: 要更新的实例
+            updates: 要更新的字段映射，支持字符串列名或 InstrumentedAttribute
             **kwargs: 要更新的字段
 
         Returns:
             更新后的实例
         """
-        return await instance.update(self._session_provider, **kwargs)
+        await self._execute_stmt(
+            instance.build_update_stmt(updates=updates, **kwargs),
+            error_context=f"{self.model_cls.__name__} update",
+        )
+        return instance
 
     async def soft_delete(self, instance: T) -> None:
         """软删除实例"""
-        await instance.soft_delete(self._session_provider)
+        await self._execute_stmt(
+            instance.build_soft_delete_stmt(),
+            error_context=f"{self.model_cls.__name__} soft_delete",
+        )
 
     async def restore(self, instance: T) -> None:
         """恢复已删除的实例"""
-        await instance.restore(self._session_provider)
+        await self._execute_stmt(
+            instance.build_restore_stmt(),
+            error_context=f"{self.model_cls.__name__} restore",
+        )
 
     # ==========================================================================
     # 批量操作 (Batch)
     # ==========================================================================
 
-    async def insert_rows(self, *, rows: list[dict[str, Any]], execute: bool = True) -> Insert | None:
+    def build_insert_rows_stmt(self, *, rows: list[dict[str, Any]]) -> Insert | None:
+        """[Batch Dict] 构造批量插入字典的 INSERT 语句。"""
+        if not rows:
+            return None
+
+        defaults = self.model_cls.get_context_defaults()
+        db_values = [self.model_cls.fill_dict_insert_fields(row, defaults) for row in rows]
+        return insert(self.model_cls).values(db_values)
+
+    async def insert_rows(self, *, rows: list[dict[str, Any]]) -> None:
         """[Batch Dict] 高性能批量插入字典。
 
         Args:
             rows: 要插入的字典列表
-            execute: 是否执行 SQL，False 时仅返回 Insert 语句
-
-        Returns:
-            execute=False 时返回 Insert 语句，否则返回 None
 
         Example:
             # 批量插入字典
             rows = [{"username": f"user{i}"} for i in range(10)]
             await dao.insert_rows(rows=rows)
 
-            # 仅构建 SQL，不执行
-            stmt = await dao.insert_rows(rows=rows, execute=False)
+            # 仅构建 SQL
+            stmt = dao.build_insert_rows_stmt(rows=rows)
         """
-        if not rows:
-            return None
-
-        defaults = self.model_cls.get_context_defaults()
-        db_values = [self.model_cls.fill_dict_insert_fields(row, defaults) for row in rows]
-
-        stmt = insert(self.model_cls).values(db_values)
-
-        if not execute:
-            return stmt
-
-        return await self.model_cls.execute_or_return(
-            stmt, self._session_provider, execute, error_context=f"{self.model_cls.__name__} insert_rows"
+        await self._execute_stmt(
+            self.build_insert_rows_stmt(rows=rows),
+            error_context=f"{self.model_cls.__name__} insert_rows",
         )
 
-    async def insert_instances(self, *, items: list[T], execute: bool = True) -> Insert | None:
+    def build_insert_instances_stmt(self, *, items: list[T]) -> Insert | None:
+        """[Batch Instance] 构造批量插入对象实例的 INSERT 语句。"""
+        if not items:
+            return None
+
+        db_values = [ins.prepare_insert_values() for ins in items]
+        return insert(self.model_cls).values(db_values)
+
+    async def insert_instances(self, *, items: list[T]) -> None:
         """[Batch Instance] 高性能批量插入对象实例。
 
         Args:
             items: 要插入的实例列表
-            execute: 是否执行 SQL，False 时仅返回 Insert 语句
-
-        Returns:
-            execute=False 时返回 Insert 语句，否则返回 None
 
         Example:
             # 批量插入实例
             users = [dao.create(username=f"user{i}") for i in range(10)]
             await dao.insert_instances(items=users)
 
-            # 仅构建 SQL，不执行
-            stmt = await dao.insert_instances(items=users, execute=False)
+            # 仅构建 SQL
+            stmt = dao.build_insert_instances_stmt(items=users)
         """
-        if not items:
-            return None
-
-        db_values = []
-        for ins in items:
-            ins.fill_ins_insert_fields()
-            db_values.append(ins.extract_db_values())
-
-        stmt = insert(self.model_cls).values(db_values)
-
-        return await self.model_cls.execute_or_return(
-            stmt, self._session_provider, execute, error_context=f"{self.model_cls.__name__} insert_instances"
+        await self._execute_stmt(
+            self.build_insert_instances_stmt(items=items),
+            error_context=f"{self.model_cls.__name__} insert_instances",
         )
 
 
@@ -358,11 +373,10 @@ async def execute_transaction(
         ```python
         async def _batch_update(sess: AsyncSession) -> None:
             # 使用 UpdateBuilder 构建 SQL 语句
-            updater = await dao.updater.eq_(
+            updater = dao.updater.eq_(
                 Model.id, record_id
             ).update(
                 status="active",
-                execute=False,  # 不自动执行
             )
             # 在事务的 session 中执行
             await sess.execute(updater.update_stmt)
@@ -379,10 +393,9 @@ async def execute_transaction(
             await sess.flush()  # 获取自增 ID
 
             # 2. 使用 UpdateBuilder 批量更新
-            updater = await dao.updater.eq_(
+            updater = dao.updater.eq_(
                 Log.user_id, new_user.id
             ).update(
-                execute=False,
                 status="processed",
             )
             await sess.execute(updater.update_stmt)

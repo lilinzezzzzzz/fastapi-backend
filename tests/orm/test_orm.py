@@ -125,7 +125,7 @@ async def test_create_and_insert_strictness(user_dao, db_session):
     assert user.creator_id == 999
 
     # 2. Insert (严格插入)
-    await user.insert(db_session)
+    await user_dao.insert(user)
 
     # 验证数据库
     db_user = await user_dao.query_by_primary_id(user.id)
@@ -134,7 +134,7 @@ async def test_create_and_insert_strictness(user_dao, db_session):
 
     # 3. Strict Insert 检查 (持久化对象不能调 insert)
     with pytest.raises(RuntimeError) as exc:
-        await db_user.insert(db_session)
+        db_user.build_insert_stmt()
     assert "strictly for INSERT" in str(exc.value)
 
 
@@ -142,11 +142,11 @@ async def test_create_and_insert_strictness(user_dao, db_session):
 async def test_update_strictness(user_dao, db_session):
     """测试更新逻辑和严格Update检查"""
     user = User.create(username="bob")
-    await user.insert(db_session)
+    await user_dao.insert(user)
 
     # 1. Update Persistent Object
     db_user = await user_dao.query_by_primary_id(user.id)
-    await db_user.update(db_session, username="bob_updated")  # 更新并持久化
+    await user_dao.update(db_user, {User.username: "bob_updated"})  # 更新并持久化
 
     reloaded = await user_dao.query_by_primary_id(user.id)
     assert reloaded.username == "bob_updated"
@@ -155,7 +155,7 @@ async def test_update_strictness(user_dao, db_session):
     # 2. Strict Update 检查 (新对象不能调 update)
     new_user = User.create(username="charlie")
     with pytest.raises(RuntimeError) as exc:
-        await new_user.update(username="fail")  # 会抛出异常
+        new_user.build_update_stmt(username="fail")
     assert "strictly for UPDATE" in str(exc.value)
 
 
@@ -183,6 +183,16 @@ async def test_batch_insert_rows(user_dao, db_session):
 
     count = await user_dao.counter.count()
     assert count == 2
+
+
+def test_build_batch_insert_statements(user_dao):
+    rows_stmt = user_dao.build_insert_rows_stmt(rows=[{"username": "row_user"}])
+    assert rows_stmt is not None
+
+    users = [User.create(username="stmt_user")]
+    instances_stmt = user_dao.build_insert_instances_stmt(items=users)
+    assert instances_stmt is not None
+    assert users[0].id is not None
 
 
 @pytest.mark.asyncio
@@ -214,9 +224,9 @@ async def test_query_builder(user_dao, db_session):
 async def test_soft_delete(user_dao, db_session):
     """测试软删除"""
     user = User.create(username="del_me")
-    await user.insert(db_session)
+    await user_dao.insert(user)
 
-    await (await user_dao.ins_updater(user).soft_delete()).execute()
+    await user_dao.ins_updater(user).soft_delete().execute()
 
     # 默认不查出
     assert await user_dao.querier.eq_(User.id, user.id).first() is None
@@ -228,9 +238,9 @@ async def test_soft_delete(user_dao, db_session):
 async def test_updater_builder_logic(user_dao, db_session):
     """测试 UpdateBuilder"""
     user = User.create(username="old_name")
-    await user.insert(db_session)
+    await user_dao.insert(user)
 
-    await (await user_dao.ins_updater(user).update(username="new_name")).execute()
+    await user_dao.ins_updater(user).update({User.username: "new_name"}).execute()
 
     reloaded = await user_dao.query_by_primary_id(user.id)
     assert reloaded.username == "new_name"

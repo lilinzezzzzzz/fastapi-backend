@@ -49,8 +49,8 @@ class JSONType(TypeDecorator):
            - 21c+ 使用默认的原生 JSON 模式即可
            - 12c-20c 必须设置 oracle_native_json=False 使用 CLOB 模式
         2. 序列化行为:
-           - PostgreSQL/MySQL/SQLite/Oracle原生: 驱动自动处理
-           - Oracle CLOB/其他数据库: 使用 orjson 序列化
+           - PostgreSQL/Oracle原生: 驱动自动处理
+           - MySQL/SQLite/Oracle CLOB/其他数据库: 使用 orjson 序列化
         3. 空值处理:
            - None 值正常存储和读取
            - 空字符串 "" 读取时返回 None

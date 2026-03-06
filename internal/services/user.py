@@ -149,8 +149,8 @@ class UserService:
 
         # 如果已经绑定到当前用户，更新信息
         if existing_account:
-            await existing_account.update(
-                session_provider=self._third_party_dao.session_provider,
+            await self._third_party_dao.update(
+                existing_account,
                 union_id=third_party_info.union_id,
                 avatar=third_party_info.avatar,
                 nickname=third_party_info.nickname,

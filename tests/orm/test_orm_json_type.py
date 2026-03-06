@@ -121,7 +121,7 @@ async def test_create_and_insert_strictness(user_dao, db_session):
     assert user.id is not None
     assert user.info == {"role": "admin"}
 
-    await user.insert(db_session)
+    await user_dao.insert(user)
 
     db_user = await user_dao.query_by_primary_id(user.id)
     assert db_user is not None
@@ -129,7 +129,7 @@ async def test_create_and_insert_strictness(user_dao, db_session):
     assert db_user.info == {"role": "admin"}
 
     with pytest.raises(RuntimeError) as exc:
-        await db_user.insert(db_session)
+        db_user.build_insert_stmt()
     assert "strictly for INSERT" in str(exc.value)
 
 
@@ -138,7 +138,7 @@ async def test_update_strictness(user_dao, db_session):
     """测试更新逻辑、Mutable JSON 追踪和严格 Update 检查"""
     # 初始化
     user = User.create(username="bob", info={"login_count": 0})
-    await user.insert(db_session)
+    await user_dao.insert(user)
 
     # 1. 测试 MutableJSON 追踪（在同一个事务中修改并提交）
     async with db_session() as session:
@@ -159,7 +159,7 @@ async def test_update_strictness(user_dao, db_session):
     # 3. Strict Update 检查（新对象不能调用 update）
     new_user = User.create(username="charlie")
     with pytest.raises(RuntimeError) as exc:
-        new_user.update(username="fail")  # 同步方法，会抛出异常
+        new_user.build_update_stmt(username="fail")
     assert "strictly for UPDATE" in str(exc.value)
 
 @pytest.mark.asyncio
@@ -197,8 +197,8 @@ async def test_query_builder(user_dao, db_session):
 @pytest.mark.asyncio
 async def test_soft_delete(user_dao, db_session):
     user = User.create(username="del_me")
-    await user.insert(db_session)
-    await (await user_dao.ins_updater(user).soft_delete()).execute()
+    await user_dao.insert(user)
+    await user_dao.ins_updater(user).soft_delete().execute()
     assert await user_dao.querier.eq_(User.id, user.id).first() is None
     assert await user_dao.querier_inc_deleted.eq_(User.id, user.id).first() is not None
 
@@ -206,8 +206,8 @@ async def test_soft_delete(user_dao, db_session):
 @pytest.mark.asyncio
 async def test_updater_builder_logic(user_dao, db_session):
     user = User.create(username="old_name")
-    await user.insert(db_session)
-    await (await user_dao.ins_updater(user).update(username="new_name")).execute()
+    await user_dao.insert(user)
+    await user_dao.ins_updater(user).update({User.username: "new_name"}).execute()
     reloaded = await user_dao.query_by_primary_id(user.id)
     assert reloaded.username == "new_name"
 

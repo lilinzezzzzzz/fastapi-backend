@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Any, Self, cast
 
@@ -260,20 +261,29 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
         if model_ins is not None:
             self._stmt = self._stmt.where(self._model_cls.id == model_ins.id)
 
-    async def update(self, **kwargs) -> Self:
-        for k, v in kwargs.items():
-            if not self._model_cls.has_column(k):
-                logger.warning(f"{k} is not a {self._model_cls.__name__} column")
+    def update(
+        self,
+        updates: Mapping[str | InstrumentedAttribute, Any] | None = None,
+        **kwargs: Any,
+    ) -> Self:
+        raw_updates = dict(updates or {})
+        raw_updates.update(kwargs)
+
+        for key, value in raw_updates.items():
+            column_name = self._model_cls.normalize_update_column_name(key)
+
+            if not self._model_cls.has_column(column_name):
+                logger.warning(f"{column_name} is not a {self._model_cls.__name__} column")
                 continue
 
-            if isinstance(v, datetime) and v.tzinfo:
-                v = v.replace(tzinfo=None)
+            if isinstance(value, datetime) and value.tzinfo:
+                value = value.replace(tzinfo=None)
 
-            self._update_dict[k] = v
+            self._update_dict[column_name] = value
 
         return self
 
-    async def soft_delete(self) -> Self:
+    def soft_delete(self) -> Self:
         if self._model_cls.has_deleted_at_column():
             self._update_dict[self._model_cls.deleted_at_column_name()] = utc_now_naive()
 

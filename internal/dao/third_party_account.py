@@ -33,7 +33,7 @@ class ThirdPartyAccountDao(BaseDao[ThirdPartyAccount]):
         """删除用户的指定平台账号（谨慎使用）"""
         account = await self.get_by_user_id_and_platform(user_id, platform)
         if account:
-            await account.soft_delete(session_provider=self.session_provider)
+            await self.soft_delete(account)
 
 
 # 单例模式
