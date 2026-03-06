@@ -208,17 +208,17 @@ class BaseDao[T: ModelMixin]:
         """插入新实例（代理 instance.insert()）"""
         await instance.insert(self._session_provider)
 
-    async def save(self, instance: T) -> T | None:
-        """保存实例（代理 instance.save()）
+    async def update(self, instance: T, **kwargs) -> T:
+        """更新实例字段并持久化（代理 instance.update()）
 
-        新对象则插入，已存在则更新。
+        Args:
+            instance: 要更新的实例
+            **kwargs: 要更新的字段
 
         Returns:
-            已存在对象返回更新后的实例，新对象返回 None
+            更新后的实例
         """
-        result = await instance.save(self._session_provider)
-        # save() 对已存在对象返回 Self，对新对象返回 None（execute=True 时）
-        return result if isinstance(result, self.model_cls) else None
+        return await instance.update(self._session_provider, **kwargs)
 
     async def soft_delete(self, instance: T) -> None:
         """软删除实例（代理 instance.soft_delete()）"""

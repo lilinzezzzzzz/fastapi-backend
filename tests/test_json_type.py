@@ -251,7 +251,7 @@ async def test_json_crud(db_session):
         config={"debug": True, "version": "1.0"},
         tags=["python", "fastapi"],
     )
-    await model.save(db_session)
+    await model.insert(db_session)
 
     # Read
     async with db_session() as session:
@@ -266,7 +266,7 @@ async def test_json_mutable_tracking(db_session):
     """测试 MutableDict/MutableList 变更追踪"""
     # 创建并保存
     model = JsonModel.create(name="mutable_test", config={"count": 0}, tags=[])
-    await model.save(db_session)
+    await model.insert(db_session)
 
     # 修改 JSON 字段
     async with db_session() as session:
@@ -289,7 +289,7 @@ async def test_json_nullable_field(db_session):
     """测试可空 JSON 字段"""
     # 测试 None 值
     model1 = JsonModel.create(name="nullable_none", extra=None)
-    await model1.save(db_session)
+    await model1.insert(db_session)
 
     async with db_session() as session:
         result = await session.get(JsonModel, model1.id)
@@ -297,7 +297,7 @@ async def test_json_nullable_field(db_session):
 
     # 测试有值
     model2 = JsonModel.create(name="nullable_with_value", extra={"meta": "data"})
-    await model2.save(db_session)
+    await model2.insert(db_session)
 
     async with db_session() as session:
         result = await session.get(JsonModel, model2.id)
@@ -319,7 +319,7 @@ async def test_json_complex_nested(db_session):
     }
 
     model = JsonModel.create(name="complex", config=complex_config)
-    await model.save(db_session)
+    await model.insert(db_session)
 
     async with db_session() as session:
         result = await session.get(JsonModel, model.id)

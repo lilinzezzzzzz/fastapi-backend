@@ -146,8 +146,7 @@ async def test_update_strictness(user_dao, db_session):
 
     # 1. Update Persistent Object
     db_user = await user_dao.query_by_primary_id(user.id)
-    db_user.update(username="bob_updated")  # 同步方法，只设置字段
-    await db_user.save(db_session)  # 持久化更新
+    await db_user.update(db_session, username="bob_updated")  # 更新并持久化
 
     reloaded = await user_dao.query_by_primary_id(user.id)
     assert reloaded.username == "bob_updated"
@@ -156,7 +155,7 @@ async def test_update_strictness(user_dao, db_session):
     # 2. Strict Update 检查 (新对象不能调 update)
     new_user = User.create(username="charlie")
     with pytest.raises(RuntimeError) as exc:
-        new_user.update(username="fail")  # 同步方法，会抛出异常
+        await new_user.update(username="fail")  # 会抛出异常
     assert "strictly for UPDATE" in str(exc.value)
 
 

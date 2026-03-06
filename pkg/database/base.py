@@ -173,20 +173,25 @@ class ModelMixin(Base):
             stmt, session_provider, execute, error_context=f"{self.__class__.__name__} insert"
         )
 
-    def update(self, **kwargs: Any) -> Self:
-        """[Strict Update] 仅用于更新已存在对象的字段值（不执行 SQL）。
+    async def update(
+        self,
+        session_provider: SessionProvider | None = None,
+        execute: bool = True,
+        **kwargs: Any,
+    ) -> Self:
+        """[Strict Update] 更新已存在对象的字段值并可选执行 SQL。
 
         Args:
-            **kwargs: 可以是字符串字段名或 InstrumentedAttribute 属性
+            session_provider: 会话提供者（execute=True 时必填）
+            execute: 是否执行 SQL，False 时仅更新对象属性
+            **kwargs: 要更新的字段名和值
 
         Example:
-            # 使用字符串字段名
-            obj.update(name="Alice", age=25)
+            # 仅更新对象属性（不执行 SQL）
+            await obj.update(execute=False, name="Alice", age=25)
 
-            # 使用模型属性 (InstrumentedAttribute)
-            from internal.models import Model
-            obj.update(Model.name, "Alice")  # 不支持这种用法
-            obj.update(**{Model.name.key: "Alice"})  # 推荐用这种方式
+            # 更新对象属性并执行 SQL
+            await obj.update(session_provider=..., name="Alice", age=25)
         """
         state = inspect(self)
 
@@ -197,6 +202,8 @@ class ModelMixin(Base):
                 f"Please use insert() first."
             )
 
+        # 构建更新数据
+        data = {}
         for key, value in kwargs.items():
             # 如果 key 是 InstrumentedAttribute，提取其字符串名称
             if isinstance(key, InstrumentedAttribute):
@@ -206,58 +213,44 @@ class ModelMixin(Base):
 
             if self.has_column(column_name):
                 setattr(self, column_name, value)
+                data[column_name] = value
+
+        # 补全更新字段
+        self._fill_ins_update_fields(data)
+
+        if not execute:
+            return self
+
+        if session_provider is None:
+            raise ValueError(f"{self.__class__.__name__} update() requires session_provider when execute=True")
+
+        # 执行 SQL 更新
+        stmt = (
+            update(self.__class__)
+            .where(self.__class__.id == self.id)
+            .values(data)
+        )
+
+        await self._execute_or_return(
+            stmt, session_provider, execute=True, error_context=f"{self.__class__.__name__} update"
+        )
 
         return self
 
-    async def save(self, session_provider: SessionProvider | None = None, execute: bool = True) -> Self | Insert | None:
-        """[Save] 保存对象（新对象则插入，已存在则更新）。"""
-        state = inspect(self)
-
-        if state.transient:
-            # 新对象：执行插入
-            self._fill_ins_insert_fields()
-            data = self._extract_db_values()
-            stmt = insert(self.__class__).values(data)
-            return await self._execute_or_return(
-                stmt, session_provider, execute, error_context=f"{self.__class__.__name__} save(insert)"
-            )
-        else:
-            # 已存在对象：执行更新
-            self._fill_ins_update_fields()
-
-            if session_provider is None:
-                raise ValueError(f"{self.__class__.__name__} save(update) requires session_provider")
-
-            # 直接使用 update() 语句执行更新（因为 ID 一定存在）
-            data = self._extract_db_values()
-            stmt = (
-                update(self.__class__)
-                .where(self.__class__.id == self.id)
-                .values(data)
-            )
-
-            await self._execute_or_return(
-                stmt, session_provider, execute=True, error_context=f"{self.__class__.__name__} save(update)"
-            )
-
-            return self
-
     async def soft_delete(self, session_provider: SessionProvider) -> None:
         if self.has_deleted_at_column():
-            # 使用 update() 设置字段，然后用 save() 持久化
-            self.update(**{self.deleted_at_column_name(): utc_now_naive()})
-            await self.save(session_provider=session_provider)
+            await self.update(
+                session_provider=session_provider,
+                **{self.deleted_at_column_name(): utc_now_naive()},
+            )
 
     async def restore(self, session_provider: SessionProvider) -> None:
-        """
-        [Soft Delete] 恢复已删除的对象
-        """
+        """[Soft Delete] 恢复已删除的对象"""
         if self.has_deleted_at_column():
-            # 恢复时：
-            # 1. deleted_at 设为 None
-            # 2. update() 会自动将 updated_at 设为当前时间（符合逻辑，因为数据状态变了）
-            self.update(**{self.deleted_at_column_name(): None})
-            await self.save(session_provider=session_provider)
+            await self.update(
+                session_provider=session_provider,
+                **{self.deleted_at_column_name(): None},
+            )
 
     # ==========================================================================
     # 字段补全辅助方法
@@ -285,15 +278,17 @@ class ModelMixin(Base):
         if self.has_updater_id_column() and not self.updater_id:
             self.updater_id = None
 
-    def _fill_ins_update_fields(self):
+    def _fill_ins_update_fields(self, data: dict[str, Any]) -> None:
         """[Instance Update] 补全实例更新所需的字段"""
         defaults = self._get_context_defaults()
 
         if self.has_updated_at_column():
             setattr(self, self.updated_at_column_name(), defaults.now)
+            data[self.updated_at_column_name()] = defaults.now
 
         if self.has_updater_id_column():
             setattr(self, self.updater_id_column_name(), defaults.user_id)
+            data[self.updater_id_column_name()] = defaults.user_id
 
     @classmethod
     def _fill_dict_insert_fields(cls, raw_data: dict[str, Any], defaults: ContextDefaults) -> dict[str, Any]:
