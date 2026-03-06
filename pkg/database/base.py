@@ -112,7 +112,7 @@ class ModelMixin(Base):
 
         stmt = insert(self.__class__).values(data)
 
-        return await self._execute_or_return(
+        return await self.execute_or_return(
             stmt, session_provider, execute, error_context=f"{self.__class__.__name__} insert"
         )
 
@@ -174,7 +174,7 @@ class ModelMixin(Base):
             .values(data)
         )
 
-        await self._execute_or_return(
+        await self.execute_or_return(
             stmt, session_provider, execute=True, error_context=f"{self.__class__.__name__} update"
         )
 
@@ -263,7 +263,7 @@ class ModelMixin(Base):
         return values
 
     @staticmethod
-    async def _execute_or_return[ExecT: Executable](
+    async def execute_or_return[ExecT: Executable](
         stmt: ExecT, session_provider: SessionProvider | None, execute: bool, error_context: str
     ) -> ExecT | None:
         """

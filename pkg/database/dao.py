@@ -268,9 +268,7 @@ class BaseDao[T: ModelMixin]:
     # 批量操作 (Batch)
     # ==========================================================================
 
-    async def insert_rows(
-        self, *, rows: list[dict[str, Any]], execute: bool = True
-    ) -> Insert | None:
+    async def insert_rows(self, *, rows: list[dict[str, Any]], execute: bool = True) -> Insert | None:
         """[Batch Dict] 高性能批量插入字典。
 
         Args:
@@ -299,13 +297,11 @@ class BaseDao[T: ModelMixin]:
         if not execute:
             return stmt
 
-        return await self.model_cls._execute_or_return(
+        return await self.model_cls.execute_or_return(
             stmt, self._session_provider, execute, error_context=f"{self.model_cls.__name__} insert_rows"
         )
 
-    async def insert_instances(
-        self, *, items: list[T], execute: bool = True
-    ) -> Insert | None:
+    async def insert_instances(self, *, items: list[T], execute: bool = True) -> Insert | None:
         """[Batch Instance] 高性能批量插入对象实例。
 
         Args:
@@ -333,7 +329,7 @@ class BaseDao[T: ModelMixin]:
 
         stmt = insert(self.model_cls).values(db_values)
 
-        return await self.model_cls._execute_or_return(
+        return await self.model_cls.execute_or_return(
             stmt, self._session_provider, execute, error_context=f"{self.model_cls.__name__} insert_instances"
         )
 
