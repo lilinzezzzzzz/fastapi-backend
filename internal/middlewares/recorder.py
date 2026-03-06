@@ -116,6 +116,7 @@ class ASGIRecordMiddleware:
             headers=MutableHeaders(scope=scope),
             receive=receive,
         )
+        send_wrapper: Send = send
 
         # 全局异常捕获,覆盖整个请求处理流程
         try:
@@ -142,6 +143,6 @@ class ASGIRecordMiddleware:
 
             if not req_ctx.response_started:
                 error_resp = self._build_error_response(exc)
-                await error_resp(scope, receive, send_wrapper)
+                await error_resp(scope, receive, send=send_wrapper)
             else:
                 logger.critical(f"Response already started, cannot send error response. trace_id={req_ctx.trace_id}")

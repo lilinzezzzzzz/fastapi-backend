@@ -8,6 +8,7 @@ from sqlalchemy import BigInteger, DateTime, Executable, Insert, Update, insert,
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, InstrumentedAttribute, Mapped, mapped_column
 
+from pkg.database.types import ColumnKey
 from pkg.toolkit import context
 from pkg.toolkit.inter import snowflake_id_generator
 from pkg.toolkit.json import JsonInputType, orjson_dumps, orjson_loads
@@ -115,14 +116,14 @@ class ModelMixin(Base):
         return self.extract_db_values()
 
     @staticmethod
-    def normalize_update_column_name(column: str | InstrumentedAttribute) -> str:
+    def normalize_update_column_name(column: ColumnKey) -> str:
         if isinstance(column, InstrumentedAttribute):
             return column.key
         return column
 
     def apply_updates(
         self,
-        updates: Mapping[str | InstrumentedAttribute, Any] | None = None,
+        updates: Mapping[ColumnKey, Any] | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
         """更新实例字段并返回可用于 UPDATE 的列值。"""
@@ -137,7 +138,7 @@ class ModelMixin(Base):
 
         data: dict[str, Any] = {}
         raw_updates = dict(updates or {})
-        raw_updates.update(kwargs)
+        raw_updates |= kwargs
 
         for key, value in raw_updates.items():
             column_name = self.normalize_update_column_name(key)
@@ -150,7 +151,7 @@ class ModelMixin(Base):
 
     def build_update_stmt(
         self,
-        updates: Mapping[str | InstrumentedAttribute, Any] | None = None,
+        updates: Mapping[ColumnKey, Any] | None = None,
         **kwargs: Any,
     ) -> Update:
         """[Strict Update] 构造已存在对象的 UPDATE 语句，并同步实例字段。"""
@@ -160,13 +161,13 @@ class ModelMixin(Base):
     def build_soft_delete_stmt(self) -> Update | None:
         if not self.has_deleted_at_column():
             return None
-        return self.build_update_stmt(**{self.deleted_at_column_name(): utc_now_naive()})
+        return self.build_update_stmt(updates={self.deleted_at_column_name(): utc_now_naive()})
 
     def build_restore_stmt(self) -> Update | None:
         """[Soft Delete] 构造恢复已删除对象的 UPDATE 语句。"""
         if not self.has_deleted_at_column():
             return None
-        return self.build_update_stmt(**{self.deleted_at_column_name(): None})
+        return self.build_update_stmt(updates={self.deleted_at_column_name(): None})
 
     # ==========================================================================
     # 字段补全辅助方法
@@ -247,7 +248,7 @@ class ModelMixin(Base):
         except Exception as e:
             raise RuntimeError(f"{error_context} failed: {e}") from e
 
-    def to_dict(self, *, exclude_column: list[str] = None) -> dict[str, Any]:
+    def to_dict(self, *, exclude_column: list[str] | None = None) -> dict[str, Any]:
         return {
             col: getattr(self, col)
             for col in self.get_column_names()

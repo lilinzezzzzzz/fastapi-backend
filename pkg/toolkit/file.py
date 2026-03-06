@@ -1,7 +1,7 @@
 import os
 from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import Literal, overload
+from typing import Any, Literal, cast, overload
 
 import anyio
 
@@ -46,12 +46,12 @@ class AnyioFile:
     @overload
     async def read(self, mode: Literal["rb", "br"], encoding: None = None) -> bytes: ...
 
-    async def read(self, mode: str = "r", encoding: str | None = "utf-8") -> str | bytes:
+    async def read(self, mode: Literal["r", "rb", "br"] = "r", encoding: str | None = "utf-8") -> str | bytes:
         """
         读取完整文件内容。
         注意：这会将整个文件加载到内存，大文件请慎用。
         """
-        if "b" in mode:
+        if mode in ("rb", "br"):
             async with await self.file_path.open(mode=mode) as f:
                 return await f.read()
         else:
@@ -73,16 +73,20 @@ class AnyioFile:
             mode: 读取模式 ("rb" 返回 bytes, "r" 返回 str)
             encoding: 文本模式下的编码
         """
-        kwargs = {"mode": mode}
-        if "b" not in mode:
-            kwargs["encoding"] = encoding
-
-        async with await self.file_path.open(**kwargs) as f:
-            while True:
-                chunk = await f.read(chunk_size)
-                if not chunk:
-                    break
-                yield chunk
+        if "b" in mode:
+            async with await self.file_path.open(mode=cast(Any, mode)) as f:
+                while True:
+                    chunk = await f.read(chunk_size)
+                    if not chunk:
+                        break
+                    yield chunk
+        else:
+            async with await self.file_path.open(mode=cast(Any, mode), encoding=encoding) as f:
+                while True:
+                    chunk = await f.read(chunk_size)
+                    if not chunk:
+                        break
+                    yield chunk
 
     async def read_lines(
         self, encoding: str | None = "utf-8", strip_newline: bool = False
@@ -136,12 +140,15 @@ class AnyioFile:
 
         # 打开文件并写入
         # 注意：anyio.Path.open() 返回的是一个 coroutine，必须 await 拿到 context manager
-        kwargs = {"mode": mode}
-        if not is_binary:
-            kwargs["encoding"] = encoding
-
-        async with await self.file_path.open(**kwargs) as f:
-            n = await f.write(data)
-            if flush:
-                await f.flush()
-            return n
+        if is_binary:
+            async with await self.file_path.open(mode=cast(Any, mode)) as f:
+                n = await f.write(data)
+                if flush:
+                    await f.flush()
+                return n
+        else:
+            async with await self.file_path.open(mode=cast(Any, mode), encoding=encoding) as f:
+                n = await f.write(data)
+                if flush:
+                    await f.flush()
+                return n

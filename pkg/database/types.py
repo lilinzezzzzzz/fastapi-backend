@@ -4,9 +4,13 @@ from sqlalchemy import Text
 from sqlalchemy.dialects import oracle, postgresql, sqlite
 from sqlalchemy.engine import Dialect
 from sqlalchemy.ext.mutable import Mutable, MutableDict, MutableList
+from sqlalchemy.orm import InstrumentedAttribute
 from sqlalchemy.types import JSON as SA_JSON, TypeDecorator
 
 from pkg.toolkit.json import orjson_dumps, orjson_loads
+
+ColumnKey = str | InstrumentedAttribute
+"""列键类型：可以是字符串列名或 InstrumentedAttribute"""
 
 
 class JSONType(TypeDecorator):

@@ -58,30 +58,44 @@ class OpenAIClient:
                 # 优化：使用更具体的异常类型
                 raise ValueError(f"Invalid message[{i}] missing role: {msg}")
 
+            def _require_content(role_name: str) -> Any:
+                if content is None:
+                    raise ValueError(f"{role_name} message[{i}] missing required 'content'")
+                return content
+
             # 优化：只传递非 None 的可选参数，使消息体更简洁
             if role == "user":
-                converted.append(ChatCompletionUserMessageParam(role="user", content=content))
+                converted.append(ChatCompletionUserMessageParam(role="user", content=_require_content("user")))
             elif role == "system":
-                converted.append(ChatCompletionSystemMessageParam(role="system", content=content))
+                converted.append(ChatCompletionSystemMessageParam(role="system", content=_require_content("system")))
             elif role == "assistant":
-                params = {"role": "assistant", "content": content}
+                assistant_msg: ChatCompletionAssistantMessageParam = {"role": "assistant"}
+                if content is not None:
+                    assistant_msg["content"] = content
                 if msg.get("tool_calls") is not None:
-                    params["tool_calls"] = msg["tool_calls"]
+                    assistant_msg["tool_calls"] = msg["tool_calls"]
                 if msg.get("function_call") is not None:
-                    params["function_call"] = msg["function_call"]
+                    assistant_msg["function_call"] = msg["function_call"]
+                if "content" not in assistant_msg and "tool_calls" not in assistant_msg and "function_call" not in assistant_msg:
+                    raise ValueError(
+                        f"assistant message[{i}] must provide at least one of content/tool_calls/function_call"
+                    )
                 # 忽略不太常用的 refusal/audio 等，除非确定需要支持
-                converted.append(ChatCompletionAssistantMessageParam(**params))
+                converted.append(assistant_msg)
             elif role == "developer":
-                params = {"role": "developer", "content": content}
+                developer_msg: ChatCompletionDeveloperMessageParam = {
+                    "role": "developer",
+                    "content": _require_content("developer"),
+                }
                 if msg.get("name") is not None:
-                    params["name"] = msg["name"]
-                converted.append(ChatCompletionDeveloperMessageParam(**params))
+                    developer_msg["name"] = msg["name"]
+                converted.append(developer_msg)
             elif role == "tool":
                 if not msg.get("tool_call_id"):
                     raise ValueError(f"Tool message[{i}] missing required 'tool_call_id'")
                 converted.append(ChatCompletionToolMessageParam(
                     role="tool",
-                    content=content,
+                    content=_require_content("tool"),
                     tool_call_id=msg["tool_call_id"],
                 ))
             elif role == "function":

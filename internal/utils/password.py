@@ -33,7 +33,7 @@ class PasswordHandler:
         password_bytes = password.encode("utf-8")
 
         # 生成盐并加密密码
-        salt = bcrypt.gensalt(rounds=12)  # rounds 越大越安全，但计算越慢
+        salt = bcrypt.gensalt(rounds=PasswordHandler.BCRYPT_ROUNDS)  # rounds 越大越安全，但计算越慢
         hashed = bcrypt.hashpw(password_bytes, salt)
 
         return hashed.decode("utf-8")
@@ -80,4 +80,22 @@ class PasswordHandler:
         Returns:
             bool: 需要重新加密返回 True，否则返回 False
         """
-        return bcrypt.hashpw_needs_rehash(password_hash)
+        try:
+            # bcrypt hash 格式示例: $2b$12$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+            parts = password_hash.split("$")
+            if len(parts) < 4:
+                return True
+
+            version = parts[1]
+            rounds = int(parts[2])
+        except (AttributeError, TypeError, ValueError):
+            # 非法 hash 或无法解析，视为需要重新加密
+            return True
+
+        # 版本不是当前主版本，建议升级
+        if version != "2b":
+            return True
+
+        # rounds 低于当前策略时需要重哈希
+        return rounds < PasswordHandler.BCRYPT_ROUNDS
+    BCRYPT_ROUNDS = 12

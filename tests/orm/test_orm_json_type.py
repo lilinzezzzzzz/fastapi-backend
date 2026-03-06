@@ -86,7 +86,7 @@ class User(ModelMixin):
 
 
 class UserDao(BaseDao[User]):
-    pass
+    _model_cls: type[User] = User
 
 
 # ==========================================

@@ -1,6 +1,6 @@
 import multiprocessing
 import random
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from functools import partial
 from typing import Any, Literal
@@ -100,10 +100,12 @@ class AnyioTaskHandler:
         while isinstance(func, partial):
             func = func.func
 
-        if hasattr(func, "__self__"):
-            return f"{func.__self__.__class__.__name__}.{func.__name__}"
-        if hasattr(func, "__name__"):
-            return func.__name__
+        bound_self = getattr(func, "__self__", None)
+        func_name = getattr(func, "__name__", None)
+        if bound_self is not None and isinstance(func_name, str):
+            return f"{bound_self.__class__.__name__}.{func_name}"
+        if isinstance(func_name, str):
+            return func_name
         return str(func)
 
     async def _run_task_inner(
@@ -302,8 +304,8 @@ class AnyioTaskHandler:
         self,
         sync_func: Callable[..., Any],
         *,
-        args_tuple_list: list[tuple] | None = None,
-        kwargs_dict_list: list[dict] | None = None,
+        args_tuple_list: list[tuple[Any, ...]] | None = None,
+        kwargs_dict_list: list[dict[str, Any]] | None = None,
         timeout: float | None = None,
         cancellable: bool = False,
     ) -> list[Any]:
@@ -313,8 +315,8 @@ class AnyioTaskHandler:
         self,
         sync_func: Callable[..., Any],
         *,
-        args_tuple_list: list[tuple] | None = None,
-        kwargs_dict_list: list[dict] | None = None,
+        args_tuple_list: list[tuple[Any, ...]] | None = None,
+        kwargs_dict_list: list[dict[str, Any]] | None = None,
         timeout: float | None = None,
         cancellable: bool = False,
     ) -> list[Any]:
@@ -323,21 +325,26 @@ class AnyioTaskHandler:
     async def _run_batch_sync(
         self,
         sync_func: Callable,
-        args_list: list[tuple] | None,
-        kwargs_list: list[dict] | None,
+        args_list: list[tuple[Any, ...]] | None,
+        kwargs_list: list[dict[str, Any]] | None,
         timeout: float | None,
         cancellable: bool,
         backend: Literal["thread", "process"],
     ) -> list[Any]:
-        args_list = args_list or []
-        kwargs_list = kwargs_list or [None] * len(args_list)  # type: ignore
-        if len(kwargs_list) != len(args_list):
+        resolved_args: list[tuple[Any, ...]] = args_list if args_list is not None else []
+        resolved_kwargs: Sequence[dict[str, Any] | None]
+        if kwargs_list is None:
+            resolved_kwargs = [None] * len(resolved_args)
+        else:
+            resolved_kwargs = kwargs_list
+
+        if len(resolved_kwargs) != len(resolved_args):
             raise ValueError("args and kwargs lists must be same length")
 
-        results: list[Any] = [None] * len(args_list)
+        results: list[Any] = [None] * len(resolved_args)
         func_name = self.get_coro_func_name(sync_func)
 
-        async def _worker(idx, a, k):
+        async def _worker(idx: int, a: tuple[Any, ...], k: dict[str, Any] | None):
             bound = partial(sync_func, *(a or ()), **(k or {}))
 
             async with self._global_limiter:
@@ -368,7 +375,7 @@ class AnyioTaskHandler:
                     logger.error(f"{backend}-{idx} ({func_name}) failed: {e}")
 
         async with create_task_group() as tg:
-            for i, (args, kwargs) in enumerate(zip(args_list, kwargs_list, strict=False)):
+            for i, (args, kwargs) in enumerate(zip(resolved_args, resolved_kwargs, strict=False)):
                 tg.start_soon(_worker, i, args, kwargs)
 
         return results

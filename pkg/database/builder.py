@@ -2,10 +2,11 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Any, Self, cast
 
-from sqlalchemy import ClauseElement, ColumnElement, Delete, Select, Update, distinct, func, or_, select, update
+from sqlalchemy import ColumnElement, Delete, Select, Update, func, or_, select, update
 from sqlalchemy.orm import InstrumentedAttribute, Mapped
 
 from pkg.database.base import ModelMixin, SessionProvider
+from pkg.database.types import ColumnKey
 from pkg.logger import logger
 from pkg.toolkit import context
 from pkg.toolkit.list import unique_list
@@ -34,7 +35,7 @@ class BaseBuilder[T: ModelMixin]:
         return self._stmt
 
     # --- 条件构造 ---
-    def where(self, *conditions: ClauseElement) -> Self:
+    def where(self, *conditions: ColumnElement[bool]) -> Self:
         if conditions:
             self._stmt = self.stmt.where(*conditions)
         return self
@@ -253,7 +254,11 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
         model_ins: T | None = None,
         session_provider: SessionProvider,
     ):
-        target_cls = model_cls if model_cls is not None else model_ins.__class__
+        # model_cls 和 model_ins 必须有一个不为 None
+        if model_cls is None and model_ins is None:
+            raise ValueError("UpdateBuilder requires either model_cls or model_ins")
+
+        target_cls: type[T] = model_cls if model_cls is not None else cast(type[T], model_ins.__class__)
         super().__init__(target_cls, session_provider=session_provider)
         self._stmt = update(self._model_cls)
         self._update_dict = {}
@@ -263,11 +268,12 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
 
     def update(
         self,
-        updates: Mapping[str | InstrumentedAttribute, Any] | None = None,
+        updates: Mapping[ColumnKey, Any] | None = None,
         **kwargs: Any,
     ) -> Self:
-        raw_updates = dict(updates or {})
-        raw_updates.update(kwargs)
+        # 合并更新数据
+        raw_updates: dict[ColumnKey, Any] = dict(updates or {})
+        raw_updates |= kwargs
 
         for key, value in raw_updates.items():
             column_name = self._model_cls.normalize_update_column_name(key)

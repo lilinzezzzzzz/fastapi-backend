@@ -128,16 +128,30 @@ class AsyncHttpClient:
         logger.info(f"Req: {method} {url} | params={params}")
 
         try:
-            response = await self.client.request(
-                method=method.upper(),
-                url=url,
-                params=params,
-                data=data,
-                json=json,
-                files=files,
-                headers=req_headers,
-                timeout=timeout or self.timeout,
-            )
+            request_method = method.upper()
+            request_timeout = timeout or self.timeout
+            if isinstance(data, str):
+                response = await self.client.request(
+                    method=request_method,
+                    url=url,
+                    params=params,
+                    content=data,
+                    json=json,
+                    files=files,
+                    headers=req_headers,
+                    timeout=request_timeout,
+                )
+            else:
+                response = await self.client.request(
+                    method=request_method,
+                    url=url,
+                    params=params,
+                    data=data,
+                    json=json,
+                    files=files,
+                    headers=req_headers,
+                    timeout=request_timeout,
+                )
 
             err_msg = self._get_error_message(response) if response.is_error else None
 

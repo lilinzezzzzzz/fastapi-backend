@@ -14,7 +14,7 @@ class AESCipher(BaseCryptoUtil):
         super().__init__(key)
         try:
             # 兼容 str (YAML/JSON 配置) 和 bytes
-            ensure_bytes_key = key if isinstance(key, bytes) else key.encode("utf-8")
+            ensure_bytes_key = key.encode("utf-8") if isinstance(key, str) else key
             self._fernet = Fernet(ensure_bytes_key)
         except Exception as e:
             raise ValueError(

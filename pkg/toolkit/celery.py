@@ -30,7 +30,8 @@ class CeleryClient:
         **extra_conf: Any,
     ) -> None:
         self.queue = task_default_queue
-        self.app = Celery(app_name, broker=broker_url, backend=backend_url, include=include)
+        include_modules: list[str] | None = list(include) if include is not None else None
+        self.app = Celery(app_name, broker=broker_url, backend=backend_url, include=include_modules)
 
         # 基础配置
         conf = {
@@ -138,7 +139,7 @@ class CeleryClient:
     # ------------------------------
     # 3. 查询与检查
     # ------------------------------
-    def get_result(self, task_id: str, timeout: float = None, propagate: bool = True) -> Any:
+    def get_result(self, task_id: str, timeout: float, propagate: bool = True) -> Any:
         """
         获取任务结果 (阻塞式)
         :param timeout: 等待超时时间(秒)，None 表示一直等待

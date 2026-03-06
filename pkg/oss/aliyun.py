@@ -13,7 +13,15 @@ class AliyunOSSBackend(BaseStorage):
     已自动注册到 _STORAGE_REGISTRY。
     """
 
-    def __init__(self, *, bucket_name: str, access_key: str, secret_key: str, endpoint: str = None, region: str = None):
+    def __init__(
+        self,
+        *,
+        bucket_name: str,
+        access_key: str,
+        secret_key: str,
+        endpoint: str | None = None,
+        region: str | None = None,
+    ):
         if not access_key or not secret_key:
             raise ValueError("Aliyun OSS requires access_key and secret_key")
 
@@ -26,7 +34,7 @@ class AliyunOSSBackend(BaseStorage):
 
         self.bucket = oss2.Bucket(auth, real_endpoint, bucket_name)
 
-    async def upload(self, file_obj, path: str, content_type: str = None) -> str:
+    async def upload(self, file_obj, path: str, content_type: str | None = None) -> str:
         headers = {"Content-Type": content_type} if content_type else None
 
         def _sync_upload():

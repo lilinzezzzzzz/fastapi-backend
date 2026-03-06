@@ -7,6 +7,7 @@ from sqlalchemy.orm import InstrumentedAttribute, aliased
 
 from pkg.database.base import ModelMixin, SessionProvider
 from pkg.database.builder import CountBuilder, QueryBuilder, UpdateBuilder
+from pkg.database.types import ColumnKey
 
 """
 数据访问对象 (DAO)
@@ -70,7 +71,7 @@ class BaseDao[T: ModelMixin]:
                 f"got {instance.__class__.__name__}"
             )
 
-    def _assert_instances_model_match(self, items: list[ModelMixin]) -> None:
+    def _assert_instances_model_match(self, items: list[T]) -> None:
         for item in items:
             self._assert_instance_model_match(item)
 
@@ -226,7 +227,7 @@ class BaseDao[T: ModelMixin]:
     # ==========================================================================
 
     async def query_by_primary_id(
-        self, primary_id: int, *, creator_id: int = None, include_deleted: bool = False
+        self, primary_id: int, *, creator_id: int | None = None, include_deleted: bool = False
     ) -> T | None:
         """根据主键 ID 查询单条记录"""
         qb = self.querier_inc_deleted if include_deleted else self.querier
@@ -260,7 +261,7 @@ class BaseDao[T: ModelMixin]:
     async def update(
         self,
         instance: T,
-        updates: Mapping[str | InstrumentedAttribute, Any] | None = None,
+        updates: Mapping[ColumnKey, Any] | None = None,
         **kwargs: Any,
     ) -> T:
         """更新实例字段并持久化

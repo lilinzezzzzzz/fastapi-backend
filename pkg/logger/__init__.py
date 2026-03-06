@@ -52,7 +52,7 @@ def init_logger(
     compression: str | None = None,
     timezone: TimezoneType = "UTC",
     enqueue: bool = True,
-    log_format: LogFormat | str = LogFormat.TEXT,
+    log_format: LogFormat = LogFormat.TEXT,
     write_to_file: bool = True,
     write_to_console: bool = True,
     use_subdir: bool = False,

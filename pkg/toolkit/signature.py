@@ -40,13 +40,17 @@ class SignatureAuthHandler:
             logger.error(f"generate_signature error: {e}, data={data}")
             raise
 
-    def verify_signature(self, data: dict[str, Any], signature: str) -> bool:
+    def verify_signature(self, data: dict[str, Any], signature: str | None) -> bool:
         """
         验证签名
         :param data: 原始数据
         :param signature: 待校验签名
         :return: True/False
         """
+        if not signature:
+            logger.warning("Missing signature for verification")
+            return False
+
         try:
             expected_signature = self.generate_signature(data)
             return hmac.compare_digest(expected_signature, signature)
@@ -54,19 +58,21 @@ class SignatureAuthHandler:
             logger.error(f"verify_signature error: {e}, data={data}, signature={signature}")
             return False
 
-    def verify_timestamp(self, request_time: str) -> bool:
+    def verify_timestamp(self, request_time: str | None) -> bool:
         """
         校验 UTC 秒级时间戳是否过期
         :param request_time: 字符串类型的 UTC 秒级时间戳
         :return: True/False
         """
         try:
-            request_time = int(request_time)
-            current_time = int(time.time())
+            if not request_time:
+                return False
+            int_request_time = int(request_time)
+            int_current_time = int(time.time())
             # 绝对容忍误差，双向防止时钟不同步
-            if abs(current_time - request_time) > self.timestamp_tolerance:
+            if abs(int_current_time - int_request_time) > self.timestamp_tolerance:
                 logger.warning(
-                    f"Timestamp not in tolerance, request_time: {request_time}, current_time: {current_time}, tolerance: {self.timestamp_tolerance}s"
+                    f"Timestamp not in tolerance, request_time: {int_request_time}, current_time: {int_current_time}, tolerance: {self.timestamp_tolerance}s"
                 )
                 return False
         except Exception as e:
@@ -74,7 +80,7 @@ class SignatureAuthHandler:
             return False
         return True
 
-    def verify(self, x_signature: str, x_timestamp: str, x_nonce: str) -> bool:
+    def verify(self, x_signature: str | None, x_timestamp: str | None, x_nonce: str | None) -> bool:
         """
         统一验签入口
         :param x_signature: 签名字符串

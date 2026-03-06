@@ -15,7 +15,9 @@ class S3Backend(BaseStorage):
     已自动注册到 _STORAGE_REGISTRY。
     """
 
-    def __init__(self, bucket_name: str, access_key: str, secret_key: str, endpoint: str = None, region: str = None):
+    def __init__(
+        self, bucket_name: str, access_key: str, secret_key: str, endpoint: str | None = None, region: str | None = None
+    ):
         self.bucket_name = bucket_name
         self.endpoint = endpoint
         self.client = boto3.client(
@@ -26,7 +28,7 @@ class S3Backend(BaseStorage):
             endpoint_url=endpoint,
         )
 
-    async def upload(self, file_obj, path: str, content_type: str = None) -> str:
+    async def upload(self, file_obj, path: str, content_type: str | None = None) -> str:
         extra_args = {}
         if content_type:
             extra_args["ContentType"] = content_type

@@ -25,7 +25,7 @@ def register_storage(storage_type: StorageType):
 
 class BaseStorage(ABC):
     @abstractmethod
-    async def upload(self, file_obj: BinaryIO | bytes | str, path: str, content_type: str = None) -> str:
+    async def upload(self, file_obj: BinaryIO | bytes | str, path: str, content_type: str | None = None) -> str:
         pass
 
     @abstractmethod
