@@ -20,6 +20,56 @@ from anyio.abc import TaskGroup
 
 from pkg.logger import logger
 
+
+# ---------- anyio wrapper functions ----------
+async def anyio_run_in_thread(
+    func: Callable[..., Any],
+    *args: Any,
+    abandon_on_cancel: bool = False,
+    limiter: CapacityLimiter | None = None,
+    **kwargs: Any,
+) -> Any:
+    """
+    封装 anyio.to_thread.run_sync，消除类型警告。
+
+    Args:
+        func: 同步函数
+        *args: 位置参数
+        abandon_on_cancel: 取消时是否放弃任务
+        limiter: 容量限制器
+        **kwargs: 关键字参数
+
+    Returns:
+        函数执行结果
+    """
+    bound = partial(func, *args, **kwargs)
+    return await to_thread.run_sync(bound, abandon_on_cancel=abandon_on_cancel, limiter=limiter)  # type: ignore
+
+
+async def anyio_run_in_process(
+    func: Callable[..., Any],
+    *args: Any,
+    cancellable: bool = False,
+    limiter: CapacityLimiter | None = None,
+    **kwargs: Any,
+) -> Any:
+    """
+    封装 anyio.to_process.run_sync，消除类型警告。
+
+    Args:
+        func: 同步函数
+        *args: 位置参数
+        cancellable: 是否可取消
+        limiter: 容量限制器
+        **kwargs: 关键字参数
+
+    Returns:
+        函数执行结果
+    """
+    bound = partial(func, *args, **kwargs)
+    return await to_process.run_sync(bound, cancellable=cancellable, limiter=limiter)  # type: ignore
+
+
 CPU = max(1, multiprocessing.cpu_count())
 GLOBAL_MAX_DEFAULT = min(max(32, 4 * CPU), 256)
 THREAD_MAX_DEFAULT = min(max(16, (2 * GLOBAL_MAX_DEFAULT) // 3), 128)
@@ -172,9 +222,9 @@ class AnyioTaskHandler:
         async def _run():
             if backend == "thread":
                 # AnyIO 4.1.0+: thread 使用 abandon_on_cancel
-                return await to_thread.run_sync(bound, abandon_on_cancel=cancellable, limiter=self._thread_limiter)  # type: ignore
+                return await anyio_run_in_thread(bound, abandon_on_cancel=cancellable, limiter=self._thread_limiter)
             else:
-                return await to_process.run_sync(bound, cancellable=cancellable, limiter=self._process_limiter)  # type: ignore
+                return await anyio_run_in_process(bound, cancellable=cancellable, limiter=self._process_limiter)
 
         if timeout and timeout > 0:
             with fail_after(timeout):
@@ -352,13 +402,13 @@ class AnyioTaskHandler:
 
                     async def _run():
                         if backend == "thread":
-                            return await to_thread.run_sync(
+                            return await anyio_run_in_thread(
                                 bound, abandon_on_cancel=cancellable, limiter=self._thread_limiter
-                            )  # type: ignore
+                            )
                         else:
-                            return await to_process.run_sync(
+                            return await anyio_run_in_process(
                                 bound, cancellable=cancellable, limiter=self._process_limiter
-                            )  # type: ignore
+                            )
 
                     if timeout and timeout > 0:
                         with fail_after(timeout):

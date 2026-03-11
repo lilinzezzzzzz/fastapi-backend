@@ -1,5 +1,6 @@
-import anyio
 import bcrypt
+
+from pkg.toolkit.async_task import anyio_run_in_thread
 
 
 class Hasher:
@@ -20,12 +21,12 @@ class Hasher:
     async def hash(self, password: str) -> str:
         if not password:
             raise ValueError("Password cannot be empty")
-        return await anyio.to_thread.run_sync(self._hash_sync, password)
+        return await anyio_run_in_thread(self._hash_sync, password)
 
     async def verify(self, plain_password: str, hashed_password: str) -> bool:
         if not plain_password or not hashed_password:
             return False
-        return await anyio.to_thread.run_sync(self._verify_sync, plain_password, hashed_password)
+        return await anyio_run_in_thread(self._verify_sync, plain_password, hashed_password)
 
 
 hasher = Hasher()

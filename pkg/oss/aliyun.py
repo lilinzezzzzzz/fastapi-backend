@@ -1,9 +1,9 @@
 from pathlib import Path
 
-import anyio
 import oss2
 
 from pkg.oss.base import BaseStorage, StorageType, register_storage
+from pkg.toolkit.async_task import anyio_run_in_thread
 
 
 @register_storage(StorageType.ALIYUN)
@@ -58,16 +58,16 @@ class AliyunOSSBackend(BaseStorage):
             except oss2.exceptions.OssError as e:
                 raise Exception(f"Aliyun OSS Upload failed: {e}") from e
 
-        await anyio.to_thread.run_sync(_sync_upload)
+        await anyio_run_in_thread(_sync_upload)
         # 阿里云签名 URL (或根据需求直接拼接 CDN 域名)
-        return await anyio.to_thread.run_sync(self.bucket.sign_url, "GET", path, 3600)
+        return await anyio_run_in_thread(self.bucket.sign_url, "GET", path, 3600)
 
     async def generate_presigned_url(self, path: str, expiration: int = 3600) -> str:
-        return await anyio.to_thread.run_sync(self.bucket.sign_url, "GET", path, expiration)
+        return await anyio_run_in_thread(self.bucket.sign_url, "GET", path, expiration)
 
     async def delete(self, path: str) -> bool:
-        result = await anyio.to_thread.run_sync(self.bucket.delete_object, path)
+        result = await anyio_run_in_thread(self.bucket.delete_object, path)
         return result.status == 204
 
     async def exists(self, path: str) -> bool:
-        return await anyio.to_thread.run_sync(self.bucket.object_exists, path)
+        return await anyio_run_in_thread(self.bucket.object_exists, path)

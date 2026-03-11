@@ -4,7 +4,7 @@ Zvec 向量数据库操作基类
 参考文档: https://zvec.org/en/docs/quickstart/
 
 注意：
-- zvec 本身是同步库，异步方法通过 anyio.to_thread.run_sync() 实现
+- zvec 本身是同步库，异步方法通过 anyio_run_in_thread() 实现
 - zvec 是嵌入式数据库，不支持连接池
 """
 
@@ -14,9 +14,10 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Self
 
-import anyio
 import zvec
 from zvec import Collection, CollectionOption, CollectionSchema, Doc
+
+from pkg.toolkit.async_task import anyio_run_in_thread
 
 
 class VectorMetricType(StrEnum):
@@ -120,7 +121,7 @@ class BaseVectorStore:
     - 向量搜索：相似度搜索、过滤搜索
 
     注意：
-    - 所有方法均为异步，使用 anyio.to_thread.run_sync() 包装 zvec 同步操作
+    - 所有方法均为异步，使用 anyio_run_in_thread() 包装 zvec 同步操作
     - 使用 threading.Lock 保证线程安全，zvec Collection 对象本身不是线程安全的
     """
 
@@ -140,7 +141,7 @@ class BaseVectorStore:
             with self._lock:
                 return func(*args, **kwargs)
 
-        return await anyio.to_thread.run_sync(_do_with_lock)
+        return await anyio_run_in_thread(_do_with_lock)
 
     @property
     def collection(self) -> Collection:
