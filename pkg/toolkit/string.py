@@ -105,3 +105,35 @@ def build_url(
 
     # 组装 URL（去掉 params 参数）
     return urlunparse((scheme, netloc, path, "", query_string, fragment))
+
+
+def mask_string(
+    text: str,
+    show_prefix: int = 4,
+    show_suffix: int = 4,
+    min_length: int = 8,
+) -> str:
+    """字符串脱敏
+
+    Args:
+        text: 需要脱敏的字符串
+        show_prefix: 显示前几位，默认 4
+        show_suffix: 显示后几位，默认 4
+        min_length: 最小长度阈值，低于此值只显示前 2 位
+
+    Returns:
+        脱敏后的字符串
+
+    Examples:
+        >>> mask_string("sk-abc123xyz789")
+        'sk-a...x789'
+        >>> mask_string("abc", show_prefix=2)
+        'ab...'
+    """
+    if not text:
+        return ""
+
+    if len(text) > min_length:
+        return f"{text[:show_prefix]}...{text[-show_suffix:]}"
+    else:
+        return f"{text[:2]}..."

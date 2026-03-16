@@ -84,7 +84,6 @@ class Settings(BaseSettings):
     )
 
     @field_validator("DB_TYPE", mode="before")
-    @classmethod
     def validate_db_type(cls, v: str) -> str:
         """校验数据库类型"""
         if not v:
