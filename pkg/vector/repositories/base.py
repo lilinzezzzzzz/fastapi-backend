@@ -4,6 +4,7 @@ from typing import Any, cast
 
 from pkg.vector.backends.base import CollectionSpec, VectorBackend
 from pkg.vector.contracts import (
+    ConsistencyLevel,
     FilterCondition,
     FilterOperator,
     ScalarValue,
@@ -122,11 +123,17 @@ class BaseVectorRepository[T](ABC):
             filters=scoped_filters,
         )
 
-    async def fetch_by_ids(self, *, ids: Sequence[str]) -> list[VectorRecord]:
+    async def fetch_by_ids(
+        self,
+        *,
+        ids: Sequence[str],
+        consistency_level: ConsistencyLevel | None = None,
+    ) -> list[VectorRecord]:
         return await self.backend.fetch(
             spec=self.collection_spec,
             ids=ids,
             filters=self.build_scope_filters(),
+            consistency_level=consistency_level,
         )
 
     async def fetch_by_filters(
@@ -134,12 +141,14 @@ class BaseVectorRepository[T](ABC):
         *,
         filters: Sequence[FilterCondition],
         limit: int | None = None,
+        consistency_level: ConsistencyLevel | None = None,
     ) -> list[VectorRecord]:
         scoped_filters = [*self.build_scope_filters(), *filters]
         return await self.backend.fetch(
             spec=self.collection_spec,
             filters=scoped_filters,
             limit=limit,
+            consistency_level=consistency_level,
         )
 
     async def search_by_text(
@@ -149,6 +158,7 @@ class BaseVectorRepository[T](ABC):
         top_k: int,
         filters: Sequence[FilterCondition] = (),
         include_payload: bool = False,
+        consistency_level: ConsistencyLevel | None = None,
     ) -> list[SearchHit]:
         query_vector = await self.embedder.embed_query(text=query_text)
         return await self.search_by_vector(
@@ -156,6 +166,7 @@ class BaseVectorRepository[T](ABC):
             top_k=top_k,
             filters=filters,
             include_payload=include_payload,
+            consistency_level=consistency_level,
         )
 
     async def search_by_vector(
@@ -165,6 +176,7 @@ class BaseVectorRepository[T](ABC):
         top_k: int,
         filters: Sequence[FilterCondition] = (),
         include_payload: bool = False,
+        consistency_level: ConsistencyLevel | None = None,
     ) -> list[SearchHit]:
         request = SearchRequest(
             vector=query_vector,
@@ -175,6 +187,7 @@ class BaseVectorRepository[T](ABC):
                 *filters,
             ],
             include_payload=include_payload,
+            consistency_level=consistency_level,
         )
         return await self.backend.search(
             spec=self.collection_spec,

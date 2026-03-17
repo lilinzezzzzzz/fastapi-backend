@@ -9,6 +9,7 @@ from pkg.toolkit.async_task import anyio_run_in_thread
 from pkg.vector.backends.base import (
     BaseVectorBackend,
     CollectionSpec,
+    ConsistencyLevel,
     MetricType,
     ScalarDataType,
     VectorBackend,
@@ -71,6 +72,7 @@ class MilvusBackend(BaseVectorBackend):
             collection_name=spec.name,
             schema=schema,
             index_params=index_params,
+            consistency_level=self._resolve_consistency_level(spec.consistency_level),
         )
         await self.load_collection(collection_name=spec.name)
 
@@ -117,18 +119,23 @@ class MilvusBackend(BaseVectorBackend):
         ids: Sequence[str] | None = None,
         filters: Sequence[FilterCondition] | None = None,
         limit: int | None = None,
+        consistency_level: ConsistencyLevel | None = None,
     ) -> list[VectorRecord]:
         if not await self._ensure_collection_loaded_if_exists(collection_name=spec.name):
             return []
 
         output_fields = self._build_fetch_output_fields(spec=spec)
         expr = self._build_filter_expression(spec=spec, ids=ids, filters=filters)
+        resolved_consistency_level = self._resolve_consistency_level(
+            consistency_level or spec.consistency_level
+        )
         if ids and not filters:
             rows = await anyio_run_in_thread(
                 self.client.query,
                 collection_name=spec.name,
                 ids=list(ids),
                 output_fields=output_fields,
+                consistency_level=resolved_consistency_level,
             )
         else:
             rows = await anyio_run_in_thread(
@@ -136,6 +143,7 @@ class MilvusBackend(BaseVectorBackend):
                 collection_name=spec.name,
                 filter=expr,
                 output_fields=output_fields,
+                consistency_level=resolved_consistency_level,
             )
 
         records = [self._row_to_record(spec=spec, row=row) for row in rows]
@@ -152,6 +160,9 @@ class MilvusBackend(BaseVectorBackend):
         )
         output_fields = self._build_search_output_fields(spec=spec, request=request)
         search_params = self._build_search_params(spec=spec, request=request)
+        resolved_consistency_level = self._resolve_consistency_level(
+            request.consistency_level or spec.consistency_level
+        )
         raw_results = await anyio_run_in_thread(
             self.client.search,
             collection_name=spec.name,
@@ -161,6 +172,7 @@ class MilvusBackend(BaseVectorBackend):
             output_fields=output_fields,
             search_params=search_params,
             anns_field=spec.vector_field,
+            consistency_level=resolved_consistency_level,
         )
         hits = raw_results[0] if raw_results else []
         return [self._hit_to_search_hit(spec=spec, hit=hit) for hit in hits]
@@ -302,6 +314,10 @@ class MilvusBackend(BaseVectorBackend):
             search_params["params"] = {}
         search_params.update(request.search_params)
         return search_params
+
+    @staticmethod
+    def _resolve_consistency_level(consistency_level: ConsistencyLevel) -> str:
+        return str(consistency_level.value)
 
     def _record_to_row(self, *, spec: CollectionSpec, record: VectorRecord) -> dict[str, Any]:
         row: dict[str, Any] = {

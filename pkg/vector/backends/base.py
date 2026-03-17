@@ -8,6 +8,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from pkg.vector.contracts import (
+    ConsistencyLevel,
     FilterCondition,
     SearchHit,
     SearchRequest,
@@ -116,6 +117,7 @@ class CollectionSpec(BaseModel, extra="forbid"):
     # ========== 多租户与其他配置 ==========
     tenant_mode: TenantIsolationMode = TenantIsolationMode.SHARED_FILTER  # 租户隔离模式
     enable_dynamic_field: bool = False  # 是否启用动态字段（Milvus 特性）
+    consistency_level: ConsistencyLevel = ConsistencyLevel.SESSION  # collection/read 默认一致性级别
     description: str = ""  # 集合描述
 
 
@@ -146,6 +148,7 @@ class VectorBackend(ABC):
         ids: Sequence[str] | None = None,
         filters: Sequence[FilterCondition] | None = None,
         limit: int | None = None,
+        consistency_level: ConsistencyLevel | None = None,
     ) -> list[VectorRecord]:
         """按 id 或过滤条件获取记录。"""
 

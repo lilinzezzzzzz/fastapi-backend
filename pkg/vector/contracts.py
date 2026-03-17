@@ -18,6 +18,13 @@ class FilterOperator(StrEnum):
     GTE = "gte"
 
 
+class ConsistencyLevel(StrEnum):
+    STRONG = "Strong"
+    BOUNDED = "Bounded"
+    SESSION = "Session"
+    EVENTUAL = "Eventual"
+
+
 class FilterCondition(BaseModel, extra="forbid"):
     field: str = Field(min_length=1)
     op: FilterOperator
@@ -39,6 +46,7 @@ class SearchRequest(BaseModel, extra="forbid"):
     include_payload: bool = False
     output_fields: list[str] = Field(default_factory=list)
     search_params: dict[str, Any] = Field(default_factory=dict)
+    consistency_level: ConsistencyLevel | None = None
 
 
 class SearchHit(BaseModel, extra="forbid"):

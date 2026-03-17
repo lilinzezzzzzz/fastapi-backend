@@ -3,6 +3,7 @@ from pkg.vector.backends import (
     BackendProvider,
     BaseVectorBackend,
     CollectionSpec,
+    ConsistencyLevel,
     MetricType,
     MilvusBackend,
     ScalarDataType,
@@ -38,13 +39,7 @@ from pkg.vector.errors import (
     UnsupportedFilterError,
     VectorCoreError,
 )
-from pkg.vector.repositories import (
-    BaseVectorRepository,
-    ChunkVectorDocument,
-    ChunkVectorRepository,
-    QaPairVectorDocument,
-    QaPairVectorRepository,
-)
+from pkg.vector.repositories import BaseVectorRepository
 
 __all__ = [
     "BACKEND_BUILDERS",
@@ -52,10 +47,9 @@ __all__ = [
     "BaseVectorBackend",
     "BaseVectorRepository",
     "CapabilityNotSupportedError",
-    "ChunkVectorDocument",
-    "ChunkVectorRepository",
     "CollectionSchemaMismatchError",
     "CollectionSpec",
+    "ConsistencyLevel",
     "EMBEDDER_BUILDERS",
     "EmbedderProvider",
     "FilterCondition",
@@ -64,8 +58,6 @@ __all__ = [
     "LLMEmbedder",
     "MetricType",
     "MilvusBackend",
-    "QaPairVectorDocument",
-    "QaPairVectorRepository",
     "RecordValidationError",
     "ScalarDataType",
     "ScalarFieldSpec",
@@ -83,3 +75,22 @@ __all__ = [
     "create_backend",
     "create_embedder",
 ]
+
+try:
+    from pkg.vector.repositories import (
+        ChunkVectorDocument,
+        ChunkVectorRepository,
+        QaPairVectorDocument,
+        QaPairVectorRepository,
+    )
+except ImportError:
+    pass
+else:
+    __all__.extend(
+        [
+            "ChunkVectorDocument",
+            "ChunkVectorRepository",
+            "QaPairVectorDocument",
+            "QaPairVectorRepository",
+        ]
+    )
