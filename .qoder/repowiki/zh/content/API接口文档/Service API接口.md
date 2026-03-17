@@ -2,10 +2,13 @@
 
 <cite>
 **本文引用的文件**
-- [internal/controllers/serviceapi/user.py](file://internal/controllers/serviceapi/user.py)
-- [internal/controllers/serviceapi/__init__.py](file://internal/controllers/serviceapi/__init__.py)
+- [internal/controllers/api/user.py](file://internal/controllers/api/user.py)
+- [internal/controllers/api/__init__.py](file://internal/controllers/api/__init__.py)
+- [internal/controllers/public/__init__.py](file://internal/controllers/public/__init__.py)
+- [internal/controllers/public/test.py](file://internal/controllers/public/test.py)
+- [internal/controllers/internal/__init__.py](file://internal/controllers/internal/__init__.py)
 - [internal/middlewares/auth.py](file://internal/middlewares/auth.py)
-- [internal/core/signature.py](file://internal/core/signature.py)
+- [internal/utils/signature.py](file://internal/utils/signature.py)
 - [pkg/toolkit/signature.py](file://pkg/toolkit/signature.py)
 - [internal/app.py](file://internal/app.py)
 - [internal/config/load_config.py](file://internal/config/load_config.py)
@@ -13,7 +16,17 @@
 - [pkg/toolkit/http_cli.py](file://pkg/toolkit/http_cli.py)
 - [internal/middlewares/recorder.py](file://internal/middlewares/recorder.py)
 - [configs/.env.dev](file://configs/.env.dev)
+- [README.md](file://README.md)
 </cite>
+
+## 更新摘要
+**所做更改**
+- 更新项目结构部分，反映serviceapi路由结构已被移除
+- 更新架构总览图，移除serviceapi相关组件
+- 更新详细组件分析，移除serviceapi控制器相关内容
+- 更新依赖关系分析，移除serviceapi路由注册
+- 更新故障排查指南，移除serviceapi相关问题
+- 更新附录，移除serviceapi接口规范与调用示例
 
 ## 目录
 1. [简介](#简介)
@@ -30,8 +43,10 @@
 ## 简介
 本文件面向服务间通信的Service API接口，提供完整的接口规范、安全架构说明、访问控制策略、监控机制以及微服务集成与运维建议。Service API采用更严格的安全要求，通过签名认证、时间戳校验与防重放机制保障消息完整性与可信性；同时结合中间件链路实现统一鉴权、日志与监控。
 
+**重要更新**：根据最新的代码变更，旧的serviceapi路由结构已完全移除，不再支持serviceapi路由模式。当前的路由结构已简化为web、public、internal三个主要类别。
+
 ## 项目结构
-Service API位于“/v1/service”前缀下，由FastAPI路由注册并经由认证中间件拦截，最终交由业务服务层处理。整体结构如下：
+Service API位于"/v1"前缀下，由FastAPI路由注册并经由认证中间件拦截，最终交由业务服务层处理。整体结构如下：
 
 ```mermaid
 graph TB
@@ -39,20 +54,24 @@ subgraph "应用入口"
 A["internal/app.py<br/>创建FastAPI应用"]
 end
 subgraph "路由层"
-R1["internal/controllers/serviceapi/__init__.py<br/>/v1/service 前缀"]
-R2["internal/controllers/serviceapi/user.py<br/>/user/hello_world"]
+R1["internal/controllers/api/__init__.py<br/>/v1 前缀"]
+R2["internal/controllers/api/user.py<br/>/user/hello_world"]
+R3["internal/controllers/public/__init__.py<br/>/v1/public 前缀"]
+R4["internal/controllers/internal/__init__.py<br/>/v1/internal 前缀"]
 end
 subgraph "中间件层"
 M1["internal/middlewares/auth.py<br/>ASGIAuthMiddleware<br/>签名/白名单/Token"]
 M2["internal/middlewares/recorder.py<br/>ASGIRecordMiddleware<br/>日志/追踪/耗时"]
 end
 subgraph "核心与工具"
-C1["internal/core/signature.py<br/>签名处理器初始化/代理"]
+C1["internal/utils/signature.py<br/>签名处理器初始化/代理"]
 T1["pkg/toolkit/signature.py<br/>SignatureAuthHandler<br/>签名/时间戳/验签"]
 CFG["internal/config/load_config.py<br/>配置加载/JWT密钥"]
 RESP["pkg/toolkit/response.py<br/>统一响应体"]
 end
 A --> R1 --> R2
+A --> R3
+A --> R4
 A --> M1
 A --> M2
 M1 --> C1 --> T1
@@ -60,47 +79,57 @@ A --> CFG
 R2 --> RESP
 ```
 
+**更新**：项目结构已更新，移除了serviceapi路由结构。当前路由结构包括：
+- web路由：JWT认证的Web API
+- public路由：无需认证的公开API  
+- internal路由：签名认证的内部API
+- api路由：/v1前缀下的用户相关接口
+
 图表来源
-- [internal/app.py](file://internal/app.py#L33-L45)
-- [internal/controllers/serviceapi/__init__.py](file://internal/controllers/serviceapi/__init__.py#L5-L12)
-- [internal/controllers/serviceapi/user.py](file://internal/controllers/serviceapi/user.py#L8-L21)
-- [internal/middlewares/auth.py](file://internal/middlewares/auth.py#L88-L150)
+- [internal/app.py](file://internal/app.py#L31-L41)
+- [internal/controllers/api/__init__.py](file://internal/controllers/api/__init__.py#L5-L13)
+- [internal/controllers/api/user.py](file://internal/controllers/api/user.py#L8-L16)
+- [internal/controllers/public/__init__.py](file://internal/controllers/public/__init__.py#L5-L10)
+- [internal/controllers/internal/__init__.py](file://internal/controllers/internal/__init__.py#L3-L8)
+- [internal/middlewares/auth.py](file://internal/middlewares/auth.py#L85-L148)
 - [internal/middlewares/recorder.py](file://internal/middlewares/recorder.py#L66-L123)
-- [internal/core/signature.py](file://internal/core/signature.py#L9-L27)
+- [internal/utils/signature.py](file://internal/utils/signature.py#L9-L27)
 - [pkg/toolkit/signature.py](file://pkg/toolkit/signature.py#L9-L95)
 - [internal/config/load_config.py](file://internal/config/load_config.py#L46-L84)
 - [pkg/toolkit/response.py](file://pkg/toolkit/response.py#L47-L170)
 
 章节来源
-- [internal/app.py](file://internal/app.py#L33-L45)
-- [internal/controllers/serviceapi/__init__.py](file://internal/controllers/serviceapi/__init__.py#L5-L12)
-- [internal/controllers/serviceapi/user.py](file://internal/controllers/serviceapi/user.py#L8-L21)
+- [internal/app.py](file://internal/app.py#L31-L41)
+- [internal/controllers/api/__init__.py](file://internal/controllers/api/__init__.py#L5-L13)
+- [internal/controllers/api/user.py](file://internal/controllers/api/user.py#L8-L16)
 
 ## 核心组件
 - 路由与控制器
-  - Service API路由前缀为/v1/service，当前暴露/hello_world示例接口。
+  - API路由前缀为/v1，当前暴露/hello_world示例接口。
   - 控制器通过依赖注入获取UserService实例，返回统一响应体。
 - 认证中间件
   - ASGIAuthMiddleware负责白名单放行、内部接口签名校验、Token校验。
-  - 内部接口路径以/v1/internal开头，Service API路径以/v1/service开头，两者走不同的认证路径。
+  - 当前路径分为/v1/public（公开）、/v1/internal（签名认证）和其他路径（JWT认证）。
 - 签名与时间戳
   - SignatureAuthHandler提供签名生成、验签与时间戳校验，支持可配置哈希算法与时间容差。
-  - 签名处理器由internal/core/signature.py进行延迟初始化与代理。
+  - 签名处理器由internal/utils/signature.py进行延迟初始化与代理。
 - 统一响应
   - 所有接口返回统一响应体结构，便于前端与服务间解析。
 - 监控与追踪
   - ASGIRecordMiddleware记录访问日志、处理耗时与追踪ID，便于问题定位与性能分析。
 
+**更新**：核心组件已更新，移除了serviceapi相关的认证路径和路由配置。
+
 章节来源
-- [internal/controllers/serviceapi/user.py](file://internal/controllers/serviceapi/user.py#L8-L21)
-- [internal/middlewares/auth.py](file://internal/middlewares/auth.py#L88-L150)
-- [internal/core/signature.py](file://internal/core/signature.py#L9-L27)
+- [internal/controllers/api/user.py](file://internal/controllers/api/user.py#L8-L16)
+- [internal/middlewares/auth.py](file://internal/middlewares/auth.py#L85-L148)
+- [internal/utils/signature.py](file://internal/utils/signature.py#L9-L27)
 - [pkg/toolkit/signature.py](file://pkg/toolkit/signature.py#L9-L95)
 - [pkg/toolkit/response.py](file://pkg/toolkit/response.py#L47-L170)
 - [internal/middlewares/recorder.py](file://internal/middlewares/recorder.py#L66-L123)
 
 ## 架构总览
-Service API的安全架构围绕“签名+时间戳+防重放”展开，结合中间件链路实现统一接入控制与可观测性。
+Service API的安全架构围绕"签名+时间戳+防重放"展开，结合中间件链路实现统一接入控制与可观测性。
 
 ```mermaid
 sequenceDiagram
@@ -108,12 +137,12 @@ participant Caller as "调用方"
 participant App as "FastAPI应用"
 participant Auth as "ASGIAuthMiddleware"
 participant Sig as "SignatureAuthHandler"
-participant Ctrl as "ServiceAPI控制器"
+participant Ctrl as "API控制器"
 participant Svc as "UserService"
 participant Resp as "统一响应"
-Caller->>App : "HTTP 请求 /v1/service/user/hello_world"
+Caller->>App : "HTTP 请求 /v1/user/hello-world"
 App->>Auth : "进入中间件链"
-Auth->>Auth : "识别路径前缀 /v1/service"
+Auth->>Auth : "识别路径前缀 /v1"
 Auth->>Sig : "verify(x_signature, x_timestamp, x_nonce)"
 Sig-->>Auth : "验签结果"
 Auth-->>App : "通过或拒绝"
@@ -124,43 +153,47 @@ Ctrl-->>Resp : "封装统一响应"
 Resp-->>Caller : "HTTP 响应"
 ```
 
+**更新**：架构图已更新，移除了serviceapi相关的组件和流程。
+
 图表来源
-- [internal/middlewares/auth.py](file://internal/middlewares/auth.py#L119-L130)
+- [internal/middlewares/auth.py](file://internal/middlewares/auth.py#L116-L127)
 - [pkg/toolkit/signature.py](file://pkg/toolkit/signature.py#L77-L95)
-- [internal/controllers/serviceapi/user.py](file://internal/controllers/serviceapi/user.py#L14-L21)
+- [internal/controllers/api/user.py](file://internal/controllers/api/user.py#L13-L16)
 - [pkg/toolkit/response.py](file://pkg/toolkit/response.py#L181-L186)
 
 ## 详细组件分析
 
-### Service API控制器与路由
+### API控制器与路由
 - 路由前缀与命名
-  - /v1/service 前缀由serviceapi/__init__.py定义，便于区分公共API、内部API与Service API。
+  - /v1前缀由api/__init__.py定义，便于区分公开API、内部API与其他API。
 - 示例接口
-  - /user/hello_world：演示服务间调用的最小可用接口，返回统一成功响应。
+  - /user/hello-world：演示服务间调用的最小可用接口，返回统一成功响应。
 - 依赖注入
   - 控制器通过Annotated依赖注入UserService，便于单元测试与替换实现。
 
 ```mermaid
 flowchart TD
-Start(["请求进入 /v1/service/user/hello_world"]) --> GetSvc["依赖注入 UserService"]
+Start(["请求进入 /v1/user/hello-world"]) --> GetSvc["依赖注入 UserService"]
 GetSvc --> CallSvc["调用业务方法 hello_world()"]
 CallSvc --> BuildResp["构建统一响应体"]
 BuildResp --> End(["返回 HTTP 200"])
 ```
 
+**更新**：详细组件分析已更新，移除了serviceapi控制器相关内容，保留了当前的API控制器结构。
+
 图表来源
-- [internal/controllers/serviceapi/user.py](file://internal/controllers/serviceapi/user.py#L14-L21)
+- [internal/controllers/api/user.py](file://internal/controllers/api/user.py#L13-L16)
 - [pkg/toolkit/response.py](file://pkg/toolkit/response.py#L181-L186)
 
 章节来源
-- [internal/controllers/serviceapi/__init__.py](file://internal/controllers/serviceapi/__init__.py#L5-L12)
-- [internal/controllers/serviceapi/user.py](file://internal/controllers/serviceapi/user.py#L8-L21)
+- [internal/controllers/api/__init__.py](file://internal/controllers/api/__init__.py#L5-L13)
+- [internal/controllers/api/user.py](file://internal/controllers/api/user.py#L8-L16)
 
 ### 认证中间件与访问控制
 - 白名单放行
   - 对公开路径（如文档、登录等）与测试路径直接放行，设置上下文用户ID为0。
 - 内部接口签名校验
-  - 对/v1/internal路径进行Token校验；对/v1/service路径进行签名校验。
+  - 对/v1/internal路径进行签名校验；对/v1/public路径直接放行；其他路径进行JWT Token校验。
 - Token校验
   - 从Authorization头中提取Token并验证有效性，失败则抛出未授权异常。
 - 上下文设置
@@ -174,16 +207,20 @@ B -- 否 --> C{"是否 /v1/internal 路径？"}
 C -- 是 --> D["校验 X-Signature/X-Timestamp/X-Nonce"] --> E{"通过？"}
 E -- 否 --> Err["抛出无效签名异常"] --> End
 E -- 是 --> Next["进入下游路由"] --> End
-C -- 否 --> F["校验 Authorization Token"] --> G{"通过？"}
-G -- 否 --> Err2["抛出未授权异常"] --> End
-G -- 是 --> SetCtx["设置用户ID到上下文"] --> Next --> End
+C -- 否 --> F{"是否 /v1/public 路径？"}
+F -- 是 --> Next --> End
+F -- 否 --> G["校验 Authorization Token"] --> H{"通过？"}
+H -- 否 --> Err2["抛出未授权异常"] --> End
+H -- 是 --> SetCtx["设置用户ID到上下文"] --> Next --> End
 ```
 
+**更新**：认证中间件逻辑已更新，移除了serviceapi相关的认证路径。
+
 图表来源
-- [internal/middlewares/auth.py](file://internal/middlewares/auth.py#L97-L150)
+- [internal/middlewares/auth.py](file://internal/middlewares/auth.py#L101-L148)
 
 章节来源
-- [internal/middlewares/auth.py](file://internal/middlewares/auth.py#L88-L150)
+- [internal/middlewares/auth.py](file://internal/middlewares/auth.py#L85-L148)
 
 ### 签名认证与防重放
 - 签名算法
@@ -211,13 +248,15 @@ class SignatureCore {
 SignatureCore --> SignatureAuthHandler : "创建/代理"
 ```
 
+**更新**：签名认证组件保持不变，但已移除serviceapi相关的调用场景。
+
 图表来源
 - [pkg/toolkit/signature.py](file://pkg/toolkit/signature.py#L9-L95)
-- [internal/core/signature.py](file://internal/core/signature.py#L9-L27)
+- [internal/utils/signature.py](file://internal/utils/signature.py#L9-L27)
 
 章节来源
 - [pkg/toolkit/signature.py](file://pkg/toolkit/signature.py#L27-L95)
-- [internal/core/signature.py](file://internal/core/signature.py#L9-L27)
+- [internal/utils/signature.py](file://internal/utils/signature.py#L9-L27)
 - [internal/config/load_config.py](file://internal/config/load_config.py#L55-L59)
 
 ### 统一响应与错误处理
@@ -246,7 +285,7 @@ SignatureCore --> SignatureAuthHandler : "创建/代理"
 - 应用生命周期
   - 应用启动时初始化日志、数据库、Redis、签名处理器与Snowflake ID生成器。
 - 路由注册
-  - 将web/internal/public/service四类路由统一注册到FastAPI应用。
+  - 将web、internal、public、api四类路由统一注册到FastAPI应用。
 - 中间件注册
   - 注册GZip、CORS、认证与记录中间件，形成完整的请求处理链。
 
@@ -260,9 +299,9 @@ Init --> Sig["init_signature_auth_handler"]
 Init --> Snow["init_snowflake_id_generator"]
 App --> RegRouter["register_router"]
 RegRouter --> Web["include_router(web)"]
-RegRouter --> Internal["include_router(internalapi)"]
-RegRouter --> Public["include_router(publicapi)"]
-RegRouter --> Service["include_router(serviceapi)"]
+RegRouter --> Internal["include_router(internal)"]
+RegRouter --> Public["include_router(public)"]
+RegRouter --> Api["include_router(api)"]
 App --> RegMW["register_middleware"]
 RegMW --> GZip["GZipMiddleware"]
 RegMW --> CORS["CORSMiddleware"]
@@ -270,15 +309,17 @@ RegMW --> Auth["ASGIAuthMiddleware"]
 RegMW --> Rec["ASGIRecordMiddleware"]
 ```
 
+**更新**：依赖关系分析已更新，移除了serviceapi路由注册，保留了当前的路由结构。
+
 图表来源
-- [internal/app.py](file://internal/app.py#L85-L109)
-- [internal/app.py](file://internal/app.py#L33-L45)
-- [internal/app.py](file://internal/app.py#L55-L82)
+- [internal/app.py](file://internal/app.py#L79-L107)
+- [internal/app.py](file://internal/app.py#L31-L41)
+- [internal/app.py](file://internal/app.py#L50-L77)
 
 章节来源
-- [internal/app.py](file://internal/app.py#L85-L109)
-- [internal/app.py](file://internal/app.py#L33-L45)
-- [internal/app.py](file://internal/app.py#L55-L82)
+- [internal/app.py](file://internal/app.py#L79-L107)
+- [internal/app.py](file://internal/app.py#L31-L41)
+- [internal/app.py](file://internal/app.py#L50-L77)
 
 ## 性能考量
 - 压缩传输
@@ -291,7 +332,7 @@ RegMW --> Rec["ASGIRecordMiddleware"]
   - 通过响应头注入处理耗时与追踪ID，便于Prometheus/Grafana等平台采集。
 
 章节来源
-- [internal/app.py](file://internal/app.py#L56-L60)
+- [internal/app.py](file://internal/app.py#L50-L77)
 - [pkg/toolkit/http_cli.py](file://pkg/toolkit/http_cli.py#L38-L75)
 - [pkg/toolkit/response.py](file://pkg/toolkit/response.py#L62-L81)
 - [internal/middlewares/recorder.py](file://internal/middlewares/recorder.py#L54-L63)
@@ -306,8 +347,10 @@ RegMW --> Rec["ASGIRecordMiddleware"]
 - 性能问题
   - 关注X-Process-Time响应头；检查GZip/CORS中间件配置；评估上游服务调用耗时。
 
+**更新**：故障排查指南已更新，移除了serviceapi相关的故障场景。
+
 章节来源
-- [internal/middlewares/auth.py](file://internal/middlewares/auth.py#L123-L127)
+- [internal/middlewares/auth.py](file://internal/middlewares/auth.py#L116-L127)
 - [pkg/toolkit/signature.py](file://pkg/toolkit/signature.py#L77-L95)
 - [pkg/toolkit/response.py](file://pkg/toolkit/response.py#L151-L169)
 - [internal/middlewares/recorder.py](file://internal/middlewares/recorder.py#L92-L102)
@@ -319,23 +362,28 @@ Service API通过严格的签名认证、时间戳校验与防重放机制，结
 - 在网关层实施限流与熔断；
 - 利用追踪ID与指标进行持续观测与优化。
 
+**更新**：结论保持不变，但已移除serviceapi相关的具体实现细节。
+
 ## 附录
 
-### 接口规范与调用示例（概念性说明）
+### 接口规范与调用示例（当前API结构）
 - 路由前缀
-  - /v1/service
+  - /v1
 - 示例接口
-  - GET /v1/service/user/hello_world
+  - GET /v1/user/hello-world
 - 请求头
-  - X-Signature：基于签名算法生成的摘要
+  - Authorization：JWT Token（对于非/v1/public路径）
+  - X-Signature：基于签名算法生成的摘要（对于/v1/internal路径）
   - X-Timestamp：UTC秒级时间戳
   - X-Nonce：随机字符串
 - 响应
   - 统一响应体包含code、message、data；成功时code为20000，message为空字符串。
 
+**更新**：附录已更新，移除了serviceapi相关的接口规范，保留了当前API的调用示例。
+
 章节来源
-- [internal/controllers/serviceapi/__init__.py](file://internal/controllers/serviceapi/__init__.py#L5-L12)
-- [internal/controllers/serviceapi/user.py](file://internal/controllers/serviceapi/user.py#L14-L21)
+- [internal/controllers/api/__init__.py](file://internal/controllers/api/__init__.py#L5-L13)
+- [internal/controllers/api/user.py](file://internal/controllers/api/user.py#L13-L16)
 - [pkg/toolkit/response.py](file://pkg/toolkit/response.py#L47-L170)
 
 ### 安全配置要点
@@ -346,7 +394,24 @@ Service API通过严格的签名认证、时间戳校验与防重放机制，结
 - 环境变量
   - 开发环境示例包含JWT_ALGORITHM与ACCESS_TOKEN_EXPIRE_MINUTES等配置项。
 
+**更新**：安全配置要点保持不变，但已移除serviceapi相关的配置场景。
+
 章节来源
 - [internal/config/load_config.py](file://internal/config/load_config.py#L55-L59)
 - [configs/.env.dev](file://configs/.env.dev#L1-L20)
 - [pkg/toolkit/signature.py](file://pkg/toolkit/signature.py#L12-L25)
+
+### 路由结构对照表
+| 路径前缀 | 模块 | 认证方式 | 说明 |
+|---------|------|---------|------|
+| `/v1` | api | JWT | 用户相关接口 |
+| `/v1/public` | public | 无 | 公开API，无需认证 |
+| `/v1/internal` | internal | 签名认证 | 内部服务间通信 |
+| Web路由 | web | JWT | Web前端接口 |
+
+**新增**：路由结构对照表，展示当前的路由分类与认证方式。
+
+章节来源
+- [README.md](file://README.md#L107-L115)
+- [internal/app.py](file://internal/app.py#L31-L41)
+- [internal/middlewares/auth.py](file://internal/middlewares/auth.py#L26-L29)

@@ -1,469 +1,416 @@
 # ORM抽象层
 
 <cite>
-**本文引用的文件**
+**本文档引用的文件**
+- [pkg/database/dao.py](file://pkg/database/dao.py)
 - [pkg/database/base.py](file://pkg/database/base.py)
 - [pkg/database/builder.py](file://pkg/database/builder.py)
 - [pkg/database/types.py](file://pkg/database/types.py)
-- [pkg/database/dao.py](file://pkg/database/dao.py)
-- [internal/infra/database.py](file://internal/infra/database.py)
+- [internal/infra/database/connection.py](file://internal/infra/database/connection.py)
 - [internal/models/user.py](file://internal/models/user.py)
 - [internal/dao/user.py](file://internal/dao/user.py)
-- [pkg/toolkit/json.py](file://pkg/toolkit/json.py)
+- [internal/dao/third_party_account.py](file://internal/dao/third_party_account.py)
+- [internal/services/user.py](file://internal/services/user.py)
+- [internal/config.py](file://internal/config.py)
+- [pkg/toolkit/context.py](file://pkg/toolkit/context.py)
 - [tests/orm/test_orm.py](file://tests/orm/test_orm.py)
 - [tests/orm/test_orm_json_type.py](file://tests/orm/test_orm_json_type.py)
-- [internal/app.py](file://internal/app.py)
-- [main.py](file://main.py)
-- [pyproject.toml](file://pyproject.toml)
 </cite>
 
 ## 目录
 1. [简介](#简介)
 2. [项目结构](#项目结构)
 3. [核心组件](#核心组件)
-4. [架构总览](#架构总览)
-5. [组件详解](#组件详解)
+4. [架构概览](#架构概览)
+5. [详细组件分析](#详细组件分析)
 6. [依赖关系分析](#依赖关系分析)
-7. [性能考量](#性能考量)
-8. [故障排查指南](#故障排查指南)
+7. [性能考虑](#性能考虑)
+8. [故障排除指南](#故障排除指南)
 9. [结论](#结论)
-10. [附录](#附录)
 
 ## 简介
-本文件系统化梳理并文档化本项目的ORM抽象层，围绕SQLAlchemy Async ORM展开，重点阐释以下主题：
-- 引擎创建、会话工厂与数据库连接的抽象实现
-- 适配器模式在数据库连接与JSON类型中的应用
-- 自定义数据类型与序列化机制（JSONType、MutableJSON）
-- ORM Builder模式的设计思路与使用方法（QueryBuilder、CountBuilder、UpdateBuilder）
-- 数据访问对象（DAO）的抽象与事务执行器
-- 数据库抽象层的扩展指南与自定义适配器开发方法
-- ORM性能优化与查询构建的最佳实践
-- 在不同数据库类型间的抽象转换策略
+
+本项目实现了一个完整的ORM抽象层，基于SQLAlchemy 2.0构建，提供了统一的数据访问接口和强大的查询构建器。该抽象层采用分层设计，将数据访问逻辑与业务逻辑分离，支持读写分离、软删除、批量操作等功能。
+
+主要特性包括：
+- 类型安全的泛型DAO基类
+- 灵活的查询构建器系统
+- 支持读写分离的数据库连接管理
+- 软删除和硬删除的统一处理
+- 批量插入和更新操作
+- 跨数据库兼容的JSON类型支持
 
 ## 项目结构
-本项目采用“分层+领域模型”组织方式，ORM抽象层位于pkg/database，基础设施连接位于internal/infra，领域模型与DAO位于internal/models与internal/dao，工具层位于pkg/toolkit。
+
+项目采用清晰的分层架构，ORM抽象层位于pkg/database目录下：
 
 ```mermaid
 graph TB
-subgraph "应用入口"
-MAIN["main.py"]
-APP["internal/app.py"]
+subgraph "应用层"
+Controllers[控制器层]
+Services[服务层]
+DAOs[数据访问层]
+end
+subgraph "ORM抽象层"
+Base[ModelMixin<br/>基础模型]
+Builders[QueryBuilder<br/>UpdateBuilder<br/>CountBuilder]
+DAO[BaseDao<br/>泛型DAO]
+Types[JSONType<br/>类型系统]
 end
 subgraph "基础设施"
-INFRA_DB["internal/infra/database.py"]
+DBConn[数据库连接管理]
+Config[配置系统]
+Context[上下文管理]
 end
-subgraph "ORM抽象层(pkg/database)"
-BASE["base.py<br/>引擎/会话/模型基类/工具"]
-BUILDER["builder.py<br/>查询/计数/更新构建器"]
-TYPES["types.py<br/>JSON类型与可变JSON"]
-DAO["dao.py<br/>DAO与事务执行器"]
-end
-subgraph "领域模型与DAO"
-MODEL_USER["internal/models/user.py"]
-DAO_USER["internal/dao/user.py"]
-end
-subgraph "工具层"
-TOOL_JSON["pkg/toolkit/json.py"]
-end
-MAIN --> APP
-APP --> INFRA_DB
-INFRA_DB --> BASE
-BASE --> BUILDER
-BASE --> DAO
-DAO --> BUILDER
-DAO --> MODEL_USER
-MODEL_USER --> BASE
-DAO_USER --> DAO
-BASE --> TOOL_JSON
-BUILDER --> TOOL_JSON
-TYPES --> TOOL_JSON
+Controllers --> Services
+Services --> DAOs
+DAOs --> DAO
+DAO --> Builders
+DAO --> Base
+Builders --> DBConn
+Base --> DBConn
+DBConn --> Config
+Base --> Context
 ```
 
-图表来源
-- [main.py](file://main.py#L1-L18)
-- [internal/app.py](file://internal/app.py#L1-L109)
-- [internal/infra/database.py](file://internal/infra/database.py#L1-L154)
-- [pkg/database/base.py](file://pkg/database/base.py#L1-L364)
-- [pkg/database/builder.py](file://pkg/database/builder.py#L1-L273)
-- [pkg/database/types.py](file://pkg/database/types.py#L1-L183)
-- [pkg/database/dao.py](file://pkg/database/dao.py#L1-L203)
-- [internal/models/user.py](file://internal/models/user.py#L1-L13)
-- [internal/dao/user.py](file://internal/dao/user.py#L1-L24)
-- [pkg/toolkit/json.py](file://pkg/toolkit/json.py#L1-L108)
+**图表来源**
+- [pkg/database/dao.py](file://pkg/database/dao.py#L17-L456)
+- [pkg/database/base.py](file://pkg/database/base.py#L61-L309)
+- [pkg/database/builder.py](file://pkg/database/builder.py#L20-L351)
 
-章节来源
-- [main.py](file://main.py#L1-L18)
-- [internal/app.py](file://internal/app.py#L1-L109)
-- [internal/infra/database.py](file://internal/infra/database.py#L1-L154)
-- [pkg/database/base.py](file://pkg/database/base.py#L1-L364)
-- [pkg/database/builder.py](file://pkg/database/builder.py#L1-L273)
-- [pkg/database/types.py](file://pkg/database/types.py#L1-L183)
-- [pkg/database/dao.py](file://pkg/database/dao.py#L1-L203)
-- [internal/models/user.py](file://internal/models/user.py#L1-L13)
-- [internal/dao/user.py](file://internal/dao/user.py#L1-L24)
-- [pkg/toolkit/json.py](file://pkg/toolkit/json.py#L1-L108)
+**章节来源**
+- [pkg/database/dao.py](file://pkg/database/dao.py#L1-L456)
+- [pkg/database/base.py](file://pkg/database/base.py#L1-L309)
+- [pkg/database/builder.py](file://pkg/database/builder.py#L1-L351)
 
 ## 核心组件
-- 引擎与会话工厂：通过工厂函数创建异步引擎与会话工厂，统一连接池参数与JSON序列化策略。
-- 模型基类与混入：提供统一的模型字段、默认值填充、严格CRUD、软删除、批量插入等能力。
-- 查询构建器：QueryBuilder、CountBuilder、UpdateBuilder，提供链式条件、分页、排序、软删除、自动字段同步等。
-- DAO：面向模型的访问层，暴露查询、计数、更新构建器与常用查询方法，提供事务执行器。
-- 自定义类型：JSONType与MutableJSON，实现跨数据库兼容的JSON存储与变更追踪。
-- 基础设施连接：生命周期管理、SQL慢查询监控、会话获取上下文管理器。
 
-章节来源
-- [pkg/database/base.py](file://pkg/database/base.py#L19-L46)
-- [pkg/database/base.py](file://pkg/database/base.py#L48-L364)
-- [pkg/database/builder.py](file://pkg/database/builder.py#L18-L273)
-- [pkg/database/dao.py](file://pkg/database/dao.py#L15-L203)
-- [pkg/database/types.py](file://pkg/database/types.py#L12-L183)
-- [internal/infra/database.py](file://internal/infra/database.py#L26-L154)
+### ModelMixin - 基础模型类
 
-## 架构总览
-ORM抽象层采用“工厂 + 适配器 + Builder + DAO”的分层设计：
-- 工厂层：负责引擎与会话工厂的创建与配置
-- 适配器层：对SQLAlchemy的异步引擎与JSON类型进行适配，屏蔽数据库差异
-- Builder层：以Builder模式封装查询、计数、更新的DSL
-- DAO层：面向领域模型的数据访问接口，提供事务与常用查询
-- 基础设施层：连接生命周期、SQL监控、会话上下文
+ModelMixin是所有数据库模型的基类，提供了以下核心功能：
+
+- **自动字段管理**：包含id、created_at、updated_at、deleted_at等标准字段
+- **工厂方法**：提供create()方法用于创建新实例
+- **CRUD操作**：内置插入、更新、软删除语句构建
+- **上下文集成**：自动处理用户ID和时间戳
+
+### BaseDao - 泛型DAO基类
+
+BaseDao提供了完整的数据访问接口：
+
+- **查询器系统**：包含默认查询器、包含删除项查询器、强制主库查询器
+- **计数器**：提供灵活的计数功能
+- **更新器**：支持多种更新场景
+- **批量操作**：高效的批量插入和更新
+
+### 查询构建器系统
+
+系统包含三种核心构建器：
+
+- **QueryBuilder**：用于SELECT查询构建
+- **UpdateBuilder**：用于UPDATE操作构建  
+- **CountBuilder**：用于COUNT统计构建
+
+**章节来源**
+- [pkg/database/base.py](file://pkg/database/base.py#L61-L309)
+- [pkg/database/dao.py](file://pkg/database/dao.py#L17-L456)
+- [pkg/database/builder.py](file://pkg/database/builder.py#L20-L351)
+
+## 架构概览
+
+ORM抽象层采用分层设计，确保各层职责清晰：
 
 ```mermaid
-classDiagram
-class 引擎工厂{
-+new_async_engine()
-+new_async_session_maker()
-}
-class 模型基类{
-+create()
-+save()
-+update()
-+soft_delete()
-+insert_instances()
-+insert_rows()
-}
-class 查询构建器{
-+where()
-+eq_()/in_()/like()
-+asc_()/desc_()
-+paginate()
-+all()/first()
-}
-class 计数构建器{
-+count()
-}
-class 更新构建器{
-+update()
-+soft_delete()
-+execute()
-}
-class DAO{
-+querier/counter/updater
-+query_by_primary_id()
-+query_by_ids()
-+execute_transaction()
-}
-class JSON类型{
-+load_dialect_impl()
-+process_bind_param()
-+process_result_value()
-}
-class 会话提供者{
-+get_session()
-}
-引擎工厂 --> 会话提供者 : "创建"
-模型基类 --> 查询构建器 : "配合"
-模型基类 --> 计数构建器 : "配合"
-模型基类 --> 更新构建器 : "配合"
-DAO --> 查询构建器 : "组合"
-DAO --> 计数构建器 : "组合"
-DAO --> 更新构建器 : "组合"
-模型基类 --> JSON类型 : "字段类型"
+graph TB
+subgraph "表现层"
+API[API控制器]
+end
+subgraph "业务层"
+UserService[用户服务]
+AuthService[认证服务]
+end
+subgraph "数据访问层"
+UserDao[用户DAO]
+AccountDao[账户DAO]
+end
+subgraph "ORM抽象层"
+BaseDao[BaseDao]
+QueryBuilder[查询构建器]
+UpdateBuilder[更新构建器]
+ModelMixin[模型混入]
+end
+subgraph "基础设施"
+DBConnection[数据库连接]
+SessionProvider[会话提供者]
+Config[配置管理]
+end
+API --> UserService
+UserService --> UserDao
+UserDao --> BaseDao
+BaseDao --> QueryBuilder
+BaseDao --> UpdateBuilder
+BaseDao --> ModelMixin
+QueryBuilder --> DBConnection
+UpdateBuilder --> DBConnection
+DBConnection --> SessionProvider
+SessionProvider --> Config
 ```
 
-图表来源
-- [pkg/database/base.py](file://pkg/database/base.py#L19-L46)
-- [pkg/database/base.py](file://pkg/database/base.py#L60-L364)
-- [pkg/database/builder.py](file://pkg/database/builder.py#L18-L273)
-- [pkg/database/dao.py](file://pkg/database/dao.py#L15-L203)
-- [pkg/database/types.py](file://pkg/database/types.py#L12-L183)
-- [internal/infra/database.py](file://internal/infra/database.py#L85-L111)
+**图表来源**
+- [internal/services/user.py](file://internal/services/user.py#L8-L173)
+- [internal/dao/user.py](file://internal/dao/user.py#L6-L31)
+- [pkg/database/dao.py](file://pkg/database/dao.py#L17-L456)
 
-## 组件详解
+## 详细组件分析
 
-### 引擎创建与会话工厂
-- 引擎工厂函数集中配置连接池参数与JSON序列化/反序列化策略，确保跨数据库一致性。
-- 会话工厂提供异步会话与过期控制策略，保证事务边界与资源释放。
+### 数据库连接管理
+
+数据库连接管理实现了读写分离和连接池优化：
 
 ```mermaid
 sequenceDiagram
-participant App as "应用"
-participant Infra as "基础设施"
-participant Engine as "引擎工厂"
-participant Maker as "会话工厂"
-participant Sess as "会话"
-App->>Infra : 初始化数据库
-Infra->>Engine : new_async_engine(URI, 池参数, JSON序列化)
-Engine-->>Infra : AsyncEngine
-Infra->>Maker : new_async_session_maker(AsyncEngine)
-Maker-->>Infra : async_sessionmaker
-App->>Infra : 获取会话上下文
-Infra->>Maker : 会话工厂()
-Maker-->>Infra : AsyncSession
-Infra-->>App : AsyncSession
+participant App as 应用程序
+participant Conn as 连接管理器
+participant Master as 主库引擎
+participant Replica as 读库引擎
+participant Session as 会话提供者
+App->>Conn : init_async_db()
+Conn->>Master : 创建主库引擎
+Conn->>Replica : 创建读库引擎(可选)
+Conn->>Session : 初始化会话提供者
+App->>Conn : get_session()
+Conn->>Session : 返回主库会话
+App->>Conn : get_read_session()
+alt 读库已配置
+Conn->>Session : 返回读库会话
+else 读库未配置
+Conn->>Session : 返回主库会话(降级)
+end
 ```
 
-图表来源
-- [internal/infra/database.py](file://internal/infra/database.py#L26-L56)
-- [pkg/database/base.py](file://pkg/database/base.py#L19-L46)
+**图表来源**
+- [internal/infra/database/connection.py](file://internal/infra/database/connection.py#L32-L180)
 
-章节来源
-- [internal/infra/database.py](file://internal/infra/database.py#L26-L56)
-- [pkg/database/base.py](file://pkg/database/base.py#L19-L46)
+### 查询构建器工作流程
 
-### 模型基类与混入（ModelMixin）
-- 统一字段：主键、创建/更新/删除时间、创建者/更新者ID
-- 工厂方法：create()自动清洗列、填充默认值
-- 批量插入：insert_rows()与insert_instances()，支持字典与实例两种输入
-- 严格CRUD：save()仅用于插入，update()仅用于已存在对象
-- 软删除：soft_delete()/restore()，自动同步updated_at与updater_id
-- 字段补全：插入/更新时自动填充时间戳与用户ID
-- 反射工具：列名、是否存在某列、InstrumentedAttribute获取
+查询构建器提供了流畅的API来构建复杂的SQL查询：
 
 ```mermaid
 flowchart TD
-Start(["开始"]) --> CheckTransient["检查对象状态<br/>是否为Transient"]
-CheckTransient --> |是| FillInsert["填充插入所需字段<br/>ID/时间/创建者"]
-CheckTransient --> |否| RaiseError["抛出错误：仅允许插入"]
-FillInsert --> BuildStmt["构建INSERT语句"]
-BuildStmt --> ExecOrReturn{"execute=True?"}
-ExecOrReturn --> |是| DoExec["执行事务并提交"]
-ExecOrReturn --> |否| ReturnStmt["返回语句对象"]
-DoExec --> End(["结束"])
-ReturnStmt --> End
-RaiseError --> End
+Start([开始查询]) --> NewBuilder[创建查询构建器]
+NewBuilder --> SetModel[设置模型类]
+SetModel --> AddConditions[添加过滤条件]
+AddConditions --> AddOrder[添加排序]
+AddOrder --> AddPagination[添加分页]
+AddPagination --> BuildStmt[构建SQL语句]
+BuildStmt --> ExecuteQuery[执行查询]
+ExecuteQuery --> GetResults[获取结果]
+GetResults --> End([结束])
+AddConditions --> |IN操作| HandleEmptyList{空列表检查}
+HandleEmptyList --> |空列表| ThrowError[抛出异常]
+HandleEmptyList --> |非空列表| Continue[继续执行]
+Continue --> AddOrder
 ```
 
-图表来源
-- [pkg/database/base.py](file://pkg/database/base.py#L156-L174)
-- [pkg/database/base.py](file://pkg/database/base.py#L283-L304)
+**图表来源**
+- [pkg/database/builder.py](file://pkg/database/builder.py#L107-L211)
 
-章节来源
-- [pkg/database/base.py](file://pkg/database/base.py#L60-L364)
+### 软删除机制
 
-### 查询构建器（QueryBuilder）
-- 条件链式构建：where()/eq_()/ne_()/gt_()/lt_()/ge_()/le_()/in_()/like()/is_null()/or_()
-- 排序与去重：distinct_()/asc_()/desc_()
-- 分页：paginate(page, limit)
-- 结果获取：all()/first()
-- 软删除过滤：默认排除deleted_at非空的记录
+系统支持软删除功能，通过标记deleted_at字段实现：
+
+```mermaid
+stateDiagram-v2
+[*] --> Active : 创建记录
+Active --> SoftDeleted : 执行软删除
+SoftDeleted --> Active : 执行恢复
+Active --> HardDeleted : 执行硬删除
+SoftDeleted --> HardDeleted : 执行硬删除
+HardDeleted --> [*] : 删除记录
+note right of Active
+查询默认排除
+软删除记录
+end note
+note right of SoftDeleted
+查询需要显式包含
+deleted_at IS NOT NULL
+end note
+```
+
+**图表来源**
+- [pkg/database/base.py](file://pkg/database/base.py#L161-L171)
+- [pkg/database/builder.py](file://pkg/database/builder.py#L102-L105)
+
+### 批量操作优化
+
+系统提供了高效的批量操作功能：
 
 ```mermaid
 sequenceDiagram
-participant Client as "调用方"
-participant QB as "QueryBuilder"
-participant SP as "会话提供者"
-participant Sess as "AsyncSession"
-Client->>QB : where/eq_/in_/paginate...
-QB->>QB : 构建Select语句
-Client->>QB : all()/first()
-QB->>SP : get_session()
-SP-->>QB : AsyncSession
-QB->>Sess : execute(select)
-Sess-->>QB : 结果集
-QB-->>Client : 实体列表/首个实体
+participant Service as 服务层
+participant DAO as DAO层
+participant Builder as 批量构建器
+participant DB as 数据库
+Service->>DAO : insert_instances(users)
+DAO->>Builder : 构建批量插入语句
+Builder->>Builder : 验证实例类型
+Builder->>Builder : 填充插入字段
+Builder->>DB : 执行批量插入
+DB-->>Builder : 返回受影响行数
+Builder-->>DAO : 插入完成
+DAO-->>Service : 操作成功
 ```
 
-图表来源
-- [pkg/database/builder.py](file://pkg/database/builder.py#L111-L162)
-- [pkg/database/builder.py](file://pkg/database/builder.py#L29-L92)
+**图表来源**
+- [pkg/database/dao.py](file://pkg/database/dao.py#L332-L358)
 
-章节来源
-- [pkg/database/builder.py](file://pkg/database/builder.py#L111-L162)
-- [pkg/database/builder.py](file://pkg/database/builder.py#L29-L92)
-
-### 计数构建器（CountBuilder）
-- 支持普通计数与去重计数
-- 可选择是否包含软删除项
-- 提供count()结果获取
-
-章节来源
-- [pkg/database/builder.py](file://pkg/database/builder.py#L164-L190)
-
-### 更新构建器（UpdateBuilder）
-- update()动态构建更新字典，自动过滤非列字段
-- 软删除：soft_delete()自动写入deleted_at与updated_at
-- 自动字段同步：更新时自动同步updated_at、updater_id、deleted_at
-- execute()执行更新并提交事务
-
-```mermaid
-flowchart TD
-UStart(["开始"]) --> BuildUpdate["收集更新字段<br/>校验列名/时区处理"]
-BuildUpdate --> SoftDel{"是否软删除?"}
-SoftDel --> |是| SetDeleted["设置deleted_at=当前时间"]
-SoftDel --> |否| KeepUpdate["保持更新字典"]
-SetDeleted --> SyncFields["同步自动字段<br/>updated_at/updater_id"]
-KeepUpdate --> SyncFields
-SyncFields --> ApplyToIns{"是否同步到实例?"}
-ApplyToIns --> |是| SyncIns["setattr(实例, 字段, 值)"]
-ApplyToIns --> |否| SkipSync["跳过同步"]
-SyncIns --> Exec["执行UPDATE并提交"]
-SkipSync --> Exec
-Exec --> UEnd(["结束"])
-```
-
-图表来源
-- [pkg/database/builder.py](file://pkg/database/builder.py#L192-L273)
-
-章节来源
-- [pkg/database/builder.py](file://pkg/database/builder.py#L192-L273)
-
-### DAO与事务执行器
-- BaseDao：提供查询、计数、更新构建器属性，以及常用查询方法
-- execute_transaction：统一事务入口，支持复杂业务逻辑与混合ORM/原生SQL
-
-章节来源
-- [pkg/database/dao.py](file://pkg/database/dao.py#L15-L203)
-
-### 自定义数据类型与序列化机制（JSONType、MutableJSON）
-- JSONType：根据数据库方言选择最优存储类型（PostgreSQL JSONB、MySQL JSON、SQLite JSON、Oracle原生/LOB），并在必要时使用orjson进行序列化/反序列化，支持空值与容错处理
-- MutableJSON：为JSONType注册变更追踪，使对dict/list的内层修改也能被SQLAlchemy感知
-
-```mermaid
-classDiagram
-class JSONType{
-+load_dialect_impl(dialect)
-+process_bind_param(value, dialect)
-+process_result_value(value, dialect)
-}
-class MutableJSON{
-+coerce(key, value)
-}
-JSONType --> MutableJSON : "注册变更追踪"
-```
-
-图表来源
-- [pkg/database/types.py](file://pkg/database/types.py#L12-L183)
-
-章节来源
-- [pkg/database/types.py](file://pkg/database/types.py#L12-L183)
-- [pkg/toolkit/json.py](file://pkg/toolkit/json.py#L1-L108)
-
-### 适配器模式的应用
-- 数据库适配：JSONType在不同dialect下选择impl与序列化策略，屏蔽数据库差异
-- 会话适配：SessionProvider作为抽象的会话提供者，DAO与Builder通过它获取会话，便于替换实现（如测试Mock）
-
-章节来源
-- [pkg/database/types.py](file://pkg/database/types.py#L78-L146)
-- [pkg/database/base.py](file://pkg/database/base.py#L16-L16)
-
-### ORM Builder模式的设计思路与使用方法
-- 设计要点：将SQL构建过程封装为链式DSL，Builder持有模型类与会话提供者，最终在执行阶段才获取会话并执行
-- 使用方法：通过DAO属性获取QueryBuilder/CountBuilder/UpdateBuilder，链式拼接条件，最后调用all()/first()/count()/execute()
-
-章节来源
-- [pkg/database/builder.py](file://pkg/database/builder.py#L18-L273)
-- [pkg/database/dao.py](file://pkg/database/dao.py#L47-L91)
-
-### 数据库抽象层的扩展指南与自定义适配器开发
-- 扩展方向：新增方言适配、自定义类型、查询扩展（如聚合、窗口函数）、事务策略定制
-- 自定义适配器：遵循SessionProvider接口，提供异步上下文管理器；自定义类型需实现TypeDecorator的bind/result处理与dialect适配
-
-章节来源
-- [pkg/database/base.py](file://pkg/database/base.py#L16-L16)
-- [pkg/database/types.py](file://pkg/database/types.py#L78-L146)
+**章节来源**
+- [internal/infra/database/connection.py](file://internal/infra/database/connection.py#L1-L223)
+- [pkg/database/builder.py](file://pkg/database/builder.py#L1-L351)
+- [pkg/database/dao.py](file://pkg/database/dao.py#L304-L358)
 
 ## 依赖关系分析
-ORM抽象层内部依赖清晰，耦合度低，主要依赖关系如下：
-- internal/infra/database依赖pkg/database/base的工厂函数
-- internal/models与internal/dao依赖pkg/database/base与pkg/database/dao
-- pkg/database/builder与pkg/database/dao依赖pkg/database/base
-- pkg/database/types依赖pkg/toolkit/json
+
+ORM抽象层的依赖关系清晰明确：
 
 ```mermaid
-graph LR
-INFRA["internal/infra/database.py"] --> BASE["pkg/database/base.py"]
-MODEL["internal/models/user.py"] --> BASE
-DAO_IMPL["internal/dao/user.py"] --> DAO["pkg/database/dao.py"]
-DAO --> BUILDER["pkg/database/builder.py"]
-DAO --> BASE
-BUILDER --> BASE
-TYPES["pkg/database/types.py"] --> TOOL["pkg/toolkit/json.py"]
-BASE --> TOOL
+graph TB
+subgraph "外部依赖"
+SQLAlchemy[SQLAlchemy 2.0]
+AsyncIO[异步I/O]
+Orjson[JSON序列化]
+end
+subgraph "内部模块"
+Base[base.py]
+DAO[dao.py]
+Builder[builder.py]
+Types[types.py]
+Context[context.py]
+end
+subgraph "应用层"
+Models[models/*]
+DAOs[dao/*]
+Services[services/*]
+end
+SQLAlchemy --> Base
+AsyncIO --> Base
+Orjson --> Base
+Base --> DAO
+Base --> Builder
+Base --> Types
+Context --> Base
+DAO --> Builder
+DAO --> Models
+DAOs --> DAO
+Services --> DAOs
 ```
 
-图表来源
-- [internal/infra/database.py](file://internal/infra/database.py#L14-L16)
-- [internal/models/user.py](file://internal/models/user.py#L4-L4)
-- [internal/dao/user.py](file://internal/dao/user.py#L1-L24)
-- [pkg/database/dao.py](file://pkg/database/dao.py#L1-L203)
-- [pkg/database/builder.py](file://pkg/database/builder.py#L1-L273)
-- [pkg/database/types.py](file://pkg/database/types.py#L1-L183)
-- [pkg/toolkit/json.py](file://pkg/toolkit/json.py#L1-L108)
+**图表来源**
+- [pkg/database/base.py](file://pkg/database/base.py#L1-L16)
+- [pkg/database/dao.py](file://pkg/database/dao.py#L1-L11)
+- [pkg/database/builder.py](file://pkg/database/builder.py#L1-L14)
 
-章节来源
-- [internal/infra/database.py](file://internal/infra/database.py#L14-L16)
-- [internal/models/user.py](file://internal/models/user.py#L4-L4)
-- [internal/dao/user.py](file://internal/dao/user.py#L1-L24)
-- [pkg/database/dao.py](file://pkg/database/dao.py#L1-L203)
-- [pkg/database/builder.py](file://pkg/database/builder.py#L1-L273)
-- [pkg/database/types.py](file://pkg/database/types.py#L1-L183)
-- [pkg/toolkit/json.py](file://pkg/toolkit/json.py#L1-L108)
+**章节来源**
+- [pkg/database/base.py](file://pkg/database/base.py#L1-L16)
+- [pkg/database/dao.py](file://pkg/database/dao.py#L1-L11)
+- [pkg/database/builder.py](file://pkg/database/builder.py#L1-L14)
 
-## 性能考量
-- 连接池参数：合理设置池大小、超时与回收周期，避免连接泄漏与抖动
-- JSON序列化：统一使用高性能orjson，减少序列化开销
-- 查询优化：优先使用索引列进行过滤，避免SELECT *
-- 批量操作：使用insert_instances()/insert_rows()进行批量插入，减少往返
-- 事务粒度：将相关操作放在同一事务中，减少commit次数
-- 监控与告警：利用SQL慢查询监控，定位热点SQL并优化
+## 性能考虑
 
-[本节为通用指导，不直接分析具体文件]
+### 连接池优化
 
-## 故障排查指南
-- 严格CRUD错误：对象状态不符导致save()/update()抛错，检查对象是否Transient/Persistent
-- 会话未初始化：调用get_session()前需确保init_async_db()已执行
-- 空列表IN条件：in_()不允许空列表，需在上层校验或使用or_()组合
-- JSON反序列化异常：数据库中存在非JSON文本时，JSONType具备容错，但仍建议检查数据源
-- 事务失败：execute_transaction()会捕获异常并回滚，查看错误堆栈定位问题
+系统实现了智能的连接池配置：
 
-章节来源
-- [pkg/database/base.py](file://pkg/database/base.py#L156-L200)
-- [internal/infra/database.py](file://internal/infra/database.py#L85-L111)
-- [pkg/database/builder.py](file://pkg/database/builder.py#L70-L83)
-- [pkg/database/types.py](file://pkg/database/types.py#L140-L146)
-- [pkg/database/dao.py](file://pkg/database/dao.py#L106-L203)
+- **主库连接池**：10个连接，最大溢出20个
+- **读库连接池**：20个连接，最大溢出30个（承载更多查询负载）
+- **连接预检测**：启用pool_pre_ping确保连接有效性
+- **连接回收**：1800秒自动回收，避免长时间占用
+
+### 查询优化策略
+
+- **默认排除软删除记录**：减少不必要的数据传输
+- **智能IN操作**：空列表直接抛出异常而非忽略条件
+- **批量操作**：使用原生批量插入提升性能
+- **连接降级**：读库不可用时自动回退到主库
+
+### 缓存和监控
+
+- **慢查询监控**：超过阈值的SQL自动记录警告日志
+- **SQL格式化**：支持参数化查询的格式化显示
+- **性能统计**：记录查询执行时间和参数
+
+**章节来源**
+- [internal/infra/database/connection.py](file://internal/infra/database/connection.py#L50-L88)
+- [pkg/database/builder.py](file://pkg/database/builder.py#L83-L92)
+
+## 故障排除指南
+
+### 常见问题及解决方案
+
+#### 1. 数据库连接问题
+
+**症状**：初始化数据库时抛出RuntimeError
+**原因**：数据库连接池未正确初始化
+**解决方案**：
+- 确保调用`init_async_db()`函数
+- 检查配置文件中的数据库连接信息
+- 验证网络连通性和权限设置
+
+#### 2. 查询构建器异常
+
+**症状**：IN操作抛出ValueError
+**原因**：传入了空列表
+**解决方案**：
+```python
+# 错误的做法
+await dao.querier.in_(User.username, []).all()
+
+# 正确的做法
+if user_list:
+    await dao.querier.in_(User.username, user_list).all()
+```
+
+#### 3. 软删除查询问题
+
+**症状**：查询不到软删除的记录
+**原因**：默认查询器会自动排除软删除记录
+**解决方案**：
+```python
+# 查询时包含软删除记录
+await dao.querier_inc_deleted.eq_(User.id, user_id).first()
+
+# 或者在查询构建器中显式包含
+qb = dao.querier
+qb._apply_delete_at_is_none()  # 移除软删除过滤
+```
+
+#### 4. 批量操作性能问题
+
+**症状**：大批量插入性能不佳
+**原因**：使用了逐条插入而非批量插入
+**解决方案**：
+```python
+# 使用批量插入
+rows = [{"username": f"user_{i}"} for i in range(1000)]
+await dao.insert_rows(rows=rows)
+
+# 或使用实例批量插入
+users = [User.create(username=f"user_{i}") for i in range(1000)]
+await dao.insert_instances(items=users)
+```
+
+**章节来源**
+- [tests/orm/test_orm.py](file://tests/orm/test_orm.py#L240-L245)
+- [pkg/database/builder.py](file://pkg/database/builder.py#L83-L92)
 
 ## 结论
-本ORM抽象层通过工厂、适配器、Builder与DAO的分层设计，实现了：
-- 统一的引擎与会话管理
-- 跨数据库的JSON类型适配与变更追踪
-- 链式查询DSL与严格的CRUD约束
-- 易于扩展的DAO与事务执行器
-- 可观测的SQL监控与性能优化空间
 
-该设计既满足快速开发需求，又为后续扩展与迁移提供了良好基础。
+本ORM抽象层设计合理，具有以下优势：
 
-[本节为总结性内容，不直接分析具体文件]
+1. **类型安全**：使用Python泛型确保编译时类型检查
+2. **功能完整**：涵盖CRUD、查询、批量操作等所有常见需求
+3. **性能优化**：连接池、批量操作、查询优化等多重优化
+4. **扩展性强**：清晰的分层设计便于功能扩展
+5. **易用性好**：流畅的API设计降低使用门槛
 
-## 附录
-
-### 使用示例与最佳实践
-- 初始化与生命周期：在应用启动时调用init_async_db()，在关闭时调用close_async_db()
-- 会话获取：通过get_session()获取上下文管理器，确保异常时自动回滚
-- 查询与更新：优先使用DAO提供的属性（querier/counter/updater），链式构建条件
-- 批量插入：使用insert_instances()/insert_rows()，避免逐条插入
-- 软删除：使用soft_delete()/restore()，配合QueryBuilder的默认过滤
-
-章节来源
-- [internal/app.py](file://internal/app.py#L85-L109)
-- [internal/infra/database.py](file://internal/infra/database.py#L26-L111)
-- [pkg/database/dao.py](file://pkg/database/dao.py#L47-L91)
-- [pkg/database/base.py](file://pkg/database/base.py#L100-L150)
-
-### 测试参考
-- ORM单元测试覆盖：严格CRUD、批量插入、查询构建器、软删除、更新构建器逻辑
-- JSON类型测试覆盖：MutableJSON变更追踪、跨数据库序列化/反序列化、空值与容错
-
-章节来源
-- [tests/orm/test_orm.py](file://tests/orm/test_orm.py#L1-L238)
-- [tests/orm/test_orm_json_type.py](file://tests/orm/test_orm_json_type.py#L1-L217)
+通过合理的架构设计和完善的错误处理机制，该ORM抽象层能够满足大多数Web应用的数据访问需求，同时为未来的功能扩展提供了良好的基础。

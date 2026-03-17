@@ -4,6 +4,7 @@
 **本文引用的文件**
 - [internal/utils/celery/__init__.py](file://internal/utils/celery/__init__.py)
 - [pkg/toolkit/celery.py](file://pkg/toolkit/celery.py)
+- [internal/utils/celery/tasks.py](file://internal/utils/celery/tasks.py)
 - [internal/tasks/demo_task.py](file://internal/tasks/demo_task.py)
 - [scripts/run_celery_worker.py](file://scripts/run_celery_worker.py)
 - [tests/test_celery_tasks.py](file://tests/test_celery_tasks.py)
@@ -13,11 +14,15 @@
 
 ## 更新摘要
 **所做更改**
-- 更新了worker启动流程优化部分，反映重新设计的启动顺序
+- 更新了Celery模块重构：从internal.infra.celery迁移到internal.utils.celery
+- 更新了任务导入路径和模块包含配置
+- 更新了任务装饰器命名空间
+- 更新了worker启动流程优化部分
 - 移除了worker内冗余数据库和Redis初始化的说明
 - 改进了run_in_async函数的trace_id参数支持说明
 - 简化了worker关闭过程的描述
 - 更新了worker生命周期钩子的实现细节
+- **更新** 增强get_result方法的类型签名，移除timeout参数的默认None值，使其成为必需参数，提升类型安全性
 
 ## 目录
 1. [简介](#简介)
@@ -75,17 +80,18 @@ CC --> REDIS
 **图表来源**
 - [internal/utils/celery/__init__.py](file://internal/utils/celery/__init__.py#L86-L100)
 - [pkg/toolkit/celery.py](file://pkg/toolkit/celery.py#L15-L51)
-- [internal/tasks/demo_task.py](file://internal/tasks/demo_task.py#L9-L19)
+- [internal/utils/celery/tasks.py](file://internal/utils/celery/tasks.py#L1-L29)
 - [scripts/run_celery_worker.py](file://scripts/run_celery_worker.py#L1-L43)
 
 **章节来源**
-- [internal/utils/celery/__init__.py](file://internal/utils/celery/__init__.py#L1-L185)
+- [internal/utils/celery/__init__.py](file://internal/utils/celery/__init__.py#L1-L190)
 - [pkg/toolkit/celery.py](file://pkg/toolkit/celery.py#L1-L198)
+- [internal/utils/celery/tasks.py](file://internal/utils/celery/tasks.py#L1-L29)
 - [internal/tasks/demo_task.py](file://internal/tasks/demo_task.py#L1-L20)
 - [scripts/run_celery_worker.py](file://scripts/run_celery_worker.py#L1-L43)
 - [tests/test_celery_tasks.py](file://tests/test_celery_tasks.py#L1-L361)
-- [internal/config/settings.py](file://internal/config/settings.py#L1-L243)
-- [internal/app.py](file://internal/app.py#L1-L109)
+- [internal/config/settings.py](file://internal/config/settings.py#L1-L228)
+- [internal/app.py](file://internal/app.py#L1-L107)
 
 ## 核心组件
 - CeleryClient：对 Celery 的轻量封装，提供任务提交、编排（链式/分组/Chord）、状态查询、撤销、Worker 生命周期钩子注册等能力。
@@ -98,10 +104,11 @@ CC --> REDIS
 **章节来源**
 - [pkg/toolkit/celery.py](file://pkg/toolkit/celery.py#L15-L198)
 - [internal/utils/celery/__init__.py](file://internal/utils/celery/__init__.py#L86-L100)
+- [internal/utils/celery/tasks.py](file://internal/utils/celery/tasks.py#L8-L29)
 - [internal/tasks/demo_task.py](file://internal/tasks/demo_task.py#L9-L19)
 - [scripts/run_celery_worker.py](file://scripts/run_celery_worker.py#L1-L43)
-- [internal/config/settings.py](file://internal/config/settings.py#L161-L173)
-- [internal/app.py](file://internal/app.py#L84-L109)
+- [internal/config/settings.py](file://internal/config/settings.py#L215-L227)
+- [internal/app.py](file://internal/app.py#L84-L107)
 
 ## 架构总览
 Celery 在本项目中的角色是"异步任务编排与执行引擎"，与 FastAPI 应用解耦，Worker 独立运行。应用通过 CeleryClient 提交任务，任务在 Worker 中执行，结果写回 Redis Backend，客户端可轮询或通过回调获取结果。
@@ -122,7 +129,7 @@ W->>REG : 调用注册的任务(number_sum)
 REG->>REG : 绑定任务上下文(self)
 REG->>W : 调用异步处理函数(handle_number_sum)
 W-->>BK : 返回结果(JSON)
-API->>CC : get_result(task_id)
+API->>CC : get_result(task_id, timeout)
 CC->>BK : 查询结果
 BK-->>CC : 返回结果
 CC-->>API : 返回结果
@@ -131,7 +138,7 @@ CC-->>API : 返回结果
 **图表来源**
 - [pkg/toolkit/celery.py](file://pkg/toolkit/celery.py#L75-L107)
 - [internal/utils/celery/__init__.py](file://internal/utils/celery/__init__.py#L129-L160)
-- [internal/tasks/demo_task.py](file://internal/tasks/demo_task.py#L9-L19)
+- [internal/utils/celery/tasks.py](file://internal/utils/celery/tasks.py#L8-L29)
 
 ## 详细组件分析
 
@@ -143,6 +150,7 @@ CC-->>API : 返回结果
   - 编排接口：chain/group/chord 均通过签名对象组合，并传入 app=self.app。
   - 执行选项合并：_get_exec_options 支持显式参数、options 字典与实例默认值的优先级合并。
   - 生命周期钩子：register_worker_hooks 使用信号注册，支持同步/异步启动/关闭钩子。
+  - **更新** get_result 方法：timeout 参数现为必需参数，提升类型安全性。
 
 ```mermaid
 classDiagram
@@ -191,7 +199,7 @@ F --> G["FastAPI Lifespan 中执行健康检查"]
 
 **章节来源**
 - [internal/utils/celery/__init__.py](file://internal/utils/celery/__init__.py#L18-L100)
-- [internal/config/settings.py](file://internal/config/settings.py#L161-L173)
+- [internal/config/settings.py](file://internal/config/settings.py#L215-L227)
 
 ### 任务注册与绑定
 - 任务定义：在 tasks.py 中使用 @celery_client.app.task(bind=True, name=...) 注册 number_sum 任务。
@@ -213,11 +221,11 @@ OK -- 否 --> RETRY["self.retry(countdown, max_retries)"]
 ```
 
 **图表来源**
-- [internal/utils/celery/__init__.py](file://internal/utils/celery/__init__.py#L129-L160)
+- [internal/utils/celery/tasks.py](file://internal/utils/celery/tasks.py#L8-L29)
 - [internal/tasks/demo_task.py](file://internal/tasks/demo_task.py#L9-L19)
 
 **章节来源**
-- [internal/utils/celery/__init__.py](file://internal/utils/celery/__init__.py#L129-L160)
+- [internal/utils/celery/tasks.py](file://internal/utils/celery/tasks.py#L8-L29)
 - [internal/tasks/demo_task.py](file://internal/tasks/demo_task.py#L9-L19)
 
 ### 编排：链式、分组与 Chord
@@ -286,17 +294,18 @@ J --> K["任务完成"]
 
 **图表来源**
 - [internal/utils/celery/__init__.py](file://internal/utils/celery/__init__.py#L55-L79)
-- [internal/utils/celery/__init__.py](file://internal/utils/celery/__init__.py#L129-L160)
+- [internal/utils/celery/tasks.py](file://internal/utils/celery/tasks.py#L8-L29)
 
 **章节来源**
 - [internal/utils/celery/__init__.py](file://internal/utils/celery/__init__.py#L55-L79)
-- [internal/utils/celery/__init__.py](file://internal/utils/celery/__init__.py#L129-L160)
+- [internal/utils/celery/tasks.py](file://internal/utils/celery/tasks.py#L8-L29)
 
 ### 任务执行与监控
 - 执行入口：scripts/run_celery_worker.py 提供统一启动脚本，支持并发、队列与日志级别等参数。
 - 监控与健康检查：在 FastAPI Lifespan 中调用 check_celery_health，主动检测 Broker 连通性。
 - 状态查询：通过 celery_client.get_status/get_result 获取任务状态与结果。
 - 撤销任务：celery_client.revoke 支持终止执行中的任务。
+- **更新** get_result 方法：timeout 参数现为必需参数，调用时必须显式提供超时时间。
 
 **章节来源**
 - [scripts/run_celery_worker.py](file://scripts/run_celery_worker.py#L1-L43)
@@ -322,18 +331,18 @@ FA --> CK["check_celery_health"]
 ```
 
 **图表来源**
-- [internal/config/settings.py](file://internal/config/settings.py#L161-L173)
+- [internal/config/settings.py](file://internal/config/settings.py#L215-L227)
 - [pkg/toolkit/celery.py](file://pkg/toolkit/celery.py#L15-L51)
 - [internal/utils/celery/__init__.py](file://internal/utils/celery/__init__.py#L86-L100)
-- [internal/tasks/demo_task.py](file://internal/tasks/demo_task.py#L9-L19)
-- [internal/app.py](file://internal/app.py#L84-L109)
+- [internal/utils/celery/tasks.py](file://internal/utils/celery/tasks.py#L3-L5)
+- [internal/app.py](file://internal/app.py#L84-L107)
 
 **章节来源**
-- [internal/config/settings.py](file://internal/config/settings.py#L161-L173)
+- [internal/config/settings.py](file://internal/config/settings.py#L215-L227)
 - [pkg/toolkit/celery.py](file://pkg/toolkit/celery.py#L15-L51)
 - [internal/utils/celery/__init__.py](file://internal/utils/celery/__init__.py#L86-L100)
-- [internal/tasks/demo_task.py](file://internal/tasks/demo_task.py#L9-L19)
-- [internal/app.py](file://internal/app.py#L84-L109)
+- [internal/utils/celery/tasks.py](file://internal/utils/celery/tasks.py#L3-L5)
+- [internal/app.py](file://internal/app.py#L84-L107)
 
 ## 性能考虑
 - 序列化与内容类型：统一使用 JSON，减少序列化开销，确保跨语言/跨服务兼容。
@@ -342,6 +351,7 @@ FA --> CK["check_celery_health"]
 - 任务粒度：将大任务拆分为小任务，配合 Group/Chord 提升吞吐与可观测性。
 - 资源管理：Worker 生命周期钩子在启动时初始化日志，在关闭时清理基础资源，数据库和 Redis 连接按需初始化和清理。
 - 超时与重试：合理设置 countdown 与 max_retries，避免无限重试造成资源浪费。
+- **更新** 类型安全性：get_result 方法的 timeout 参数现为必需参数，有助于在编译时发现潜在的超时配置问题。
 
 **章节来源**
 - [pkg/toolkit/celery.py](file://pkg/toolkit/celery.py#L36-L48)
@@ -360,10 +370,10 @@ FA --> CK["check_celery_health"]
 - 任务重试过多
   - 现象：任务反复失败重试。
   - 排查：检查任务内部异常处理与 self.retry 配置；确认输入参数类型；必要时增加 countdown 间隔。
-  - 参考：[internal/utils/celery/__init__.py](file://internal/utils/celery/__init__.py#L129-L160)
+  - 参考：[internal/utils/celery/tasks.py](file://internal/utils/celery/tasks.py#L25-L29)
 - 结果无法获取
   - 现象：get_result 抛出异常或返回 None。
-  - 排查：确认 Backend 使用 Redis；检查任务是否成功；确认 task_id 正确。
+  - 排查：确认 Backend 使用 Redis；检查任务是否成功；确认 task_id 正确；**更新** 确认 timeout 参数已正确传入。
   - 参考：[pkg/toolkit/celery.py](file://pkg/toolkit/celery.py#L141-L148)
 - Worker 进程崩溃或资源泄漏
   - 现象：Worker 进程异常退出或内存持续增长。
@@ -372,19 +382,21 @@ FA --> CK["check_celery_health"]
 
 **章节来源**
 - [internal/utils/celery/__init__.py](file://internal/utils/celery/__init__.py#L120-L127)
-- [internal/utils/celery/__init__.py](file://internal/utils/celery/__init__.py#L129-L160)
+- [internal/utils/celery/tasks.py](file://internal/utils/celery/tasks.py#L25-L29)
 - [pkg/toolkit/celery.py](file://pkg/toolkit/celery.py#L141-L148)
 - [internal/utils/celery/__init__.py](file://internal/utils/celery/__init__.py#L73-L79)
 
 ## 结论
 本项目以 Celery 为核心构建了高可用的异步任务体系：通过 CeleryClient 封装统一任务提交与编排，借助任务路由与队列实现流量隔离，结合优化的 Worker 生命周期钩子与健康检查保障稳定性。number_sum 任务展示了绑定上下文、Chord 兼容与重试策略的完整实现。配合 JSON 序列化、合理的并发与资源管理策略，可在生产环境中获得稳定且可观测的异步执行体验。
 
+**更新** 最新的类型安全改进提升了代码质量：get_result 方法的 timeout 参数现为必需参数，有助于在开发阶段发现潜在的超时配置问题，减少运行时错误。
+
 ## 附录
 - number_sum 任务定义与实现要点
   - 任务注册：在 tasks.py 中使用 bind=True，支持 self.retry。
   - 输入兼容：当 x 为列表时，先聚合求和，再调用异步处理函数。
   - 异步执行：通过 anyio.run 调用 handle_number_sum，确保事件循环安全。
-  - 参考：[internal/utils/celery/__init__.py](file://internal/utils/celery/__init__.py#L129-L160)、[internal/tasks/demo_task.py](file://internal/tasks/demo_task.py#L9-L19)
+  - 参考：[internal/utils/celery/tasks.py](file://internal/utils/celery/tasks.py#L8-L29)、[internal/tasks/demo_task.py](file://internal/tasks/demo_task.py#L9-L19)
 - Worker 启动与参数
   - 脚本：scripts/run_celery_worker.py
   - 常用参数：--concurrency、--pool、--max-tasks-per-child、--max-memory-per-child
@@ -392,7 +404,12 @@ FA --> CK["check_celery_health"]
 - 配置与环境
   - 配置加载：internal/config/settings.py 生成 redis_url
   - 环境变量：configs/.env.dev 提供 REDIS_HOST/PORT/PASSWORD/DB
-  - 参考：[internal/config/settings.py](file://internal/config/settings.py#L161-L173)、[configs/.env.dev](file://configs/.env.dev#L14-L17)
+  - 参考：[internal/config/settings.py](file://internal/config/settings.py#L215-L227)、[configs/.env.dev](file://configs/.env.dev#L14-L17)
 - FastAPI 集成
   - Lifespan 中初始化日志、DB、Redis、签名与雪花 ID；调用 check_celery_health 进行健康检查
-  - 参考：[internal/app.py](file://internal/app.py#L84-L109)、[internal/utils/celery/__init__.py](file://internal/utils/celery/__init__.py#L108-L128)
+  - 参考：[internal/app.py](file://internal/app.py#L84-L107)、[internal/utils/celery/__init__.py](file://internal/utils/celery/__init__.py#L108-L128)
+- **更新** get_result 方法使用注意事项
+  - 方法签名：get_result(task_id: str, timeout: float, propagate: bool = True) -> Any
+  - 必需参数：timeout 参数现为必需，调用时必须提供超时时间
+  - 类型安全性：编译器会在缺少 timeout 参数时发出类型错误警告
+  - 参考：[pkg/toolkit/celery.py](file://pkg/toolkit/celery.py#L141-L149)
