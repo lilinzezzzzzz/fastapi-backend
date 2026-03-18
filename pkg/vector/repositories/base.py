@@ -109,7 +109,7 @@ class BaseVectorRepository[T](ABC):
             records=prepared_records,
         )
 
-    async def delete_by_ids(self, *, ids: Sequence[str]) -> int:
+    async def delete_by_ids(self, *, ids: Sequence[int]) -> int:
         return await self.backend.delete(
             spec=self.collection_spec,
             ids=ids,
@@ -126,7 +126,7 @@ class BaseVectorRepository[T](ABC):
     async def fetch_by_ids(
         self,
         *,
-        ids: Sequence[str],
+        ids: Sequence[int],
         consistency_level: ConsistencyLevel | None = None,
     ) -> list[VectorRecord]:
         return await self.backend.fetch(

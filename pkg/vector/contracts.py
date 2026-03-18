@@ -6,6 +6,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 type ScalarValue = str | int | float | bool
+type VectorRecordId = int
 
 
 class FilterOperator(StrEnum):
@@ -32,7 +33,7 @@ class FilterCondition(BaseModel, extra="forbid"):
 
 
 class VectorRecord(BaseModel, extra="forbid"):
-    id: str = Field(min_length=1)
+    id: VectorRecordId = Field(gt=0)
     text: str
     embedding: list[float] | None = None
     metadata: dict[str, ScalarValue] = Field(default_factory=dict)
@@ -50,7 +51,7 @@ class SearchRequest(BaseModel, extra="forbid"):
 
 
 class SearchHit(BaseModel, extra="forbid"):
-    id: str
+    id: VectorRecordId = Field(gt=0)
     text: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     payload: dict[str, Any] = Field(default_factory=dict)

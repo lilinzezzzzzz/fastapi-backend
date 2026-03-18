@@ -10,16 +10,16 @@ from pkg.vector.contracts import ConsistencyLevel, VectorRecord
 from pkg.vector.repositories.base import BaseVectorRepository
 
 
-class DummyRepository(BaseVectorRepository[str]):
+class DummyRepository(BaseVectorRepository[int]):
     @property
     def collection_spec(self) -> CollectionSpec:
         return CollectionSpec(name="test_collection", dimension=4)
 
-    def to_records(self, *, entity: str) -> list[VectorRecord]:
+    def to_records(self, *, entity: int) -> list[VectorRecord]:
         return [
             VectorRecord(
                 id=entity,
-                text=entity,
+                text=str(entity),
                 embedding=[0.1, 0.2, 0.3, 0.4],
             )
         ]
@@ -49,7 +49,7 @@ def test_fetch_by_ids_passes_consistency_level(backend: MagicMock, embedder: Mag
 
     asyncio.run(
         repo.fetch_by_ids(
-            ids=["doc-1"],
+            ids=[1],
             consistency_level=ConsistencyLevel.STRONG,
         )
     )

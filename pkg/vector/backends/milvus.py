@@ -92,7 +92,7 @@ class MilvusBackend(BaseVectorBackend):
         self,
         *,
         spec: CollectionSpec,
-        ids: Sequence[str] | None = None,
+        ids: Sequence[int] | None = None,
         filters: Sequence[FilterCondition] | None = None,
     ) -> int:
         expr = self._build_filter_expression(spec=spec, ids=ids, filters=filters)
@@ -116,7 +116,7 @@ class MilvusBackend(BaseVectorBackend):
         self,
         *,
         spec: CollectionSpec,
-        ids: Sequence[str] | None = None,
+        ids: Sequence[int] | None = None,
         filters: Sequence[FilterCondition] | None = None,
         limit: int | None = None,
         consistency_level: ConsistencyLevel | None = None,
@@ -231,6 +231,17 @@ class MilvusBackend(BaseVectorBackend):
                     f"Milvus collection 字段缺失: collection={spec.name}, field={required_field}"
                 )
 
+        id_field = field_map.get(spec.id_field, {})
+        actual_id_type = id_field.get("type") or id_field.get("data_type") or id_field.get("dtype")
+        if actual_id_type is not None and not self._matches_primary_key_type(
+            actual=actual_id_type,
+            expected=spec.id_data_type,
+        ):
+            raise CollectionSchemaMismatchError(
+                f"Milvus 主键字段类型不匹配: collection={spec.name}, field={spec.id_field}, "
+                f"got={actual_id_type}, expected={spec.id_data_type.value}"
+            )
+
         if spec.payload_field and spec.payload_field not in field_map:
             raise CollectionSchemaMismatchError(
                 f"Milvus collection 缺少 payload 字段: collection={spec.name}, field={spec.payload_field}"
@@ -256,12 +267,18 @@ class MilvusBackend(BaseVectorBackend):
             auto_id=False,
             enable_dynamic_field=spec.enable_dynamic_field,
         )
-        schema.add_field(
-            field_name=spec.id_field,
-            datatype=DataType.VARCHAR,
-            is_primary=True,
-            max_length=spec.id_max_length,
-        )
+        id_field_kwargs: dict[str, Any] = {
+            "field_name": spec.id_field,
+            "is_primary": True,
+        }
+        if spec.id_data_type == ScalarDataType.INT64:
+            id_field_kwargs["datatype"] = DataType.INT64
+        elif spec.id_data_type == ScalarDataType.STRING:
+            id_field_kwargs["datatype"] = DataType.VARCHAR
+            id_field_kwargs["max_length"] = spec.id_max_length
+        else:
+            raise ValueError(f"Milvus 主键字段仅支持 INT64 或 STRING: {spec.id_data_type}")
+        schema.add_field(**id_field_kwargs)
         schema.add_field(
             field_name=spec.text_field,
             datatype=DataType.VARCHAR,
@@ -340,7 +357,7 @@ class MilvusBackend(BaseVectorBackend):
 
         embedding = row.get(spec.vector_field)
         return VectorRecord(
-            id=str(row.get(spec.id_field)),
+            id=int(row.get(spec.id_field)),
             text=str(row.get(spec.text_field, "")),
             embedding=embedding if isinstance(embedding, list) else None,
             metadata=metadata,
@@ -351,7 +368,7 @@ class MilvusBackend(BaseVectorBackend):
         row = self._extract_entity_row(spec=spec, hit=hit)
         raw_score = self._extract_raw_score(hit=hit)
         return SearchHit(
-            id=str(hit.get("id", row.get(spec.id_field, ""))),
+            id=int(hit.get("id", row.get(spec.id_field, 0))),
             text=row.get(spec.text_field),
             metadata={field.name: row[field.name] for field in spec.scalar_fields if field.name in row},
             payload=self._extract_payload(spec=spec, row=row),
@@ -413,7 +430,7 @@ class MilvusBackend(BaseVectorBackend):
         self,
         *,
         spec: CollectionSpec,
-        ids: Sequence[str] | None,
+        ids: Sequence[int] | None,
         filters: Sequence[FilterCondition] | None,
     ) -> str:
         expressions: list[str] = []
@@ -474,6 +491,27 @@ class MilvusBackend(BaseVectorBackend):
             MetricType.L2: "L2",
         }
         return mapping[metric_type]
+
+    @staticmethod
+    def _matches_primary_key_type(*, actual: Any, expected: ScalarDataType) -> bool:
+        expected_map = {
+            ScalarDataType.INT64: DataType.INT64,
+            ScalarDataType.STRING: DataType.VARCHAR,
+        }
+        expected_dtype = expected_map.get(expected)
+        if expected_dtype is None:
+            return False
+        if isinstance(actual, DataType):
+            return actual == expected_dtype
+        if isinstance(actual, int):
+            try:
+                return DataType(actual) == expected_dtype
+            except ValueError:
+                return False
+        if isinstance(actual, str):
+            normalized = actual.lower()
+            return expected.value in normalized or expected_dtype.name.lower() in normalized
+        return False
 
     def _format_scalar(self, value: Any) -> str:
         if isinstance(value, str):

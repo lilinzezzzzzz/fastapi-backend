@@ -101,7 +101,8 @@ class CollectionSpec(BaseModel, extra="forbid"):
 
     # ========== 核心字段名配置 ==========
     id_field: str = "id"  # 主键字段名
-    id_max_length: int = Field(default=128, gt=0)  # 主键最大长度（VARCHAR）
+    id_data_type: ScalarDataType = ScalarDataType.INT64  # 主键数据类型
+    id_max_length: int = Field(default=128, gt=0)  # STRING 主键最大长度（仅 id_data_type=STRING 时生效）
     text_field: str = "text"  # 原始文本字段名
     text_max_length: int = Field(default=65_535, gt=0)  # 文本最大长度（VARCHAR）
     vector_field: str = "embedding"  # 向量字段名
@@ -135,7 +136,7 @@ class VectorBackend(ABC):
         self,
         *,
         spec: CollectionSpec,
-        ids: Sequence[str] | None = None,
+        ids: Sequence[int] | None = None,
         filters: Sequence[FilterCondition] | None = None,
     ) -> int:
         """按 id 或过滤条件删除记录。"""
@@ -145,7 +146,7 @@ class VectorBackend(ABC):
         self,
         *,
         spec: CollectionSpec,
-        ids: Sequence[str] | None = None,
+        ids: Sequence[int] | None = None,
         filters: Sequence[FilterCondition] | None = None,
         limit: int | None = None,
         consistency_level: ConsistencyLevel | None = None,
@@ -163,8 +164,8 @@ class VectorBackend(ABC):
 
 class BaseVectorBackend(VectorBackend):
     def validate_record(self, *, spec: CollectionSpec, record: VectorRecord) -> None:
-        if not record.id:
-            raise RecordValidationError("record.id 不能为空")
+        if record.id <= 0:
+            raise RecordValidationError("record.id 必须大于 0")
         if record.embedding is None:
             raise RecordValidationError(f"record.embedding 不能为空: id={record.id}")
         if len(record.embedding) != spec.dimension:
