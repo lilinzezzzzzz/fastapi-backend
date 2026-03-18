@@ -167,3 +167,6 @@ cython_debug/
 
 # VSCode
 .vscode/
+
+# Qoder generated workspace data
+.qoder/
