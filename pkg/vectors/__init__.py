@@ -12,12 +12,6 @@ from pkg.vectors.backends import (
     VectorBackend,
     create_backend,
 )
-from pkg.vectors.capabilities import (
-    SupportsBulkImport,
-    SupportsHybridSearch,
-    SupportsLoadControl,
-    SupportsNamespaceIsolation,
-)
 from pkg.vectors.contracts import (
     FilterCondition,
     FilterOperator,
@@ -63,10 +57,6 @@ __all__ = [
     "ScalarFieldSpec",
     "SearchHit",
     "SearchRequest",
-    "SupportsBulkImport",
-    "SupportsHybridSearch",
-    "SupportsLoadControl",
-    "SupportsNamespaceIsolation",
     "TenantIsolationMode",
     "UnsupportedFilterError",
     "VectorBackend",
@@ -75,22 +65,3 @@ __all__ = [
     "create_backend",
     "create_embedder",
 ]
-
-try:
-    from pkg.vectors.repositories import (
-        ChunkVectorDocument,
-        ChunkVectorRepository,
-        QaPairVectorDocument,
-        QaPairVectorRepository,
-    )
-except ImportError:
-    pass
-else:
-    __all__.extend(
-        [
-            "ChunkVectorDocument",
-            "ChunkVectorRepository",
-            "QaPairVectorDocument",
-            "QaPairVectorRepository",
-        ]
-    )
