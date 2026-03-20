@@ -4,8 +4,8 @@ from collections.abc import Callable
 from functools import lru_cache
 from typing import Any
 
-from pkg.vector.embedders.base import BaseEmbedder, Embedder, EmbedderProvider
-from pkg.vector.embedders.llm import LLMEmbedder, create_llm_embedder
+from pkg.vectors.embedders.base import BaseEmbedder, Embedder, EmbedderProvider
+from pkg.vectors.embedders.llm import LLMEmbedder, create_llm_embedder
 
 _NO_AUTH_API_KEY = "not-required"
 

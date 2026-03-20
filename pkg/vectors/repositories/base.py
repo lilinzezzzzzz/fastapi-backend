@@ -2,8 +2,8 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing import Any, cast
 
-from pkg.vector.backends.base import CollectionSpec, VectorBackend
-from pkg.vector.contracts import (
+from pkg.vectors.backends.base import CollectionSpec, VectorBackend
+from pkg.vectors.contracts import (
     ConsistencyLevel,
     FilterCondition,
     FilterOperator,
@@ -12,8 +12,8 @@ from pkg.vector.contracts import (
     SearchRequest,
     VectorRecord,
 )
-from pkg.vector.embedders.base import Embedder
-from pkg.vector.errors import RecordValidationError
+from pkg.vectors.embedders.base import Embedder
+from pkg.vectors.errors import RecordValidationError
 
 
 class BaseVectorRepository[T](ABC):

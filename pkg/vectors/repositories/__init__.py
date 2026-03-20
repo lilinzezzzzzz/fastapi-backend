@@ -1,9 +1,9 @@
-from pkg.vector.repositories.base import BaseVectorRepository
+from pkg.vectors.repositories.base import BaseVectorRepository
 
 __all__ = ["BaseVectorRepository"]
 
 try:
-    from pkg.vector.repositories.chunks import (
+    from pkg.vectors.repositories.chunks import (
         ChunkVectorDocument,
         ChunkVectorRepository,
         new_chunk_repository,
@@ -20,7 +20,7 @@ else:
     )
 
 try:
-    from pkg.vector.repositories.qa_pairs import (
+    from pkg.vectors.repositories.qa_pairs import (
         QaPairVectorDocument,
         QaPairVectorRepository,
         new_qa_pair_repository,

@@ -6,10 +6,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pymilvus import DataType
 
-from pkg.vector.backends.base import CollectionSpec, ConsistencyLevel
-from pkg.vector.backends.milvus import MilvusBackend
-from pkg.vector.contracts import SearchRequest
-from pkg.vector.errors import CollectionSchemaMismatchError
+from pkg.vectors.backends.base import CollectionSpec, ConsistencyLevel
+from pkg.vectors.backends.milvus import MilvusBackend
+from pkg.vectors.contracts import SearchRequest
+from pkg.vectors.errors import CollectionSchemaMismatchError
 
 
 async def _run_direct(func, *args, **kwargs):

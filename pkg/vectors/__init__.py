@@ -1,4 +1,4 @@
-from pkg.vector.backends import (
+from pkg.vectors.backends import (
     BACKEND_BUILDERS,
     BackendProvider,
     BaseVectorBackend,
@@ -12,26 +12,26 @@ from pkg.vector.backends import (
     VectorBackend,
     create_backend,
 )
-from pkg.vector.capabilities import (
+from pkg.vectors.capabilities import (
     SupportsBulkImport,
     SupportsHybridSearch,
     SupportsLoadControl,
     SupportsNamespaceIsolation,
 )
-from pkg.vector.contracts import (
+from pkg.vectors.contracts import (
     FilterCondition,
     FilterOperator,
     SearchHit,
     SearchRequest,
     VectorRecord,
 )
-from pkg.vector.embedders import (
+from pkg.vectors.embedders import (
     EMBEDDER_BUILDERS,
     EmbedderProvider,
     LLMEmbedder,
     create_embedder,
 )
-from pkg.vector.errors import (
+from pkg.vectors.errors import (
     CapabilityNotSupportedError,
     CollectionSchemaMismatchError,
     InvalidEmbeddingDimensionError,
@@ -39,7 +39,7 @@ from pkg.vector.errors import (
     UnsupportedFilterError,
     VectorCoreError,
 )
-from pkg.vector.repositories import BaseVectorRepository
+from pkg.vectors.repositories import BaseVectorRepository
 
 __all__ = [
     "BACKEND_BUILDERS",
@@ -77,7 +77,7 @@ __all__ = [
 ]
 
 try:
-    from pkg.vector.repositories import (
+    from pkg.vectors.repositories import (
         ChunkVectorDocument,
         ChunkVectorRepository,
         QaPairVectorDocument,

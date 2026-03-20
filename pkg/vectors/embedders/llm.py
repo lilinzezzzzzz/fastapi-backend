@@ -7,8 +7,8 @@ from typing import Any
 from openai import AsyncOpenAI
 
 from pkg.toolkit.string import mask_string
-from pkg.vector.embedders.base import BaseEmbedder
-from pkg.vector.errors import RecordValidationError
+from pkg.vectors.embedders.base import BaseEmbedder
+from pkg.vectors.errors import RecordValidationError
 
 # =========================================================
 # 默认配置常量

@@ -7,14 +7,13 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from pkg.vector.contracts import (
-    ConsistencyLevel,
+from pkg.vectors.contracts import (
     FilterCondition,
     SearchHit,
     SearchRequest,
     VectorRecord,
 )
-from pkg.vector.errors import InvalidEmbeddingDimensionError, RecordValidationError
+from pkg.vectors.errors import InvalidEmbeddingDimensionError, RecordValidationError
 
 # =============================================================================
 # Collection 名称注册表
@@ -28,8 +27,8 @@ class CollectionName:
     """
 
     # 默认 collection 名称
-    CHUNKS = "chunks_collection"
-    QA_PAIRS = "questions_collection"
+    CHUNKS = "chunk_vectors_collection"
+    QA_PAIRS = "qa_pair_vectors_collection"
 
 
 class BackendProvider(StrEnum):
@@ -59,6 +58,14 @@ class MetricType(StrEnum):
     COSINE = "cosine"
     IP = "ip"
     L2 = "l2"
+
+
+class ConsistencyLevel(StrEnum):
+    STRONG = "Strong"
+    SESSION = "Session"
+    BOUNDED = "Bounded"
+    EVENTUALLY = "Eventually"
+    CUSTOMIZED = "Customized"
 
 
 class TenantIsolationMode(StrEnum):
@@ -101,15 +108,15 @@ class CollectionSpec(BaseModel, extra="forbid"):
 
     # ========== 核心字段名配置 ==========
     id_field: str = "id"  # 主键字段名
-    id_data_type: ScalarDataType = ScalarDataType.INT64  # 主键数据类型
-    id_max_length: int = Field(default=128, gt=0)  # STRING 主键最大长度（仅 id_data_type=STRING 时生效）
     text_field: str = "text"  # 原始文本字段名
     text_max_length: int = Field(default=65_535, gt=0)  # 文本最大长度（VARCHAR）
     vector_field: str = "embedding"  # 向量字段名
     payload_field: str | None = "payload"  # JSON payload 字段名，None 表示不使用
 
     # ========== 扩展字段配置 ==========
-    scalar_fields: list[ScalarFieldSpec] = Field(default_factory=list)  # 标量元数据字段列表
+    scalar_fields: list[ScalarFieldSpec] = Field(
+        default_factory=list
+    )  # 标量元数据字段列表
 
     # ========== 索引配置 ==========
     # 示例: {"index_type": "HNSW", "metric_type": "COSINE", "params": {"M": 16}}
@@ -117,8 +124,10 @@ class CollectionSpec(BaseModel, extra="forbid"):
 
     # ========== 多租户与其他配置 ==========
     tenant_mode: TenantIsolationMode = TenantIsolationMode.SHARED_FILTER  # 租户隔离模式
+    consistency_level: ConsistencyLevel = (
+        ConsistencyLevel.SESSION
+    )  # 默认使用 Session，满足同 client 的读后写一致性
     enable_dynamic_field: bool = False  # 是否启用动态字段（Milvus 特性）
-    consistency_level: ConsistencyLevel = ConsistencyLevel.SESSION  # collection/read 默认一致性级别
     description: str = ""  # 集合描述
 
 
@@ -128,8 +137,10 @@ class VectorBackend(ABC):
         """确保 collection 已存在且满足约束。"""
 
     @abstractmethod
-    async def upsert(self, *, spec: CollectionSpec, records: Sequence[VectorRecord]) -> None:
-        """批量写入记录。"""
+    async def upsert(
+        self, *, spec: CollectionSpec, records: Sequence[VectorRecord]
+    ) -> None:
+        """批量写入记录，必要时自动准备 collection。"""
 
     @abstractmethod
     async def delete(
@@ -139,7 +150,7 @@ class VectorBackend(ABC):
         ids: Sequence[int] | None = None,
         filters: Sequence[FilterCondition] | None = None,
     ) -> int:
-        """按 id 或过滤条件删除记录。"""
+        """按 id 或过滤条件删除记录；collection 不存在时返回 0。"""
 
     @abstractmethod
     async def fetch(
@@ -149,12 +160,13 @@ class VectorBackend(ABC):
         ids: Sequence[int] | None = None,
         filters: Sequence[FilterCondition] | None = None,
         limit: int | None = None,
-        consistency_level: ConsistencyLevel | None = None,
     ) -> list[VectorRecord]:
         """按 id 或过滤条件获取记录。"""
 
     @abstractmethod
-    async def search(self, *, spec: CollectionSpec, request: SearchRequest) -> list[SearchHit]:
+    async def search(
+        self, *, spec: CollectionSpec, request: SearchRequest
+    ) -> list[SearchHit]:
         """执行向量检索。"""
 
     @abstractmethod
@@ -163,9 +175,10 @@ class VectorBackend(ABC):
 
 
 class BaseVectorBackend(VectorBackend):
-    def validate_record(self, *, spec: CollectionSpec, record: VectorRecord) -> None:
+    @staticmethod
+    def validate_record(*, spec: CollectionSpec, record: VectorRecord) -> None:
         if record.id <= 0:
-            raise RecordValidationError("record.id 必须大于 0")
+            raise RecordValidationError("record.id 必须为正整数")
         if record.embedding is None:
             raise RecordValidationError(f"record.embedding 不能为空: id={record.id}")
         if len(record.embedding) != spec.dimension:
@@ -173,11 +186,16 @@ class BaseVectorBackend(VectorBackend):
                 f"record embedding 维度不匹配: got={len(record.embedding)}, expected={spec.dimension}, id={record.id}"
             )
 
-    def validate_records(self, *, spec: CollectionSpec, records: Sequence[VectorRecord]) -> None:
+    def validate_records(
+        self, *, spec: CollectionSpec, records: Sequence[VectorRecord]
+    ) -> None:
         for record in records:
             self.validate_record(spec=spec, record=record)
 
-    def validate_search_request(self, *, spec: CollectionSpec, request: SearchRequest) -> None:
+    @staticmethod
+    def validate_search_request(
+        *, spec: CollectionSpec, request: SearchRequest
+    ) -> None:
         if len(request.vector) != spec.dimension:
             raise InvalidEmbeddingDimensionError(
                 f"query embedding 维度不匹配: got={len(request.vector)}, expected={spec.dimension}"

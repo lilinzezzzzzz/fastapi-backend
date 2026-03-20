@@ -5,9 +5,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from pkg.vector.backends.base import CollectionSpec
-from pkg.vector.contracts import ConsistencyLevel, VectorRecord
-from pkg.vector.repositories.base import BaseVectorRepository
+from pkg.vectors.backends.base import CollectionSpec
+from pkg.vectors.contracts import ConsistencyLevel, VectorRecord
+from pkg.vectors.repositories.base import BaseVectorRepository
 
 
 class DummyRepository(BaseVectorRepository[int]):
