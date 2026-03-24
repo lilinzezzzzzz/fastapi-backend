@@ -33,6 +33,7 @@ class CollectionName:
 
 class BackendProvider(StrEnum):
     MILVUS = "milvus"
+    ZVEC = "zvec"
 
     @classmethod
     def is_valid(cls, value: object) -> BackendProvider:

@@ -13,7 +13,7 @@ uv add zvec
 ### 1. 定义集合配置
 
 ```python
-from pkg.zvec_vector import (
+from pkg.vectors.backends.zvec import (
     BaseVectorStore,
     CollectionConfig,
     VectorFieldConfig,
@@ -96,7 +96,7 @@ async def search_example():
         )
 
         # 使用 SearchParams
-        from pkg.zvec_vector import SearchParams
+        from pkg.vectors.backends.zvec import SearchParams
 
         params = SearchParams(
             vector=[0.15] * 768,
@@ -152,7 +152,7 @@ async def index_example():
         )
 
         # 创建标量字段倒排索引
-        from pkg.zvec_vector import ScalarFieldConfig
+        from pkg.vectors.backends.zvec import ScalarFieldConfig
 
         await store.add_column(
             ScalarFieldConfig(name="tags", data_type="ARRAY_STRING", indexed=True)
@@ -264,7 +264,7 @@ async def collection_example():
 ```python
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from pkg.zvec_vector import BaseVectorStore, CollectionConfig, VectorFieldConfig
+from pkg.vectors.backends.zvec import BaseVectorStore, CollectionConfig, VectorFieldConfig
 
 # 全局实例
 _vector_store: BaseVectorStore | None = None

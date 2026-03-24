@@ -7,15 +7,18 @@ from pkg.vectors.backends.base import (
     BackendProvider,
     BaseVectorBackend,
     CollectionSpec,
+    MetricType,
     ScalarDataType,
     ScalarFieldSpec,
     TenantIsolationMode,
     VectorBackend,
 )
-from pkg.vectors.backends.milvus import MetricType, MilvusBackend, create_milvus_backend
+from pkg.vectors.backends.milvus import MilvusBackend, create_milvus_backend
+from pkg.vectors.backends.zvec import ZvecBackend, create_zvec_backend
 
 BACKEND_BUILDERS: dict[BackendProvider, Callable[..., VectorBackend]] = {
     BackendProvider.MILVUS: create_milvus_backend,
+    BackendProvider.ZVEC: create_zvec_backend,
 }
 
 
@@ -39,5 +42,7 @@ __all__ = [
     "ScalarFieldSpec",
     "TenantIsolationMode",
     "VectorBackend",
+    "ZvecBackend",
     "create_backend",
+    "create_zvec_backend",
 ]

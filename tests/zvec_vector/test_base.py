@@ -21,7 +21,7 @@ import pytest
 import pytest_asyncio
 from zvec import Doc
 
-from pkg.zvec_vector import (
+from pkg.vectors.backends.zvec import (
     BaseVectorStore,
     CollectionConfig,
     IndexType,
