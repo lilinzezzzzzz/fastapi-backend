@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import contextlib
-from functools import cache
 
 from pymilvus import MilvusClient, connections
 
@@ -61,24 +60,8 @@ def create_milvus_backend(
     timeout: float | None = None,
 ) -> MilvusBackend:
     resolved_uri = uri if uri is not None else f"http://{MILVUS_HOST}:{MILVUS_PORT}"
-    return _create_milvus_backend_cached(
-        uri=resolved_uri,
-        token=token,
-        db_name=db_name,
-        timeout=timeout,
-    )
-
-
-@cache
-def _create_milvus_backend_cached(
-    *,
-    uri: str,
-    token: str | None = None,
-    db_name: str | None = None,
-    timeout: float | None = None,
-) -> MilvusBackend:
     return MilvusBackend(
-        uri=uri,
+        uri=resolved_uri,
         token=token,
         db_name=db_name,
         timeout=timeout,

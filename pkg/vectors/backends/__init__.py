@@ -3,17 +3,16 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from app.vectors.backends.base import (
+from pkg.vectors.backends.base import (
     BackendProvider,
     BaseVectorBackend,
     CollectionSpec,
-    MetricType,
     ScalarDataType,
     ScalarFieldSpec,
     TenantIsolationMode,
     VectorBackend,
 )
-from app.vectors.backends.milvus import MilvusBackend, create_milvus_backend
+from pkg.vectors.backends.milvus import MetricType, MilvusBackend, create_milvus_backend
 
 BACKEND_BUILDERS: dict[BackendProvider, Callable[..., VectorBackend]] = {
     BackendProvider.MILVUS: create_milvus_backend,

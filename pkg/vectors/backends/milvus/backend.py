@@ -3,7 +3,6 @@ from __future__ import annotations
 import contextlib
 import threading
 from collections.abc import Awaitable, Callable, Sequence
-from typing import TypeVar
 
 import anyio
 import grpc
@@ -37,8 +36,6 @@ from .schema import (
     map_metric_type,
     validate_collection_description,
 )
-
-T = TypeVar("T")
 
 
 class MilvusBackend(BaseVectorBackend):
@@ -105,7 +102,7 @@ class MilvusBackend(BaseVectorBackend):
             with contextlib.suppress(Exception):
                 client.close()
 
-    async def _call_client(
+    async def _call_client[T](
         self,
         operation: Callable[[MilvusClient], T],
     ) -> T:
@@ -114,14 +111,14 @@ class MilvusBackend(BaseVectorBackend):
 
         return await anyio_run_in_thread(_run_operation)
 
-    async def _call_client_method(self, method_name: str, /, **kwargs: object) -> T:
+    async def _call_client_method[T](self, method_name: str, /, **kwargs: object) -> T:
         def _run_method(client: MilvusClient) -> T:
             method = getattr(client, method_name)
             return method(**kwargs)
 
         return await self._call_client(_run_method)
 
-    async def _run_with_recovery(self, operation: Callable[[], Awaitable[T]]) -> T:
+    async def _run_with_recovery[T](self, operation: Callable[[], Awaitable[T]]) -> T:
         try:
             return await operation()
         except Exception as exc:
