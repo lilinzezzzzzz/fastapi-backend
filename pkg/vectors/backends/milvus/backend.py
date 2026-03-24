@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 import threading
+import time
 from collections.abc import Awaitable, Callable, Sequence
+from dataclasses import dataclass
 
 import anyio
 import grpc
-from pymilvus import MilvusClient
+from pymilvus import AnnSearchRequest, MilvusClient, RRFRanker, WeightedRanker
 from pymilvus.exceptions import (
     ConnectError,
     ConnectionNotExistException,
@@ -17,6 +20,8 @@ from pkg.toolkit.async_task import anyio_run_in_thread
 from pkg.vectors.backends.base import BaseVectorBackend, CollectionSpec
 from pkg.vectors.contracts import (
     FilterCondition,
+    RerankerStrategy,
+    RetrievalMode,
     SearchHit,
     SearchRequest,
     VectorRecord,
@@ -36,6 +41,33 @@ from .schema import (
     map_metric_type,
     validate_collection_description,
 )
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class SearchBranchPlan:
+    name: str
+    anns_field: str
+    data: list[object]
+    search_params: dict[str, object]
+    limit: int
+
+
+@dataclass(frozen=True)
+class SearchExecutionPlan:
+    mode: RetrievalMode
+    expr: str
+    output_fields: tuple[str, ...]
+    consistency_level: str
+    final_limit: int
+    branches: tuple[SearchBranchPlan, ...]
+    candidate_limit: int | None = None
+    ranker: RRFRanker | WeightedRanker | None = None
+
+    @property
+    def branch_names(self) -> tuple[str, ...]:
+        return tuple(branch.name for branch in self.branches)
 
 
 class MilvusBackend(BaseVectorBackend):
@@ -118,12 +150,21 @@ class MilvusBackend(BaseVectorBackend):
 
         return await self._call_client(_run_method)
 
-    async def _run_with_recovery[T](self, operation: Callable[[], Awaitable[T]]) -> T:
+    async def _run_with_recovery[T](
+        self,
+        operation_name: str,
+        operation: Callable[[], Awaitable[T]],
+    ) -> T:
         try:
             return await operation()
         except Exception as exc:
             if not self._is_recoverable_client_error(exc):
                 raise
+            logger.warning(
+                "milvus operation %s hit recoverable error, resetting client: %s",
+                operation_name,
+                type(exc).__name__,
+            )
             await self._reset_client_state()
             return await operation()
 
@@ -177,6 +218,7 @@ class MilvusBackend(BaseVectorBackend):
                 if exists:
                     await self._validate_existing_collection(spec=spec)
                     await self._load_collection_if_needed(collection_name=spec.name)
+                    logger.debug("milvus collection validated and loaded: %s", spec.name)
                 else:
                     schema = build_schema(spec=spec)
                     index_params = build_index_params(client=self.client, spec=spec)
@@ -188,21 +230,20 @@ class MilvusBackend(BaseVectorBackend):
                         consistency_level=spec.consistency_level.value,
                     )
                     await self._load_collection_if_needed(collection_name=spec.name)
+                    logger.info("milvus collection created: %s", spec.name)
 
                 self._ensured_collections.add(spec.name)
 
-        await self._run_with_recovery(_run)
+        await self._run_with_recovery("ensure_collection", _run)
 
     async def load_collection(self, *, collection_name: str) -> None:
         async def _run() -> None:
             async with self._get_collection_lock(collection_name=collection_name):
                 await self._load_collection_if_needed(collection_name=collection_name)
 
-        await self._run_with_recovery(_run)
+        await self._run_with_recovery("load_collection", _run)
 
-    async def upsert(
-        self, *, spec: CollectionSpec, records: Sequence[VectorRecord]
-    ) -> None:
+    async def upsert(self, *, spec: CollectionSpec, records: Sequence[VectorRecord]) -> None:
         async def _run() -> None:
             if not records:
                 return
@@ -216,7 +257,7 @@ class MilvusBackend(BaseVectorBackend):
                 data=rows,
             )
 
-        await self._run_with_recovery(_run)
+        await self._run_with_recovery("upsert", _run)
 
     async def delete(
         self,
@@ -247,7 +288,7 @@ class MilvusBackend(BaseVectorBackend):
 
             return int(result.get("delete_count", 0))
 
-        return await self._run_with_recovery(_run)
+        return await self._run_with_recovery("delete", _run)
 
     async def fetch(
         self,
@@ -256,36 +297,47 @@ class MilvusBackend(BaseVectorBackend):
         ids: Sequence[int] | None = None,
         filters: Sequence[FilterCondition] | None = None,
         limit: int | None = None,
+        consistency_level: object | None = None,
     ) -> list[VectorRecord]:
         async def _run() -> list[VectorRecord]:
             if not await self._load_collection_if_exists(collection_name=spec.name):
                 return []
+            if not ids and not filters:
+                raise ValueError("fetch 需要至少提供 ids 或 filters，禁止无条件整表扫描")
 
             output_fields = build_fetch_output_fields(spec=spec)
             expr = build_filter_expression(spec=spec, ids=ids, filters=filters)
+            resolved_consistency_level = self._resolve_consistency_level(
+                spec=spec,
+                override=consistency_level,
+            )
             if ids is not None and len(ids) > 0 and not filters:
                 rows = await self._call_client_method(
                     "query",
                     collection_name=spec.name,
                     ids=list(ids),
                     output_fields=output_fields,
+                    consistency_level=resolved_consistency_level,
                 )
             else:
+                query_kwargs: dict[str, object] = {}
+                if limit is not None:
+                    query_kwargs["limit"] = limit
                 rows = await self._call_client_method(
                     "query",
                     collection_name=spec.name,
                     filter=expr,
                     output_fields=output_fields,
+                    consistency_level=resolved_consistency_level,
+                    **query_kwargs,
                 )
 
             records = [row_to_record(spec=spec, row=row) for row in rows]
             return records[:limit] if limit is not None else records
 
-        return await self._run_with_recovery(_run)
+        return await self._run_with_recovery("fetch", _run)
 
-    async def search(
-        self, *, spec: CollectionSpec, request: SearchRequest
-    ) -> list[SearchHit]:
+    async def search(self, *, spec: CollectionSpec, request: SearchRequest) -> list[SearchHit]:
         async def _run() -> list[SearchHit]:
             self.validate_search_request(spec=spec, request=request)
             if not await self._load_collection_if_exists(collection_name=spec.name):
@@ -297,21 +349,45 @@ class MilvusBackend(BaseVectorBackend):
                 filters=request.filters,
             )
             output_fields = build_search_output_fields(spec=spec, request=request)
-            search_params = self._build_search_params(spec=spec, request=request)
-            raw_results = await self._call_client_method(
-                "search",
-                collection_name=spec.name,
-                data=[request.vector],
-                filter=expr,
-                limit=request.top_k,
+            plan = self._build_search_plan(
+                spec=spec,
+                request=request,
+                expr=expr,
                 output_fields=output_fields,
-                search_params=search_params,
-                anns_field=spec.vector_field,
             )
-            hits = raw_results[0] if raw_results else []
-            return [hit_to_search_hit(spec=spec, hit=hit) for hit in hits]
+            normalize_relevance = plan.mode == RetrievalMode.DENSE
+            start_time = time.perf_counter()
+            logger.debug(
+                "milvus search start collection=%s mode=%s branches=%s top_k=%d candidate_top_k=%s",
+                spec.name,
+                plan.mode.value,
+                ",".join(plan.branch_names),
+                plan.final_limit,
+                plan.candidate_limit,
+            )
+            raw_results = await self._execute_search_plan(spec=spec, plan=plan)
 
-        return await self._run_with_recovery(_run)
+            hits = raw_results[0] if raw_results else []
+            search_hits = [
+                hit_to_search_hit(
+                    spec=spec,
+                    hit=hit,
+                    retrieval_mode=plan.mode,
+                    normalize_relevance=normalize_relevance,
+                )
+                for hit in hits
+            ]
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            logger.debug(
+                "milvus search complete collection=%s mode=%s hits=%d duration_ms=%.2f",
+                spec.name,
+                plan.mode.value,
+                len(search_hits),
+                duration_ms,
+            )
+            return search_hits
+
+        return await self._run_with_recovery("search", _run)
 
     async def healthcheck(self) -> dict[str, str]:
         async def _run() -> dict[str, str]:
@@ -322,7 +398,7 @@ class MilvusBackend(BaseVectorBackend):
                 "version": str(version),
             }
 
-        return await self._run_with_recovery(_run)
+        return await self._run_with_recovery("healthcheck", _run)
 
     async def release_collection(self, *, collection_name: str) -> None:
         async def _run() -> None:
@@ -333,8 +409,9 @@ class MilvusBackend(BaseVectorBackend):
                 )
                 self._loaded_collections.discard(collection_name)
                 self._ensured_collections.discard(collection_name)
+                logger.debug("milvus collection released: %s", collection_name)
 
-        await self._run_with_recovery(_run)
+        await self._run_with_recovery("release_collection", _run)
 
     async def _load_collection_if_exists(self, *, collection_name: str) -> bool:
         if collection_name in self._loaded_collections:
@@ -367,6 +444,7 @@ class MilvusBackend(BaseVectorBackend):
             collection_name=collection_name,
         )
         self._loaded_collections.add(collection_name)
+        logger.debug("milvus collection loaded: %s", collection_name)
 
     async def _collection_exists(self, *, collection_name: str) -> bool:
         if collection_name in self._loaded_collections:
@@ -399,3 +477,197 @@ class MilvusBackend(BaseVectorBackend):
             search_params["params"] = {}
         search_params.update(request.search_params)
         return search_params
+
+    def _build_search_plan(
+        self,
+        *,
+        spec: CollectionSpec,
+        request: SearchRequest,
+        expr: str,
+        output_fields: list[str],
+    ) -> SearchExecutionPlan:
+        mode = self._resolve_retrieval_mode(spec=spec, request=request)
+        consistency_level = self._resolve_consistency_level(
+            spec=spec,
+            override=request.consistency_level,
+        )
+
+        if mode == RetrievalMode.DENSE:
+            if request.vector is None:
+                raise ValueError("dense 检索需要 query vector")
+            return SearchExecutionPlan(
+                mode=mode,
+                expr=expr,
+                output_fields=tuple(output_fields),
+                consistency_level=consistency_level,
+                final_limit=request.top_k,
+                branches=(
+                    SearchBranchPlan(
+                        name=RetrievalMode.DENSE.value,
+                        anns_field=spec.vector_field,
+                        data=[request.vector],
+                        search_params=self._build_search_params(spec=spec, request=request),
+                        limit=request.top_k,
+                    ),
+                ),
+            )
+
+        if mode == RetrievalMode.FULL_TEXT:
+            if request.query_text is None:
+                raise ValueError("full-text 检索需要 query_text")
+            return SearchExecutionPlan(
+                mode=mode,
+                expr=expr,
+                output_fields=tuple(output_fields),
+                consistency_level=consistency_level,
+                final_limit=request.top_k,
+                branches=(
+                    SearchBranchPlan(
+                        name=RetrievalMode.FULL_TEXT.value,
+                        anns_field=spec.full_text_search.sparse_vector_field,
+                        data=[request.query_text],
+                        search_params=self._build_sparse_search_params(request=request),
+                        limit=request.top_k,
+                    ),
+                ),
+            )
+
+        if request.vector is None:
+            raise ValueError("hybrid 检索需要 query vector")
+        if request.query_text is None:
+            raise ValueError("hybrid 检索需要 query_text")
+        candidate_limit = request.candidate_top_k or request.top_k
+        branches = (
+            SearchBranchPlan(
+                name=RetrievalMode.DENSE.value,
+                anns_field=spec.vector_field,
+                data=[request.vector],
+                search_params=self._build_search_params(spec=spec, request=request),
+                limit=candidate_limit,
+            ),
+            SearchBranchPlan(
+                name=RetrievalMode.FULL_TEXT.value,
+                anns_field=spec.full_text_search.sparse_vector_field,
+                data=[request.query_text],
+                search_params=self._build_sparse_search_params(request=request),
+                limit=candidate_limit,
+            ),
+        )
+        return SearchExecutionPlan(
+            mode=mode,
+            expr=expr,
+            output_fields=tuple(output_fields),
+            consistency_level=consistency_level,
+            final_limit=request.top_k,
+            branches=branches,
+            candidate_limit=candidate_limit,
+            ranker=self._build_reranker(request=request, request_count=len(branches)),
+        )
+
+    async def _execute_search_plan(
+        self,
+        *,
+        spec: CollectionSpec,
+        plan: SearchExecutionPlan,
+    ) -> list[list[dict]]:
+        if plan.mode == RetrievalMode.HYBRID:
+            reqs = [
+                AnnSearchRequest(
+                    data=branch.data,
+                    anns_field=branch.anns_field,
+                    param=branch.search_params,
+                    limit=branch.limit,
+                    expr=plan.expr or None,
+                )
+                for branch in plan.branches
+            ]
+            return await self._call_client_method(
+                "hybrid_search",
+                collection_name=spec.name,
+                reqs=reqs,
+                ranker=plan.ranker,
+                limit=plan.final_limit,
+                output_fields=list(plan.output_fields),
+                consistency_level=plan.consistency_level,
+            )
+
+        branch = plan.branches[0]
+        return await self._call_client_method(
+            "search",
+            collection_name=spec.name,
+            data=branch.data,
+            filter=plan.expr,
+            limit=plan.final_limit,
+            output_fields=list(plan.output_fields),
+            search_params=branch.search_params,
+            anns_field=branch.anns_field,
+            consistency_level=plan.consistency_level,
+        )
+
+    def _build_sparse_search_params(
+        self,
+        *,
+        request: SearchRequest,
+    ) -> dict[str, object]:
+        search_params: dict[str, object] = {
+            "metric_type": "BM25",
+            "params": {},
+        }
+        search_params.update(request.sparse_search_params)
+        return search_params
+
+    def _build_reranker(
+        self,
+        *,
+        request: SearchRequest,
+        request_count: int,
+    ) -> RRFRanker | WeightedRanker:
+        reranker = request.reranker
+        if reranker is None:
+            return RRFRanker()
+
+        if reranker.strategy == RerankerStrategy.RRF:
+            return RRFRanker(reranker.k)
+
+        if len(reranker.weights) != request_count:
+            raise ValueError(f"Weighted reranker 权重数量不匹配: got={len(reranker.weights)}, expected={request_count}")
+        return WeightedRanker(*reranker.weights, norm_score=reranker.normalize_score)
+
+    def _resolve_retrieval_mode(
+        self,
+        *,
+        spec: CollectionSpec,
+        request: SearchRequest,
+    ) -> RetrievalMode:
+        if request.retrieval_mode == RetrievalMode.AUTO:
+            if request.vector is not None and request.query_text:
+                if not spec.full_text_search.enabled:
+                    raise ValueError(
+                        "AUTO 模式收到 vector + query_text，但当前 collection 未启用 BM25/full-text search；"
+                        "请显式改用 DENSE，或先为 collection 开启 full-text"
+                    )
+                return RetrievalMode.HYBRID
+            if request.vector is not None:
+                return RetrievalMode.DENSE
+            if request.query_text:
+                if not spec.full_text_search.enabled:
+                    raise ValueError("query_text 检索要求 collection 启用 BM25/full-text search")
+                return RetrievalMode.FULL_TEXT
+            raise ValueError("至少需要提供 query vector 或 query_text")
+
+        if (
+            request.retrieval_mode in {RetrievalMode.FULL_TEXT, RetrievalMode.HYBRID}
+            and not spec.full_text_search.enabled
+        ):
+            raise ValueError("当前 collection 未启用 BM25/full-text search")
+        return request.retrieval_mode
+
+    @staticmethod
+    def _resolve_consistency_level(
+        *,
+        spec: CollectionSpec,
+        override: object | None,
+    ) -> str:
+        resolved = override if override is not None else spec.consistency_level
+        value = getattr(resolved, "value", resolved)
+        return str(value)

@@ -95,6 +95,18 @@ class ScalarFieldSpec(BaseModel, extra="forbid"):
     description: str = ""  # 字段描述
 
 
+class FullTextSearchSpec(BaseModel, extra="forbid"):
+    """Milvus BM25 / full-text search 配置。"""
+
+    enabled: bool = False
+    sparse_vector_field: str = Field(default="text_sparse", min_length=1)
+    function_name: str = Field(default="text_bm25_emb", min_length=1)
+    analyzer_params: dict[str, Any] = Field(default_factory=dict)
+    function_params: dict[str, Any] = Field(default_factory=dict)
+    index_config: dict[str, Any] = Field(default_factory=dict)
+    description: str = ""
+
+
 class CollectionSpec(BaseModel, extra="forbid"):
     """向量集合规格定义。
 
@@ -115,9 +127,8 @@ class CollectionSpec(BaseModel, extra="forbid"):
     payload_field: str | None = "payload"  # JSON payload 字段名，None 表示不使用
 
     # ========== 扩展字段配置 ==========
-    scalar_fields: list[ScalarFieldSpec] = Field(
-        default_factory=list
-    )  # 标量元数据字段列表
+    scalar_fields: list[ScalarFieldSpec] = Field(default_factory=list)  # 标量元数据字段列表
+    full_text_search: FullTextSearchSpec = Field(default_factory=FullTextSearchSpec)
 
     # ========== 索引配置 ==========
     # 示例: {"index_type": "HNSW", "metric_type": "COSINE", "params": {"M": 16}}
@@ -125,9 +136,7 @@ class CollectionSpec(BaseModel, extra="forbid"):
 
     # ========== 多租户与其他配置 ==========
     tenant_mode: TenantIsolationMode = TenantIsolationMode.SHARED_FILTER  # 租户隔离模式
-    consistency_level: ConsistencyLevel = (
-        ConsistencyLevel.SESSION
-    )  # 默认使用 Session，满足同 client 的读后写一致性
+    consistency_level: ConsistencyLevel = ConsistencyLevel.SESSION  # 默认使用 Session，满足同 client 的读后写一致性
     enable_dynamic_field: bool = False  # 是否启用动态字段（Milvus 特性）
     description: str = ""  # 集合描述
 
@@ -138,9 +147,7 @@ class VectorBackend(ABC):
         """确保 collection 已存在且满足约束。"""
 
     @abstractmethod
-    async def upsert(
-        self, *, spec: CollectionSpec, records: Sequence[VectorRecord]
-    ) -> None:
+    async def upsert(self, *, spec: CollectionSpec, records: Sequence[VectorRecord]) -> None:
         """批量写入记录，必要时自动准备 collection。"""
 
     @abstractmethod
@@ -161,13 +168,12 @@ class VectorBackend(ABC):
         ids: Sequence[int] | None = None,
         filters: Sequence[FilterCondition] | None = None,
         limit: int | None = None,
+        consistency_level: Any | None = None,
     ) -> list[VectorRecord]:
         """按 id 或过滤条件获取记录。"""
 
     @abstractmethod
-    async def search(
-        self, *, spec: CollectionSpec, request: SearchRequest
-    ) -> list[SearchHit]:
+    async def search(self, *, spec: CollectionSpec, request: SearchRequest) -> list[SearchHit]:
         """执行向量检索。"""
 
     @abstractmethod
@@ -187,17 +193,13 @@ class BaseVectorBackend(VectorBackend):
                 f"record embedding 维度不匹配: got={len(record.embedding)}, expected={spec.dimension}, id={record.id}"
             )
 
-    def validate_records(
-        self, *, spec: CollectionSpec, records: Sequence[VectorRecord]
-    ) -> None:
+    def validate_records(self, *, spec: CollectionSpec, records: Sequence[VectorRecord]) -> None:
         for record in records:
             self.validate_record(spec=spec, record=record)
 
     @staticmethod
-    def validate_search_request(
-        *, spec: CollectionSpec, request: SearchRequest
-    ) -> None:
-        if len(request.vector) != spec.dimension:
+    def validate_search_request(*, spec: CollectionSpec, request: SearchRequest) -> None:
+        if request.vector is not None and len(request.vector) != spec.dimension:
             raise InvalidEmbeddingDimensionError(
                 f"query embedding 维度不匹配: got={len(request.vector)}, expected={spec.dimension}"
             )

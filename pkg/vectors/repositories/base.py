@@ -3,17 +3,21 @@ from collections.abc import Sequence
 from typing import Any, cast
 
 from pkg.vectors.backends.base import CollectionSpec, VectorBackend
+from pkg.vectors.context_assembly import ContextAssemblyResult, DocumentContextAssembler
 from pkg.vectors.contracts import (
     ConsistencyLevel,
     FilterCondition,
     FilterOperator,
+    RetrievalMode,
     ScalarValue,
     SearchHit,
     SearchRequest,
+    SearchReranker,
     VectorRecord,
 )
 from pkg.vectors.embedders.base import Embedder
 from pkg.vectors.errors import RecordValidationError
+from pkg.vectors.post_retrieval import PostRetrievalPipeline, PostRetrievalResult
 
 
 class BaseVectorRepository[T](ABC):
@@ -158,41 +162,230 @@ class BaseVectorRepository[T](ABC):
         top_k: int,
         filters: Sequence[FilterCondition] = (),
         include_payload: bool = False,
+        output_fields: Sequence[str] = (),
+        search_params: dict[str, Any] | None = None,
+        sparse_search_params: dict[str, Any] | None = None,
+        retrieval_mode: RetrievalMode = RetrievalMode.AUTO,
+        candidate_top_k: int | None = None,
+        reranker: SearchReranker | None = None,
         consistency_level: ConsistencyLevel | None = None,
     ) -> list[SearchHit]:
-        query_vector = await self.embedder.embed_query(text=query_text)
-        return await self.search_by_vector(
+        query_vector: list[float] | None = None
+        if retrieval_mode != RetrievalMode.FULL_TEXT:
+            query_vector = await self.embedder.embed_query(text=query_text)
+
+        request = self._build_search_request(
             query_vector=query_vector,
+            query_text=query_text,
             top_k=top_k,
             filters=filters,
             include_payload=include_payload,
-            consistency_level=consistency_level,
-        )
-
-    async def search_by_vector(
-        self,
-        *,
-        query_vector: list[float],
-        top_k: int,
-        filters: Sequence[FilterCondition] = (),
-        include_payload: bool = False,
-        consistency_level: ConsistencyLevel | None = None,
-    ) -> list[SearchHit]:
-        request = SearchRequest(
-            vector=query_vector,
-            top_k=top_k,
-            filters=[
-                *self.build_scope_filters(),
-                *self.build_default_search_filters(),
-                *filters,
-            ],
-            include_payload=include_payload,
+            output_fields=output_fields,
+            search_params=search_params,
+            sparse_search_params=sparse_search_params,
+            retrieval_mode=retrieval_mode,
+            candidate_top_k=candidate_top_k,
+            reranker=reranker,
             consistency_level=consistency_level,
         )
         return await self.backend.search(
             spec=self.collection_spec,
             request=request,
         )
+
+    async def retrieve_by_text(
+        self,
+        *,
+        query_text: str,
+        top_k: int,
+        filters: Sequence[FilterCondition] = (),
+        include_payload: bool = False,
+        output_fields: Sequence[str] = (),
+        search_params: dict[str, Any] | None = None,
+        sparse_search_params: dict[str, Any] | None = None,
+        retrieval_mode: RetrievalMode = RetrievalMode.AUTO,
+        candidate_top_k: int | None = None,
+        reranker: SearchReranker | None = None,
+        post_retrieval: PostRetrievalPipeline | None = None,
+        consistency_level: ConsistencyLevel | None = None,
+    ) -> PostRetrievalResult:
+        query_vector: list[float] | None = None
+        if retrieval_mode != RetrievalMode.FULL_TEXT:
+            query_vector = await self.embedder.embed_query(text=query_text)
+
+        request = self._build_search_request(
+            query_vector=query_vector,
+            query_text=query_text,
+            top_k=top_k,
+            filters=filters,
+            include_payload=include_payload,
+            output_fields=output_fields,
+            search_params=search_params,
+            sparse_search_params=sparse_search_params,
+            retrieval_mode=retrieval_mode,
+            candidate_top_k=candidate_top_k,
+            reranker=reranker,
+            consistency_level=consistency_level,
+        )
+        hits = await self.backend.search(
+            spec=self.collection_spec,
+            request=request,
+        )
+        pipeline = post_retrieval or PostRetrievalPipeline()
+        return await pipeline.run(
+            hits=hits,
+            query_text=query_text,
+            query_vector=query_vector,
+        )
+
+    async def assemble_context_by_text(
+        self,
+        *,
+        query_text: str,
+        top_k: int,
+        filters: Sequence[FilterCondition] = (),
+        include_payload: bool = False,
+        output_fields: Sequence[str] = (),
+        search_params: dict[str, Any] | None = None,
+        sparse_search_params: dict[str, Any] | None = None,
+        retrieval_mode: RetrievalMode = RetrievalMode.AUTO,
+        candidate_top_k: int | None = None,
+        reranker: SearchReranker | None = None,
+        post_retrieval: PostRetrievalPipeline | None = None,
+        context_assembler: DocumentContextAssembler | None = None,
+        consistency_level: ConsistencyLevel | None = None,
+    ) -> ContextAssemblyResult:
+        """执行 text retrieval，并把 collapsed documents 组装成 LLM context。"""
+        retrieval_result = await self.retrieve_by_text(
+            query_text=query_text,
+            top_k=top_k,
+            filters=filters,
+            include_payload=include_payload,
+            output_fields=output_fields,
+            search_params=search_params,
+            sparse_search_params=sparse_search_params,
+            retrieval_mode=retrieval_mode,
+            candidate_top_k=candidate_top_k,
+            reranker=reranker,
+            post_retrieval=post_retrieval,
+            consistency_level=consistency_level,
+        )
+        assembler = context_assembler or DocumentContextAssembler()
+        return assembler.assemble(result=retrieval_result)
+
+    async def search_by_vector(
+        self,
+        *,
+        query_vector: list[float],
+        query_text: str | None = None,
+        top_k: int,
+        filters: Sequence[FilterCondition] = (),
+        include_payload: bool = False,
+        output_fields: Sequence[str] = (),
+        search_params: dict[str, Any] | None = None,
+        sparse_search_params: dict[str, Any] | None = None,
+        retrieval_mode: RetrievalMode = RetrievalMode.AUTO,
+        candidate_top_k: int | None = None,
+        reranker: SearchReranker | None = None,
+        consistency_level: ConsistencyLevel | None = None,
+    ) -> list[SearchHit]:
+        request = self._build_search_request(
+            query_vector=query_vector,
+            query_text=query_text,
+            top_k=top_k,
+            filters=filters,
+            include_payload=include_payload,
+            output_fields=output_fields,
+            search_params=search_params,
+            sparse_search_params=sparse_search_params,
+            retrieval_mode=retrieval_mode,
+            candidate_top_k=candidate_top_k,
+            reranker=reranker,
+            consistency_level=consistency_level,
+        )
+        return await self.backend.search(
+            spec=self.collection_spec,
+            request=request,
+        )
+
+    async def retrieve_by_vector(
+        self,
+        *,
+        query_vector: list[float],
+        query_text: str | None = None,
+        top_k: int,
+        filters: Sequence[FilterCondition] = (),
+        include_payload: bool = False,
+        output_fields: Sequence[str] = (),
+        search_params: dict[str, Any] | None = None,
+        sparse_search_params: dict[str, Any] | None = None,
+        retrieval_mode: RetrievalMode = RetrievalMode.AUTO,
+        candidate_top_k: int | None = None,
+        reranker: SearchReranker | None = None,
+        post_retrieval: PostRetrievalPipeline | None = None,
+        consistency_level: ConsistencyLevel | None = None,
+    ) -> PostRetrievalResult:
+        request = self._build_search_request(
+            query_vector=query_vector,
+            query_text=query_text,
+            top_k=top_k,
+            filters=filters,
+            include_payload=include_payload,
+            output_fields=output_fields,
+            search_params=search_params,
+            sparse_search_params=sparse_search_params,
+            retrieval_mode=retrieval_mode,
+            candidate_top_k=candidate_top_k,
+            reranker=reranker,
+            consistency_level=consistency_level,
+        )
+        hits = await self.backend.search(
+            spec=self.collection_spec,
+            request=request,
+        )
+        pipeline = post_retrieval or PostRetrievalPipeline()
+        return await pipeline.run(
+            hits=hits,
+            query_text=query_text,
+            query_vector=query_vector,
+        )
+
+    async def assemble_context_by_vector(
+        self,
+        *,
+        query_vector: list[float],
+        query_text: str | None = None,
+        top_k: int,
+        filters: Sequence[FilterCondition] = (),
+        include_payload: bool = False,
+        output_fields: Sequence[str] = (),
+        search_params: dict[str, Any] | None = None,
+        sparse_search_params: dict[str, Any] | None = None,
+        retrieval_mode: RetrievalMode = RetrievalMode.AUTO,
+        candidate_top_k: int | None = None,
+        reranker: SearchReranker | None = None,
+        post_retrieval: PostRetrievalPipeline | None = None,
+        context_assembler: DocumentContextAssembler | None = None,
+        consistency_level: ConsistencyLevel | None = None,
+    ) -> ContextAssemblyResult:
+        """执行 vector retrieval，并把 collapsed documents 组装成 LLM context。"""
+        retrieval_result = await self.retrieve_by_vector(
+            query_vector=query_vector,
+            query_text=query_text,
+            top_k=top_k,
+            filters=filters,
+            include_payload=include_payload,
+            output_fields=output_fields,
+            search_params=search_params,
+            sparse_search_params=sparse_search_params,
+            retrieval_mode=retrieval_mode,
+            candidate_top_k=candidate_top_k,
+            reranker=reranker,
+            post_retrieval=post_retrieval,
+            consistency_level=consistency_level,
+        )
+        assembler = context_assembler or DocumentContextAssembler()
+        return assembler.assemble(result=retrieval_result)
 
     async def _prepare_records(self, *, records: Sequence[VectorRecord]) -> list[VectorRecord]:
         """预处理记录：为缺失 embedding 的记录批量生成向量。
@@ -217,6 +410,41 @@ class BaseVectorRepository[T](ABC):
         for index, embedding in zip(missing_embedding_indexes, embeddings, strict=True):
             prepared_records[index] = prepared_records[index].model_copy(update={"embedding": embedding})
         return prepared_records
+
+    def _build_search_request(
+        self,
+        *,
+        query_vector: list[float] | None,
+        query_text: str | None,
+        top_k: int,
+        filters: Sequence[FilterCondition],
+        include_payload: bool,
+        output_fields: Sequence[str],
+        search_params: dict[str, Any] | None,
+        sparse_search_params: dict[str, Any] | None,
+        retrieval_mode: RetrievalMode,
+        candidate_top_k: int | None,
+        reranker: SearchReranker | None,
+        consistency_level: ConsistencyLevel | None,
+    ) -> SearchRequest:
+        return SearchRequest(
+            vector=query_vector,
+            query_text=query_text,
+            top_k=top_k,
+            filters=[
+                *self.build_scope_filters(),
+                *self.build_default_search_filters(),
+                *filters,
+            ],
+            include_payload=include_payload,
+            output_fields=list(output_fields),
+            search_params=dict(search_params or {}),
+            sparse_search_params=dict(sparse_search_params or {}),
+            retrieval_mode=retrieval_mode,
+            candidate_top_k=candidate_top_k,
+            reranker=reranker,
+            consistency_level=consistency_level,
+        )
 
 
 def as_scalar_list(values: list[Any]) -> list[ScalarValue]:

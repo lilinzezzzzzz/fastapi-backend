@@ -110,6 +110,7 @@ class ZvecBackend(BaseVectorBackend):
         ids: Sequence[int] | None = None,
         filters: Sequence[FilterCondition] | None = None,
         limit: int | None = None,
+        consistency_level: object | None = None,
     ) -> list[VectorRecord]:
         self._ensure_not_shutdown()
         if filters:
@@ -136,6 +137,8 @@ class ZvecBackend(BaseVectorBackend):
     ) -> list[SearchHit]:
         self._ensure_not_shutdown()
         self.validate_search_request(spec=spec, request=request)
+        if request.vector is None:
+            raise CapabilityNotSupportedError("zvec backend 仅支持 dense vector 检索")
 
         collection = await self._get_collection_if_exists(collection_name=spec.name)
         if collection is None:

@@ -7,6 +7,7 @@ from pkg.vectors.backends.base import CollectionSpec, MetricType, scalar_field_n
 from pkg.vectors.contracts import (
     FilterCondition,
     FilterOperator,
+    RetrievalMode,
     SearchHit,
     SearchRequest,
     VectorRecord,
@@ -27,11 +28,7 @@ def record_to_row(*, spec: CollectionSpec, record: VectorRecord) -> dict[str, An
 
 
 def row_to_record(*, spec: CollectionSpec, row: dict[str, Any]) -> VectorRecord:
-    metadata = {
-        field.name: row[field.name]
-        for field in spec.scalar_fields
-        if field.name in row
-    }
+    metadata = {field.name: row[field.name] for field in spec.scalar_fields if field.name in row}
     payload = {}
     if spec.payload_field:
         payload_value = row.get(spec.payload_field)
@@ -48,21 +45,28 @@ def row_to_record(*, spec: CollectionSpec, row: dict[str, Any]) -> VectorRecord:
     )
 
 
-def hit_to_search_hit(*, spec: CollectionSpec, hit: dict[str, Any]) -> SearchHit:
+def hit_to_search_hit(
+    *,
+    spec: CollectionSpec,
+    hit: dict[str, Any],
+    retrieval_mode: RetrievalMode | None = None,
+    normalize_relevance: bool = True,
+) -> SearchHit:
     row = extract_entity_row(spec=spec, hit=hit)
     raw_score = extract_raw_score(hit=hit)
     return SearchHit(
         id=coerce_id_value(hit.get("id", row.get(spec.id_field))),
         text=row.get(spec.text_field),
-        metadata={
-            field.name: row[field.name]
-            for field in spec.scalar_fields
-            if field.name in row
-        },
+        metadata={field.name: row[field.name] for field in spec.scalar_fields if field.name in row},
         payload=extract_payload(spec=spec, row=row),
-        relevance_score=normalize_score(
-            metric_type=spec.metric_type,
-            raw_score=raw_score,
+        retrieval_mode=retrieval_mode,
+        relevance_score=(
+            normalize_score(
+                metric_type=spec.metric_type,
+                raw_score=raw_score,
+            )
+            if normalize_relevance
+            else raw_score
         ),
         raw_score=raw_score,
     )
@@ -73,11 +77,7 @@ def extract_entity_row(*, spec: CollectionSpec, hit: dict[str, Any]) -> dict[str
     if isinstance(entity, dict):
         return dict(entity)
 
-    row = {
-        key: value
-        for key, value in hit.items()
-        if key not in {"id", "distance", "score", "entity"}
-    }
+    row = {key: value for key, value in hit.items() if key not in {"id", "distance", "score", "entity"}}
     if spec.id_field not in row and "id" in hit:
         row[spec.id_field] = hit["id"]
     return row
@@ -156,9 +156,7 @@ def translate_filter_condition(*, condition: FilterCondition) -> str:
         )
 
     if isinstance(condition.value, list):
-        raise UnsupportedFilterError(
-            f"{condition.op.value} 过滤器的 value 不能为 list"
-        )
+        raise UnsupportedFilterError(f"{condition.op.value} 过滤器的 value 不能为 list")
 
     operator_map = {
         FilterOperator.EQ: "==",
