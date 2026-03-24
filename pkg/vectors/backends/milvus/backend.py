@@ -22,7 +22,7 @@ from pkg.vectors.contracts import (
     VectorRecord,
 )
 
-from .query import (
+from .codec import (
     build_fetch_output_fields,
     build_filter_expression,
     build_search_output_fields,
