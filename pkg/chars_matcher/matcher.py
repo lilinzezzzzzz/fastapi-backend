@@ -194,6 +194,8 @@ class CharsMatcher:
         self,
         token: str,
         mapping: PinyinCharMapping,
+        *,
+        allow_prefix_after_exact: bool = False,
     ) -> list[_MatchedPinyinKey]:
         """输入法风格的模糊拼音匹配。"""
         matched_keys: list[_MatchedPinyinKey] = []
@@ -218,7 +220,7 @@ class CharsMatcher:
                     )
                 )
 
-        if not matched_keys:
+        if allow_prefix_after_exact or not matched_keys:
             for variant in fuzzy_variants:
                 for key in mapping:
                     if key.startswith(variant.token):
@@ -254,8 +256,13 @@ class CharsMatcher:
 
         ranked_candidates: dict[str, _RankedCandidate] = {}
         first_seen = 0
+        allow_prefix_after_exact = char_type == "surname"
         for token in tokens:
-            for matched_key in self._match_pinyin_keys(token, mapping):
+            for matched_key in self._match_pinyin_keys(
+                token,
+                mapping,
+                allow_prefix_after_exact=allow_prefix_after_exact,
+            ):
                 for char in mapping.get(matched_key.key, []):
                     first_seen += 1
                     score = self._score_candidate(char=char, matched_key=matched_key)
