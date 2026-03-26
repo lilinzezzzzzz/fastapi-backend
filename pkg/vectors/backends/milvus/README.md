@@ -141,9 +141,10 @@ backend = MilvusBackend(
 最简单的 dense collection：
 
 ```python
-from pkg.vectors.backends.base import CollectionSpec, MetricType
+from pkg.vectors.backends.base import MetricType
+from pkg.vectors.backends.milvus.specs import MilvusCollectionSpec
 
-spec = CollectionSpec(
+spec = MilvusCollectionSpec(
     name="chunk_vectors",
     dimension=1024,
     metric_type=MetricType.COSINE,
@@ -153,15 +154,14 @@ spec = CollectionSpec(
 启用 BM25 / full-text / hybrid：
 
 ```python
-from pkg.vectors.backends.base import (
-    CollectionSpec,
+from pkg.vectors.backends.base import MetricType, ScalarDataType, ScalarFieldSpec
+from pkg.vectors.backends.milvus.specs import (
     FullTextSearchSpec,
-    MetricType,
-    ScalarDataType,
-    ScalarFieldSpec,
+    MilvusCollectionSpec,
+    MilvusSparseInvertedIndexConfig,
 )
 
-spec = CollectionSpec(
+spec = MilvusCollectionSpec(
     name="chunk_vectors",
     dimension=1024,
     metric_type=MetricType.COSINE,
@@ -174,10 +174,9 @@ spec = CollectionSpec(
         enabled=True,
         sparse_vector_field="text_sparse",
         function_name="text_bm25_emb",
-        index_config={
-            "index_type": "SPARSE_INVERTED_INDEX",
-            "metric_type": "BM25",
-        },
+        index_config=MilvusSparseInvertedIndexConfig(
+            metric_type="BM25",
+        ),
     ),
 )
 ```
@@ -1151,9 +1150,10 @@ weights=[0.7, 0.3]
 ### 22.1 建 collection
 
 ```python
-from pkg.vectors.backends.base import CollectionSpec, FullTextSearchSpec, MetricType
+from pkg.vectors.backends.base import MetricType
+from pkg.vectors.backends.milvus.specs import FullTextSearchSpec, MilvusCollectionSpec
 
-spec = CollectionSpec(
+spec = MilvusCollectionSpec(
     name="rag_chunks",
     dimension=1024,
     metric_type=MetricType.COSINE,

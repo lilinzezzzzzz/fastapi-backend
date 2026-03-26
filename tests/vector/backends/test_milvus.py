@@ -6,10 +6,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pymilvus import DataType, FunctionType
 
-from pkg.vectors.backends.base import CollectionSpec, ConsistencyLevel, FullTextSearchSpec
 from pkg.vectors.backends.milvus import MilvusBackend
+from pkg.vectors.backends.milvus.specs import FullTextSearchSpec, MilvusCollectionSpec
 from pkg.vectors.backends.milvus.schema import build_schema
-from pkg.vectors.contracts import RetrievalMode, SearchRequest, SearchReranker
+from pkg.vectors.contracts import ConsistencyLevel, RetrievalMode, SearchRequest, SearchReranker
 from pkg.vectors.errors import CollectionSchemaMismatchError
 
 
@@ -29,13 +29,13 @@ def backend() -> MilvusBackend:
 
 
 @pytest.fixture
-def collection_spec() -> CollectionSpec:
-    return CollectionSpec(name="test_collection", dimension=4)
+def collection_spec() -> MilvusCollectionSpec:
+    return MilvusCollectionSpec(name="test_collection", dimension=4)
 
 
 @pytest.fixture
-def full_text_spec() -> CollectionSpec:
-    return CollectionSpec(
+def full_text_spec() -> MilvusCollectionSpec:
+    return MilvusCollectionSpec(
         name="test_collection",
         dimension=4,
         full_text_search=FullTextSearchSpec(enabled=True),
@@ -50,9 +50,34 @@ def mock_client(backend: MilvusBackend) -> MagicMock:
     return client
 
 
+def test_collection_spec_parses_index_config_from_dict():
+    spec = MilvusCollectionSpec(
+        name="test_collection",
+        dimension=4,
+        index_config={
+            "index_type": "HNSW",
+            "index_name": "idx_embedding",
+            "params": {"M": 16},
+        },
+        full_text_search=FullTextSearchSpec(
+            enabled=True,
+            index_config={
+                "index_type": "SPARSE_INVERTED_INDEX",
+                "metric_type": "BM25",
+            },
+        ),
+    )
+
+    assert spec.index_config.index_type == "HNSW"
+    assert spec.index_config.index_name == "idx_embedding"
+    assert spec.index_config.build_params() == {"M": 16}
+    assert spec.full_text_search.index_config.index_type == "SPARSE_INVERTED_INDEX"
+    assert spec.full_text_search.index_config.metric_type == "BM25"
+
+
 def test_ensure_collection_uses_session_consistency(
     backend: MilvusBackend,
-    collection_spec: CollectionSpec,
+    collection_spec: MilvusCollectionSpec,
     mock_client: MagicMock,
 ):
     mock_client.has_collection.return_value = False
@@ -64,7 +89,7 @@ def test_ensure_collection_uses_session_consistency(
 
 def test_fetch_uses_session_consistency_by_default(
     backend: MilvusBackend,
-    collection_spec: CollectionSpec,
+    collection_spec: MilvusCollectionSpec,
     mock_client: MagicMock,
 ):
     mock_client.has_collection.return_value = True
@@ -83,7 +108,7 @@ def test_fetch_uses_session_consistency_by_default(
 
 def test_fetch_allows_strong_consistency_override(
     backend: MilvusBackend,
-    collection_spec: CollectionSpec,
+    collection_spec: MilvusCollectionSpec,
     mock_client: MagicMock,
 ):
     mock_client.has_collection.return_value = True
@@ -102,7 +127,7 @@ def test_fetch_allows_strong_consistency_override(
 
 def test_fetch_requires_ids_or_filters(
     backend: MilvusBackend,
-    collection_spec: CollectionSpec,
+    collection_spec: MilvusCollectionSpec,
     mock_client: MagicMock,
 ):
     mock_client.has_collection.return_value = True
@@ -113,7 +138,7 @@ def test_fetch_requires_ids_or_filters(
 
 def test_search_dense_uses_session_consistency_by_default(
     backend: MilvusBackend,
-    collection_spec: CollectionSpec,
+    collection_spec: MilvusCollectionSpec,
     mock_client: MagicMock,
 ):
     mock_client.has_collection.return_value = True
@@ -132,7 +157,7 @@ def test_search_dense_uses_session_consistency_by_default(
 
 def test_search_auto_rejects_silent_dense_fallback_when_full_text_disabled(
     backend: MilvusBackend,
-    collection_spec: CollectionSpec,
+    collection_spec: MilvusCollectionSpec,
     mock_client: MagicMock,
 ):
     mock_client.has_collection.return_value = True
@@ -152,7 +177,7 @@ def test_search_auto_rejects_silent_dense_fallback_when_full_text_disabled(
 
 def test_search_hybrid_uses_rrf_reranker_by_default(
     backend: MilvusBackend,
-    full_text_spec: CollectionSpec,
+    full_text_spec: MilvusCollectionSpec,
     mock_client: MagicMock,
 ):
     mock_client.has_collection.return_value = True
@@ -191,7 +216,7 @@ def test_search_hybrid_uses_rrf_reranker_by_default(
 
 def test_search_hybrid_supports_weighted_reranker(
     backend: MilvusBackend,
-    full_text_spec: CollectionSpec,
+    full_text_spec: MilvusCollectionSpec,
     mock_client: MagicMock,
 ):
     mock_client.has_collection.return_value = True
@@ -217,7 +242,7 @@ def test_search_hybrid_supports_weighted_reranker(
 
 def test_search_full_text_only_uses_sparse_field(
     backend: MilvusBackend,
-    full_text_spec: CollectionSpec,
+    full_text_spec: MilvusCollectionSpec,
     mock_client: MagicMock,
 ):
     mock_client.has_collection.return_value = True
@@ -239,7 +264,7 @@ def test_search_full_text_only_uses_sparse_field(
     assert call_kwargs["data"] == ["hello"]
 
 
-def test_build_schema_adds_sparse_field_and_bm25_function(full_text_spec: CollectionSpec):
+def test_build_schema_adds_sparse_field_and_bm25_function(full_text_spec: MilvusCollectionSpec):
     schema = build_schema(spec=full_text_spec)
 
     sparse_field = next(
@@ -256,7 +281,7 @@ def test_build_schema_adds_sparse_field_and_bm25_function(full_text_spec: Collec
 
 def test_ensure_collection_rejects_varchar_primary_key(
     backend: MilvusBackend,
-    collection_spec: CollectionSpec,
+    collection_spec: MilvusCollectionSpec,
     mock_client: MagicMock,
 ):
     mock_client.has_collection.return_value = True

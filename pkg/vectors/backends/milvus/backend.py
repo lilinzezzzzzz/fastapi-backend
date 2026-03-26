@@ -18,6 +18,7 @@ from pymilvus.exceptions import (
 
 from pkg.toolkit.async_task import anyio_run_in_thread
 from pkg.vectors.backends.base import BaseVectorBackend, CollectionSpec
+from pkg.vectors.backends.milvus.specs import MilvusCollectionSpec
 from pkg.vectors.contracts import (
     FilterCondition,
     RerankerStrategy,
@@ -199,7 +200,15 @@ class MilvusBackend(BaseVectorBackend):
             }
         return False
 
+    @staticmethod
+    def _require_spec(*, spec: CollectionSpec) -> MilvusCollectionSpec:
+        if not isinstance(spec, MilvusCollectionSpec):
+            raise TypeError(f"Milvus backend 需要 MilvusCollectionSpec，实际收到: {type(spec).__name__}")
+        return spec
+
     async def ensure_collection(self, *, spec: CollectionSpec) -> None:
+        spec = self._require_spec(spec=spec)
+
         async def _run() -> None:
             if spec.name in self._ensured_collections:
                 return
@@ -244,6 +253,8 @@ class MilvusBackend(BaseVectorBackend):
         await self._run_with_recovery("load_collection", _run)
 
     async def upsert(self, *, spec: CollectionSpec, records: Sequence[VectorRecord]) -> None:
+        spec = self._require_spec(spec=spec)
+
         async def _run() -> None:
             if not records:
                 return
@@ -266,6 +277,8 @@ class MilvusBackend(BaseVectorBackend):
         ids: Sequence[int] | None = None,
         filters: Sequence[FilterCondition] | None = None,
     ) -> int:
+        spec = self._require_spec(spec=spec)
+
         async def _run() -> int:
             if not await self._collection_exists(collection_name=spec.name):
                 return 0
@@ -299,6 +312,8 @@ class MilvusBackend(BaseVectorBackend):
         limit: int | None = None,
         consistency_level: object | None = None,
     ) -> list[VectorRecord]:
+        spec = self._require_spec(spec=spec)
+
         async def _run() -> list[VectorRecord]:
             if not await self._load_collection_if_exists(collection_name=spec.name):
                 return []
@@ -338,6 +353,8 @@ class MilvusBackend(BaseVectorBackend):
         return await self._run_with_recovery("fetch", _run)
 
     async def search(self, *, spec: CollectionSpec, request: SearchRequest) -> list[SearchHit]:
+        spec = self._require_spec(spec=spec)
+
         async def _run() -> list[SearchHit]:
             self.validate_search_request(spec=spec, request=request)
             if not await self._load_collection_if_exists(collection_name=spec.name):

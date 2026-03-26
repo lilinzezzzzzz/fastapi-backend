@@ -6,7 +6,18 @@ from typing import Any
 from pymilvus import DataType, Function, FunctionType, MilvusClient
 
 from pkg.vectors.backends.base import CollectionSpec, MetricType, ScalarDataType
+from pkg.vectors.backends.milvus.specs import (
+    MilvusCollectionSpec,
+    MilvusDenseIndexType,
+    MilvusSparseIndexType,
+)
 from pkg.vectors.errors import CollectionSchemaMismatchError
+
+
+def require_milvus_spec(*, spec: CollectionSpec) -> MilvusCollectionSpec:
+    if not isinstance(spec, MilvusCollectionSpec):
+        raise TypeError(f"Milvus backend 需要 MilvusCollectionSpec，实际收到: {type(spec).__name__}")
+    return spec
 
 
 def validate_collection_description(
@@ -14,6 +25,7 @@ def validate_collection_description(
     description: object,
     spec: CollectionSpec,
 ) -> None:
+    spec = require_milvus_spec(spec=spec)
     if not isinstance(description, dict):
         raise CollectionSchemaMismatchError(
             f"Milvus collection 描述格式非法: collection={spec.name}, description_type={type(description)!r}"
@@ -133,6 +145,7 @@ def validate_collection_description(
 
 
 def build_schema(*, spec: CollectionSpec):
+    spec = require_milvus_spec(spec=spec)
     schema = MilvusClient.create_schema(
         auto_id=False,
         enable_dynamic_field=spec.enable_dynamic_field,
@@ -192,37 +205,33 @@ def build_schema(*, spec: CollectionSpec):
 
 
 def build_index_params(*, client: MilvusClient, spec: CollectionSpec):
+    spec = require_milvus_spec(spec=spec)
     index_params = client.prepare_index_params()
-    index_config = dict(spec.index_config)
-    vector_index_params = dict(index_config.pop("params", {}))
+    index_config = spec.index_config
+    index_type = str(index_config.index_type or MilvusDenseIndexType.AUTOINDEX).upper()
+    if index_type not in {index.value for index in MilvusDenseIndexType}:
+        raise ValueError(f"Milvus backend 不支持的 dense index_type: {index_type}")
     index_params.add_index(
         field_name=spec.vector_field,
-        index_name=index_config.pop("index_name", f"idx_{spec.vector_field}"),
-        index_type=index_config.pop("index_type", "AUTOINDEX"),
-        metric_type=index_config.pop(
-            "metric_type",
-            map_metric_type(spec.metric_type),
-        ),
-        params=vector_index_params,
-        **index_config,
+        index_name=index_config.index_name or f"idx_{spec.vector_field}",
+        index_type=index_type,
+        metric_type=index_config.metric_type or map_metric_type(spec.metric_type),
+        params=index_config.build_params(),
+        **dict(index_config.extra_options),
     )
 
     if spec.full_text_search.enabled:
-        sparse_index_config = dict(spec.full_text_search.index_config)
-        sparse_index_params = dict(sparse_index_config.pop("params", {}))
+        sparse_index_config = spec.full_text_search.index_config
+        sparse_index_type = str(sparse_index_config.index_type or MilvusSparseIndexType.SPARSE_INVERTED_INDEX).upper()
+        if sparse_index_type not in {index.value for index in MilvusSparseIndexType}:
+            raise ValueError(f"Milvus backend 不支持的 sparse index_type: {sparse_index_type}")
         index_params.add_index(
             field_name=spec.full_text_search.sparse_vector_field,
-            index_name=sparse_index_config.pop(
-                "index_name",
-                f"idx_{spec.full_text_search.sparse_vector_field}",
-            ),
-            index_type=sparse_index_config.pop(
-                "index_type",
-                "SPARSE_INVERTED_INDEX",
-            ),
-            metric_type=sparse_index_config.pop("metric_type", "BM25"),
-            params=sparse_index_params,
-            **sparse_index_config,
+            index_name=sparse_index_config.index_name or f"idx_{spec.full_text_search.sparse_vector_field}",
+            index_type=sparse_index_type,
+            metric_type=sparse_index_config.metric_type or "BM25",
+            params=sparse_index_config.build_params(),
+            **dict(sparse_index_config.extra_options),
         )
     return index_params
 

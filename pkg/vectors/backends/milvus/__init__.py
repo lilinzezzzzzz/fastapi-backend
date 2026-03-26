@@ -5,6 +5,7 @@ import contextlib
 from pymilvus import MilvusClient, connections
 
 from .backend import MilvusBackend
+from .specs import FullTextSearchSpec, MilvusCollectionSpec
 
 MILVUS_HOST = "localhost"
 MILVUS_PORT = 19530
@@ -69,7 +70,9 @@ def create_milvus_backend(
 
 
 __all__ = [
+    "FullTextSearchSpec",
     "MilvusBackend",
+    "MilvusCollectionSpec",
     "MilvusClient",
     "connect_milvus",
     "connections",

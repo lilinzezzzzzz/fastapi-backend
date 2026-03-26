@@ -28,7 +28,6 @@ class CollectionName:
 
     # 默认 collection 名称
     CHUNKS = "chunk_vectors_collection"
-    QA_PAIRS = "qa_pair_vectors_collection"
 
 
 class BackendProvider(StrEnum):
@@ -61,12 +60,15 @@ class MetricType(StrEnum):
     L2 = "l2"
 
 
-class ConsistencyLevel(StrEnum):
-    STRONG = "Strong"
-    SESSION = "Session"
-    BOUNDED = "Bounded"
-    EVENTUALLY = "Eventually"
-    CUSTOMIZED = "Customized"
+class IndexParams(BaseModel, extra="forbid"):
+    """索引参数基类。"""
+
+    def to_dict(self) -> dict[str, Any]:
+        return self.model_dump(exclude_none=True)
+
+
+class EmptyIndexParams(IndexParams):
+    """无参数索引。"""
 
 
 class TenantIsolationMode(StrEnum):
@@ -95,16 +97,21 @@ class ScalarFieldSpec(BaseModel, extra="forbid"):
     description: str = ""  # 字段描述
 
 
-class FullTextSearchSpec(BaseModel, extra="forbid"):
-    """Milvus BM25 / full-text search 配置。"""
+class IndexConfig(BaseModel, extra="forbid"):
+    """向量/稀疏索引配置。
 
-    enabled: bool = False
-    sparse_vector_field: str = Field(default="text_sparse", min_length=1)
-    function_name: str = Field(default="text_bm25_emb", min_length=1)
-    analyzer_params: dict[str, Any] = Field(default_factory=dict)
-    function_params: dict[str, Any] = Field(default_factory=dict)
-    index_config: dict[str, Any] = Field(default_factory=dict)
-    description: str = ""
+    使用显式字段定义常见索引参数，避免裸 dict 难以发现可配置项。
+    `extra_options` 用于透传少量 backend 特定参数。
+    """
+
+    index_type: str | None = None
+    index_name: str | None = None
+    metric_type: str | None = None
+    params: IndexParams = Field(default_factory=IndexParams)
+    extra_options: dict[str, Any] = Field(default_factory=dict)
+
+    def build_params(self) -> dict[str, Any]:
+        return self.params.to_dict()
 
 
 class CollectionSpec(BaseModel, extra="forbid"):
@@ -122,22 +129,20 @@ class CollectionSpec(BaseModel, extra="forbid"):
     # ========== 核心字段名配置 ==========
     id_field: str = "id"  # 主键字段名
     text_field: str = "text"  # 原始文本字段名
-    text_max_length: int = Field(default=65_535, gt=0)  # 文本最大长度（VARCHAR）
     vector_field: str = "embedding"  # 向量字段名
     payload_field: str | None = "payload"  # JSON payload 字段名，None 表示不使用
 
-    # ========== 扩展字段配置 ==========
+    # ========== 字段约束配置 ==========
+    text_max_length: int = Field(default=65_535, gt=0)  # text_field 的最大长度（VARCHAR）
+
+    # ========== 扩展字段 ==========
     scalar_fields: list[ScalarFieldSpec] = Field(default_factory=list)  # 标量元数据字段列表
-    full_text_search: FullTextSearchSpec = Field(default_factory=FullTextSearchSpec)
 
     # ========== 索引配置 ==========
-    # 示例: {"index_type": "HNSW", "metric_type": "COSINE", "params": {"M": 16}}
-    index_config: dict[str, Any] = Field(default_factory=dict)
+    index_config: IndexConfig = Field(default_factory=IndexConfig)
 
     # ========== 多租户与其他配置 ==========
     tenant_mode: TenantIsolationMode = TenantIsolationMode.SHARED_FILTER  # 租户隔离模式
-    consistency_level: ConsistencyLevel = ConsistencyLevel.SESSION  # 默认使用 Session，满足同 client 的读后写一致性
-    enable_dynamic_field: bool = False  # 是否启用动态字段（Milvus 特性）
     description: str = ""  # 集合描述
 
 

@@ -6,9 +6,17 @@ import zvec
 from zvec import CollectionSchema
 
 from pkg.vectors.backends.base import CollectionSpec, MetricType, ScalarDataType
+from pkg.vectors.backends.zvec.specs import ZvecCollectionSpec, ZvecIndexType
+
+
+def require_zvec_spec(*, spec: CollectionSpec) -> ZvecCollectionSpec:
+    if not isinstance(spec, ZvecCollectionSpec):
+        raise TypeError(f"zvec backend 需要 ZvecCollectionSpec，实际收到: {type(spec).__name__}")
+    return spec
 
 
 def build_schema(*, spec: CollectionSpec) -> CollectionSchema:
+    spec = require_zvec_spec(spec=spec)
     fields = [
         zvec.FieldSchema(
             name=spec.text_field,
@@ -26,7 +34,9 @@ def build_schema(*, spec: CollectionSpec) -> CollectionSchema:
     fields.extend(build_scalar_fields(spec=spec))
 
     metric_type = map_metric_type(metric_type=spec.metric_type)
-    index_type = str(spec.index_config.get("index_type", "FLAT")).upper()
+    index_type = str(spec.index_config.index_type or ZvecIndexType.FLAT).upper()
+    if index_type not in {index.value for index in ZvecIndexType}:
+        raise ValueError(f"zvec backend 不支持的 index_type: {index_type}")
     if index_type == "HNSW":
         index_param = zvec.HnswIndexParam(metric_type=metric_type)
     elif index_type == "IVF":

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .backend import ZvecBackend
+from .specs import ZvecCollectionSpec
 
 
 def create_zvec_backend(
@@ -18,5 +19,6 @@ def create_zvec_backend(
 
 __all__ = [
     "ZvecBackend",
+    "ZvecCollectionSpec",
     "create_zvec_backend",
 ]

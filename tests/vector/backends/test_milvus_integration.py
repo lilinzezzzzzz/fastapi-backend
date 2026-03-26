@@ -7,8 +7,9 @@ import uuid
 
 import pytest
 
-from pkg.vectors.backends.base import CollectionSpec, FullTextSearchSpec, ScalarDataType, ScalarFieldSpec
+from pkg.vectors.backends.base import ScalarDataType, ScalarFieldSpec
 from pkg.vectors.backends.milvus import MilvusBackend
+from pkg.vectors.backends.milvus.specs import FullTextSearchSpec, MilvusCollectionSpec
 from pkg.vectors.contracts import (
     ConsistencyLevel,
     FilterCondition,
@@ -27,9 +28,9 @@ def backend() -> MilvusBackend:
 
 
 @pytest.fixture
-def collection_spec() -> CollectionSpec:
+def collection_spec() -> MilvusCollectionSpec:
     collection_name = f"test_milvus_backend_{uuid.uuid4().hex[:8]}"
-    return CollectionSpec(
+    return MilvusCollectionSpec(
         name=collection_name,
         dimension=4,
         scalar_fields=[
@@ -41,7 +42,7 @@ def collection_spec() -> CollectionSpec:
 
 
 @pytest.fixture(autouse=True)
-def cleanup_collection(backend: MilvusBackend, collection_spec: CollectionSpec):
+def cleanup_collection(backend: MilvusBackend, collection_spec: MilvusCollectionSpec):
     yield
     with contextlib.suppress(Exception):
         backend.client.drop_collection(collection_name=collection_spec.name)
@@ -50,7 +51,7 @@ def cleanup_collection(backend: MilvusBackend, collection_spec: CollectionSpec):
 
 async def _wait_for_hits(
     backend: MilvusBackend,
-    spec: CollectionSpec,
+    spec: MilvusCollectionSpec,
     request: SearchRequest,
 ) -> list:
     for _ in range(10):
@@ -62,7 +63,10 @@ async def _wait_for_hits(
 
 
 @pytest.mark.integration
-async def test_milvus_full_text_and_hybrid_search_work(backend: MilvusBackend, collection_spec: CollectionSpec):
+async def test_milvus_full_text_and_hybrid_search_work(
+    backend: MilvusBackend,
+    collection_spec: MilvusCollectionSpec,
+):
     await backend.ensure_collection(spec=collection_spec)
     await backend.upsert(
         spec=collection_spec,
@@ -119,7 +123,10 @@ async def test_milvus_full_text_and_hybrid_search_work(backend: MilvusBackend, c
 
 
 @pytest.mark.integration
-async def test_milvus_fetch_limit_and_fail_fast(backend: MilvusBackend, collection_spec: CollectionSpec):
+async def test_milvus_fetch_limit_and_fail_fast(
+    backend: MilvusBackend,
+    collection_spec: MilvusCollectionSpec,
+):
     await backend.ensure_collection(spec=collection_spec)
     await backend.upsert(
         spec=collection_spec,
