@@ -131,12 +131,11 @@ class CollectionSpec(BaseModel, extra="forbid"):
     text_field: str = "text"  # 原始文本字段名
     vector_field: str = "embedding"  # 向量字段名
     payload_field: str | None = "payload"  # JSON payload 字段名，None 表示不使用
+    # ========== 扩展字段 ==========
+    scalar_fields: list[ScalarFieldSpec] = Field(default_factory=list)  # 标量元数据字段列表
 
     # ========== 字段约束配置 ==========
     text_max_length: int = Field(default=65_535, gt=0)  # text_field 的最大长度（VARCHAR）
-
-    # ========== 扩展字段 ==========
-    scalar_fields: list[ScalarFieldSpec] = Field(default_factory=list)  # 标量元数据字段列表
 
     # ========== 索引配置 ==========
     index_config: IndexConfig = Field(default_factory=IndexConfig)
