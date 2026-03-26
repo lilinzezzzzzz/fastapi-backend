@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 from pkg.vectors.backends import create_backend
 from pkg.vectors.backends.base import (
@@ -31,7 +31,7 @@ CHUNK_ALLOWED_FILTER_FIELDS = frozenset({"doc_id"})
 class ChunkVectorDocument:
     id: int
     doc_id: int
-    content: str
+    text: str
 
 
 class ChunkVectorRepository(BaseVectorRepository[ChunkVectorDocument]):
@@ -73,21 +73,12 @@ class ChunkVectorRepository(BaseVectorRepository[ChunkVectorDocument]):
         return [
             VectorRecord(
                 id=entity.id,
-                text=entity.content,
+                text=entity.text,
                 metadata={
                     "doc_id": entity.doc_id,
                 },
             )
         ]
-
-    async def vectorize_chunk(self, chunk: Any) -> dict[str, Any]:
-        await self.upsert_entity(
-            entity=ChunkVectorDocument(
-                id=int(chunk.id),
-                doc_id=int(chunk.document_id),
-                content=str(chunk.content),
-            )
-        )
 
     async def delete_chunks(self, chunk_ids: list[int]) -> int:
         # 调用方已在 MySQL 层完成组织级校验，这里直接走主键删除以命中 backend 的快路径。
