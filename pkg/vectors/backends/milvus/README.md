@@ -142,7 +142,7 @@ backend = MilvusBackend(
 
 ```python
 from pkg.vectors.backends.base import MetricType
-from pkg.vectors.backends.milvus.specs import MilvusCollectionSpec
+from pkg.vectors.backends.milvus.types import MilvusCollectionSpec
 
 spec = MilvusCollectionSpec(
     name="chunk_vectors",
@@ -155,7 +155,7 @@ spec = MilvusCollectionSpec(
 
 ```python
 from pkg.vectors.backends.base import MetricType, ScalarDataType, ScalarFieldSpec
-from pkg.vectors.backends.milvus.specs import (
+from pkg.vectors.backends.milvus.types import (
     FullTextSearchSpec,
     MilvusCollectionSpec,
     MilvusSparseInvertedIndexConfig,
@@ -1151,7 +1151,7 @@ weights=[0.7, 0.3]
 
 ```python
 from pkg.vectors.backends.base import MetricType
-from pkg.vectors.backends.milvus.specs import FullTextSearchSpec, MilvusCollectionSpec
+from pkg.vectors.backends.milvus.types import FullTextSearchSpec, MilvusCollectionSpec
 
 spec = MilvusCollectionSpec(
     name="rag_chunks",

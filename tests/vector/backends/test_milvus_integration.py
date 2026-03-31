@@ -9,7 +9,7 @@ import pytest
 
 from pkg.vectors.backends.base import ScalarDataType, ScalarFieldSpec
 from pkg.vectors.backends.milvus import MilvusBackend
-from pkg.vectors.backends.milvus.specs import FullTextSearchSpec, MilvusCollectionSpec
+from pkg.vectors.backends.milvus.types import FullTextSearchSpec, MilvusCollectionSpec
 from pkg.vectors.contracts import (
     ConsistencyLevel,
     FilterCondition,

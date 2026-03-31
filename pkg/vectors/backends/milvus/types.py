@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
+from pymilvus import RRFRanker, WeightedRanker
 
 from pkg.vectors.backends.base import CollectionSpec, EmptyIndexParams, IndexConfig, IndexParams
+from pkg.vectors.contracts import RetrievalMode
+
+MILVUS_HOST = "localhost"
+MILVUS_PORT = 19530
 
 
 class MilvusDenseIndexType(StrEnum):
@@ -121,7 +127,60 @@ class FullTextSearchSpec(BaseModel, extra="forbid"):
 class MilvusCollectionSpec(CollectionSpec, extra="forbid"):
     """Milvus collection 规格定义。"""
 
+    text_max_length: int = Field(default=65_535, gt=0)
     index_config: MilvusIndexConfig = Field(default_factory=MilvusAutoIndexConfig)
     full_text_search: FullTextSearchSpec = Field(default_factory=FullTextSearchSpec)
     consistency_level: MilvusConsistencyLevel = MilvusConsistencyLevel.SESSION
     enable_dynamic_field: bool = False
+
+
+@dataclass(frozen=True)
+class SearchBranchPlan:
+    name: str
+    anns_field: str
+    data: list[object]
+    search_params: dict[str, object]
+    limit: int
+
+
+@dataclass(frozen=True)
+class SearchExecutionPlan:
+    mode: RetrievalMode
+    expr: str
+    output_fields: tuple[str, ...]
+    consistency_level: str
+    final_limit: int
+    branches: tuple[SearchBranchPlan, ...]
+    candidate_limit: int | None = None
+    ranker: RRFRanker | WeightedRanker | None = None
+
+    @property
+    def branch_names(self) -> tuple[str, ...]:
+        return tuple(branch.name for branch in self.branches)
+
+
+__all__ = [
+    "FullTextSearchSpec",
+    "MILVUS_HOST",
+    "MILVUS_PORT",
+    "MilvusAutoIndexConfig",
+    "MilvusCollectionSpec",
+    "MilvusConsistencyLevel",
+    "MilvusDenseIndexType",
+    "MilvusDiskAnnIndexConfig",
+    "MilvusFlatIndexConfig",
+    "MilvusHnswIndexConfig",
+    "MilvusHnswIndexParams",
+    "MilvusIndexConfig",
+    "MilvusIvfFlatIndexConfig",
+    "MilvusIvfIndexParams",
+    "MilvusIvfPqIndexConfig",
+    "MilvusIvfPqIndexParams",
+    "MilvusIvfSq8IndexConfig",
+    "MilvusSparseIndexConfig",
+    "MilvusSparseIndexType",
+    "MilvusSparseInvertedIndexConfig",
+    "MilvusSparseInvertedIndexParams",
+    "SearchBranchPlan",
+    "SearchExecutionPlan",
+]

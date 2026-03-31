@@ -5,7 +5,6 @@ import logging
 import threading
 import time
 from collections.abc import Awaitable, Callable, Sequence
-from dataclasses import dataclass
 
 import anyio
 import grpc
@@ -18,7 +17,6 @@ from pymilvus.exceptions import (
 
 from pkg.toolkit.async_task import anyio_run_in_thread
 from pkg.vectors.backends.base import BaseVectorBackend, CollectionSpec
-from pkg.vectors.backends.milvus.specs import MilvusCollectionSpec
 from pkg.vectors.contracts import (
     FilterCondition,
     RerankerStrategy,
@@ -42,33 +40,9 @@ from .schema import (
     map_metric_type,
     validate_collection_description,
 )
+from .types import MilvusCollectionSpec, SearchBranchPlan, SearchExecutionPlan
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class SearchBranchPlan:
-    name: str
-    anns_field: str
-    data: list[object]
-    search_params: dict[str, object]
-    limit: int
-
-
-@dataclass(frozen=True)
-class SearchExecutionPlan:
-    mode: RetrievalMode
-    expr: str
-    output_fields: tuple[str, ...]
-    consistency_level: str
-    final_limit: int
-    branches: tuple[SearchBranchPlan, ...]
-    candidate_limit: int | None = None
-    ranker: RRFRanker | WeightedRanker | None = None
-
-    @property
-    def branch_names(self) -> tuple[str, ...]:
-        return tuple(branch.name for branch in self.branches)
 
 
 class MilvusBackend(BaseVectorBackend):

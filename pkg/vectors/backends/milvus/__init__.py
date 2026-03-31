@@ -5,10 +5,7 @@ import contextlib
 from pymilvus import MilvusClient, connections
 
 from .backend import MilvusBackend
-from .specs import FullTextSearchSpec, MilvusCollectionSpec
-
-MILVUS_HOST = "localhost"
-MILVUS_PORT = 19530
+from .types import FullTextSearchSpec, MILVUS_HOST, MILVUS_PORT, MilvusCollectionSpec
 
 
 def connect_milvus(

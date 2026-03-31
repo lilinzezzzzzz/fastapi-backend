@@ -14,7 +14,7 @@ from pkg.vectors.backends.base import (
     VectorBackend,
 )
 from pkg.vectors.backends.milvus import MilvusBackend, create_milvus_backend
-from pkg.vectors.backends.milvus.specs import FullTextSearchSpec, MilvusCollectionSpec
+from pkg.vectors.backends.milvus.types import FullTextSearchSpec, MilvusCollectionSpec
 from pkg.vectors.backends.zvec import ZvecBackend, create_zvec_backend
 from pkg.vectors.backends.zvec.specs import ZvecCollectionSpec
 from pkg.vectors.contracts import ConsistencyLevel

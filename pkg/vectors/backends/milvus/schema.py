@@ -6,7 +6,7 @@ from typing import Any
 from pymilvus import DataType, Function, FunctionType, MilvusClient
 
 from pkg.vectors.backends.base import CollectionSpec, MetricType, ScalarDataType
-from pkg.vectors.backends.milvus.specs import (
+from pkg.vectors.backends.milvus.types import (
     MilvusCollectionSpec,
     MilvusDenseIndexType,
     MilvusSparseIndexType,

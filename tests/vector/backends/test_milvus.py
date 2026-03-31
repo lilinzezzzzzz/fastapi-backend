@@ -7,7 +7,7 @@ import pytest
 from pymilvus import DataType, FunctionType
 
 from pkg.vectors.backends.milvus import MilvusBackend
-from pkg.vectors.backends.milvus.specs import FullTextSearchSpec, MilvusCollectionSpec
+from pkg.vectors.backends.milvus.types import FullTextSearchSpec, MilvusCollectionSpec
 from pkg.vectors.backends.milvus.schema import build_schema
 from pkg.vectors.contracts import ConsistencyLevel, RetrievalMode, SearchRequest, SearchReranker
 from pkg.vectors.errors import CollectionSchemaMismatchError

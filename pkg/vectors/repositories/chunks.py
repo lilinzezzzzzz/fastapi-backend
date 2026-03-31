@@ -12,7 +12,7 @@ from pkg.vectors.backends.base import (
     ScalarFieldSpec,
     VectorBackend,
 )
-from pkg.vectors.backends.milvus.specs import MilvusCollectionSpec, MilvusHnswIndexConfig
+from pkg.vectors.backends.milvus.types import MilvusCollectionSpec, MilvusHnswIndexConfig
 from pkg.vectors.contracts import (
     FilterCondition,
     FilterOperator,
