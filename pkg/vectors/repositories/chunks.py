@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any
 
 from pkg.vectors.backends import create_backend
 from pkg.vectors.backends.base import (
@@ -12,7 +12,7 @@ from pkg.vectors.backends.base import (
     ScalarFieldSpec,
     VectorBackend,
 )
-from pkg.vectors.backends.milvus.specs import MilvusAutoIndexConfig, MilvusCollectionSpec
+from pkg.vectors.backends.milvus.specs import MilvusCollectionSpec, MilvusHnswIndexConfig
 from pkg.vectors.contracts import (
     FilterCondition,
     FilterOperator,
@@ -53,7 +53,9 @@ class ChunkVectorRepository(BaseVectorRepository[ChunkVectorDocument]):
             scalar_fields=[
                 ScalarFieldSpec(name="doc_id", data_type=ScalarDataType.INT64),
             ],
-            index_config=MilvusAutoIndexConfig(),
+            index_config=MilvusHnswIndexConfig(
+                params=MilvusHnswIndexConfig.Params(M=30, efConstruction=200)
+            ),
             description="Chunk vector collection",
         )
 
