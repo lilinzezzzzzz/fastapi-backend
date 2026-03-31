@@ -170,3 +170,6 @@ cython_debug/
 
 # Qoder generated workspace data
 .qoder/
+
+# Codex workspace metadata
+.codex
