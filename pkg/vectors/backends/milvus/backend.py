@@ -96,6 +96,10 @@ class MilvusBackend(BaseVectorBackend):
         self._ensured_collections: set[str] = set()
         self._is_shutdown = False
 
+    # ------------------------------------------------------------------
+    # Lifecycle and client access
+    # ------------------------------------------------------------------
+
     @property
     def client(self) -> MilvusClient:
         if self._client is not None:
@@ -206,6 +210,10 @@ class MilvusBackend(BaseVectorBackend):
             raise TypeError(f"Milvus backend 需要 MilvusCollectionSpec，实际收到: {type(spec).__name__}")
         return spec
 
+    # ------------------------------------------------------------------
+    # Collection lifecycle
+    # ------------------------------------------------------------------
+
     async def ensure_collection(self, *, spec: CollectionSpec) -> None:
         spec = self._require_spec(spec=spec)
 
@@ -251,6 +259,74 @@ class MilvusBackend(BaseVectorBackend):
                 await self._load_collection_if_needed(collection_name=collection_name)
 
         await self._run_with_recovery("load_collection", _run)
+
+    async def release_collection(self, *, collection_name: str) -> None:
+        async def _run() -> None:
+            async with self._get_collection_lock(collection_name=collection_name):
+                await self._call_client_method(
+                    "release_collection",
+                    collection_name=collection_name,
+                )
+                self._loaded_collections.discard(collection_name)
+                self._ensured_collections.discard(collection_name)
+                logger.debug("milvus collection released: %s", collection_name)
+
+        await self._run_with_recovery("release_collection", _run)
+
+    async def _load_collection_if_exists(self, *, collection_name: str) -> bool:
+        if collection_name in self._loaded_collections:
+            return True
+
+        async with self._get_collection_lock(collection_name=collection_name):
+            if collection_name in self._loaded_collections:
+                return True
+
+            exists = await self._collection_exists(collection_name=collection_name)
+            if not exists:
+                return False
+
+            await self._load_collection_if_needed(collection_name=collection_name)
+            return True
+
+    def _get_collection_lock(self, *, collection_name: str) -> anyio.Lock:
+        lock = self._collection_locks.get(collection_name)
+        if lock is None:
+            lock = anyio.Lock()
+            self._collection_locks[collection_name] = lock
+        return lock
+
+    async def _load_collection_if_needed(self, *, collection_name: str) -> None:
+        if collection_name in self._loaded_collections:
+            return
+
+        await self._call_client_method(
+            "load_collection",
+            collection_name=collection_name,
+        )
+        self._loaded_collections.add(collection_name)
+        logger.debug("milvus collection loaded: %s", collection_name)
+
+    async def _collection_exists(self, *, collection_name: str) -> bool:
+        if collection_name in self._loaded_collections:
+            return True
+
+        return bool(
+            await self._call_client_method(
+                "has_collection",
+                collection_name=collection_name,
+            )
+        )
+
+    async def _validate_existing_collection(self, *, spec: CollectionSpec) -> None:
+        description = await self._call_client_method(
+            "describe_collection",
+            collection_name=spec.name,
+        )
+        validate_collection_description(description=description, spec=spec)
+
+    # ------------------------------------------------------------------
+    # Data operations
+    # ------------------------------------------------------------------
 
     async def upsert(self, *, spec: CollectionSpec, records: Sequence[VectorRecord]) -> None:
         spec = self._require_spec(spec=spec)
@@ -352,6 +428,17 @@ class MilvusBackend(BaseVectorBackend):
 
         return await self._run_with_recovery("fetch", _run)
 
+    async def healthcheck(self) -> dict[str, str]:
+        async def _run() -> dict[str, str]:
+            version = await self._call_client_method("get_server_version")
+            return {
+                "backend": "milvus",
+                "status": "ok",
+                "version": str(version),
+            }
+
+        return await self._run_with_recovery("healthcheck", _run)
+
     async def search(self, *, spec: CollectionSpec, request: SearchRequest) -> list[SearchHit]:
         spec = self._require_spec(spec=spec)
 
@@ -406,30 +493,6 @@ class MilvusBackend(BaseVectorBackend):
 
         return await self._run_with_recovery("search", _run)
 
-    async def healthcheck(self) -> dict[str, str]:
-        async def _run() -> dict[str, str]:
-            version = await self._call_client_method("get_server_version")
-            return {
-                "backend": "milvus",
-                "status": "ok",
-                "version": str(version),
-            }
-
-        return await self._run_with_recovery("healthcheck", _run)
-
-    async def release_collection(self, *, collection_name: str) -> None:
-        async def _run() -> None:
-            async with self._get_collection_lock(collection_name=collection_name):
-                await self._call_client_method(
-                    "release_collection",
-                    collection_name=collection_name,
-                )
-                self._loaded_collections.discard(collection_name)
-                self._ensured_collections.discard(collection_name)
-                logger.debug("milvus collection released: %s", collection_name)
-
-        await self._run_with_recovery("release_collection", _run)
-
     async def _load_collection_if_exists(self, *, collection_name: str) -> bool:
         if collection_name in self._loaded_collections:
             return True
@@ -445,41 +508,9 @@ class MilvusBackend(BaseVectorBackend):
             await self._load_collection_if_needed(collection_name=collection_name)
             return True
 
-    def _get_collection_lock(self, *, collection_name: str) -> anyio.Lock:
-        lock = self._collection_locks.get(collection_name)
-        if lock is None:
-            lock = anyio.Lock()
-            self._collection_locks[collection_name] = lock
-        return lock
-
-    async def _load_collection_if_needed(self, *, collection_name: str) -> None:
-        if collection_name in self._loaded_collections:
-            return
-
-        await self._call_client_method(
-            "load_collection",
-            collection_name=collection_name,
-        )
-        self._loaded_collections.add(collection_name)
-        logger.debug("milvus collection loaded: %s", collection_name)
-
-    async def _collection_exists(self, *, collection_name: str) -> bool:
-        if collection_name in self._loaded_collections:
-            return True
-
-        return bool(
-            await self._call_client_method(
-                "has_collection",
-                collection_name=collection_name,
-            )
-        )
-
-    async def _validate_existing_collection(self, *, spec: CollectionSpec) -> None:
-        description = await self._call_client_method(
-            "describe_collection",
-            collection_name=spec.name,
-        )
-        validate_collection_description(description=description, spec=spec)
+    # ------------------------------------------------------------------
+    # Search planning and execution
+    # ------------------------------------------------------------------
 
     def _build_search_params(
         self,
@@ -647,7 +678,9 @@ class MilvusBackend(BaseVectorBackend):
             return RRFRanker(reranker.k)
 
         if len(reranker.weights) != request_count:
-            raise ValueError(f"Weighted reranker 权重数量不匹配: got={len(reranker.weights)}, expected={request_count}")
+            raise ValueError(
+                f"Weighted reranker 权重数量不匹配: got={len(reranker.weights)}, expected={request_count}"
+            )
         return WeightedRanker(*reranker.weights, norm_score=reranker.normalize_score)
 
     def _resolve_retrieval_mode(
