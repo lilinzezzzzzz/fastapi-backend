@@ -42,16 +42,14 @@ if str(PROJECT_ROOT) not in sys.path:
 # 2. Mock 外部依赖 (必须在导入内部模块之前)
 # ==========================================
 
-# 检查是否跳过 logger mock（logger 测试需要真实的 LoggerHandler）
-import sys as _sys_check
-
 _skip_logger_mock = False
 _skip_context_mock = False
-if _sys_check.argv:
-    for arg in _sys_check.argv:
-        if "logger/" in arg or "test_logger" in arg:
+if sys.argv:
+    for arg in sys.argv:
+        normalized_arg = arg.replace("\\", "/")
+        if "tests/logger" in normalized_arg or "logger/" in normalized_arg or "test_logger" in normalized_arg:
             _skip_logger_mock = True
-        if "test_context" in arg:
+        if "test_context" in normalized_arg:
             _skip_context_mock = True
 
 if not _skip_logger_mock:
@@ -531,7 +529,7 @@ def cleanup_after_test():
         from internal.config import reset_settings
 
         reset_settings()
-    except ImportError:
+    except (ImportError, TypeError):
         pass
 
     # 重置数据库连接
@@ -539,7 +537,7 @@ def cleanup_after_test():
         from internal.infra.database import reset_async_db
 
         reset_async_db()
-    except ImportError:
+    except (ImportError, TypeError):
         pass
 
     # 重置 Redis 连接
@@ -547,5 +545,5 @@ def cleanup_after_test():
         from internal.infra.redis import reset_async_redis
 
         reset_async_redis()
-    except ImportError:
+    except (ImportError, TypeError):
         pass
