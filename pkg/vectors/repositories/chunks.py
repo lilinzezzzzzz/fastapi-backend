@@ -12,7 +12,12 @@ from pkg.vectors.backends.base import (
     ScalarFieldSpec,
     VectorBackend,
 )
-from pkg.vectors.backends.milvus.types import MilvusCollectionSpec, MilvusHnswIndexConfig
+from pkg.vectors.backends.milvus.types import (
+    FullTextSearchSpec,
+    MilvusCollectionSpec,
+    MilvusHnswIndexConfig,
+    MilvusHnswIndexParams,
+)
 from pkg.vectors.contracts import (
     FilterCondition,
     FilterOperator,
@@ -53,9 +58,8 @@ class ChunkVectorRepository(BaseVectorRepository[ChunkVectorDocument]):
             scalar_fields=[
                 ScalarFieldSpec(name="doc_id", data_type=ScalarDataType.INT64),
             ],
-            index_config=MilvusHnswIndexConfig(
-                params=MilvusHnswIndexConfig.Params(M=30, efConstruction=200)
-            ),
+            index_config=MilvusHnswIndexConfig(params=MilvusHnswIndexParams(M=30, efConstruction=200)),
+            full_text_search=FullTextSearchSpec(enabled=True),
             description="Chunk vector collection",
         )
 
