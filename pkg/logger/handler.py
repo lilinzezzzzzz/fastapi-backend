@@ -179,7 +179,6 @@ class LoggerHandler:
         # 1. 准备基础配置
         config_params: dict[str, Any] = {
             "extra": {
-                "trace_id": "-",
                 "log_namespace": self.DEFAULT_LOG_NAMESPACE,
                 "json_content": None,
             },
@@ -386,6 +385,8 @@ class LoggerHandler:
         extra_data = record["extra"].copy()
         json_content = extra_data.pop("json_content", None)
         extra_data.pop("_json_out", None)
+        # trace_id 固定由 context 提供，不接受 extra 覆盖
+        extra_data.pop("trace_id", None)
 
         if not isinstance(json_content, (dict, list, str, type(None))):
             raise TypeError(f"json_content must be types or None. Got {type(json_content)}")
@@ -437,9 +438,9 @@ class LoggerHandler:
         path.mkdir(parents=True, exist_ok=True)
 
     @classmethod
-    def _get_trace_id(cls, record: Any) -> str:
+    def _get_trace_id(cls, _record: Any) -> str:
         """
-        获取 trace_id，优先级：extra[trace_id] > context.get_trace_id() > "-"
+        获取 trace_id，仅从 context.get_trace_id() 读取，未设置时返回 "-"
 
         Args:
             record: 日志记录对象
@@ -447,14 +448,7 @@ class LoggerHandler:
         Returns:
             trace_id 字符串
         """
-        trace_id = record["extra"].get("trace_id")
-
-        # 如果 trace_id 无效，尝试从 context 获取
-        if not context.is_valid_trace_id(trace_id):
-            try:
-                return context.get_trace_id()
-            except LookupError:
-                return "-"
-
-        # 确保返回有效的 trace_id
-        return trace_id
+        try:
+            return context.get_trace_id()
+        except LookupError:
+            return "-"

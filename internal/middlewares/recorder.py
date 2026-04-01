@@ -78,11 +78,11 @@ class ASGIRecordMiddleware:
             exc: 捕获的异常
         """
         if isinstance(exc, AppException):
-            logger.warning(f"Business exception, exc={get_business_exec_tb(exc)}")
+            logger.opt(depth=1).warning(f"Business exception, exc={get_business_exec_tb(exc)}")
         elif isinstance(exc, RequestValidationError):
-            logger.warning(f"Validation Error: {exc}")
+            logger.opt(depth=1).warning(f"Validation Error: {exc}")
         else:
-            logger.error(f"Unexpected exception, exc={get_unexpected_exec_tb(exc)}")
+            logger.opt(depth=1).error(f"Unexpected exception, exc={get_unexpected_exec_tb(exc)}")
 
     @staticmethod
     def _build_error_response(exc: Exception) -> Response:
@@ -121,21 +121,20 @@ class ASGIRecordMiddleware:
         # 全局异常捕获,覆盖整个请求处理流程
         try:
             # 1. 初始化上下文
-            context.init(trace_id=req_ctx.trace_id)
+            context.init(**{context.ContextKey.TRACE_ID: req_ctx.trace_id})
 
             send_wrapper = req_ctx.create_send_wrapper(send, scope)
             # 2. 记录访问日志
-            with logger.contextualize(trace_id=req_ctx.trace_id):
-                logger.info(
-                    f"access log, ip={req_ctx.client_host}, method={req_ctx.method}, "
-                    f"path={req_ctx.path}, query_string={req_ctx.query_string}"
-                )
+            logger.info(
+                f"access log, ip={req_ctx.client_host}, method={req_ctx.method}, "
+                f"path={req_ctx.path}, query_string={req_ctx.query_string}"
+            )
 
-                # 3. 创建 send 包装器并执行应用逻辑
-                await self.app(scope, receive, send_wrapper)
+            # 3. 创建 send 包装器并执行应用逻辑
+            await self.app(scope, receive, send_wrapper)
 
-                # 4. 记录响应日志
-                logger.info(f"response log, processing time={req_ctx.process_time:.4f}s")
+            # 4. 记录响应日志
+            logger.info(f"response log, processing time={req_ctx.process_time:.4f}s")
 
         except Exception as exc:
             # 5. 统一异常处理

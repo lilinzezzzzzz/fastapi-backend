@@ -101,7 +101,7 @@ class ASGIAuthMiddleware:
         # 1. 白名单放行
         if auth_ctx.is_whitelist():
             logger.debug(f"Whitelist path: {auth_ctx.path}")
-            context.set_user_id(0)
+            context.set_val(context.ContextKey.USER_ID, 0)
             await self.app(scope, receive, send)
             return
 
@@ -142,6 +142,6 @@ class ASGIAuthMiddleware:
 
         # 设置用户上下文
         logger.debug(f"Set user_id to context: {user_id}")
-        context.set_user_id(user_id)
+        context.set_val(context.ContextKey.USER_ID, user_id)
 
         await self.app(scope, receive, send)

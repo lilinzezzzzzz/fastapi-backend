@@ -125,27 +125,21 @@ def run_in_async[T](coro_func: Callable[[], Coroutine[None, None, T]], trace_id:
     reset_async_db()
     reset_async_redis()
 
-    # 2. 准备上下文
-    context_kwargs: dict[str, str | int] = {
-        "trace_id": trace_id,
-    }
-
     async def _wrapper() -> T:
         # 1. 在新事件循环中初始化（使用配置中的 echo 参数）
         init_async_db(echo=settings.DB_ECHO)
         init_async_redis()
 
         # 2. 设置上下文
-        context.init(**context_kwargs)
+        context.init(**{context.ContextKey.TRACE_ID: trace_id})
 
-        with logger.contextualize(trace_id=trace_id):
-            try:
-                # 3. 执行业务逻辑 (通过闭包捕获 coro_func)
-                return await coro_func()
-            finally:
-                # 4. 清理连接
-                await close_async_db()
-                await close_async_redis()
+        try:
+            # 3. 执行业务逻辑 (通过闭包捕获 coro_func)
+            return await coro_func()
+        finally:
+            # 4. 清理连接
+            await close_async_db()
+            await close_async_redis()
 
     return anyio.run(_wrapper)
 

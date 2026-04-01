@@ -1,7 +1,22 @@
 from contextvars import ContextVar
+from enum import StrEnum
 from typing import Any
 
 _request_context_var: ContextVar[dict[str, Any]] = ContextVar("request_context")
+
+
+class ContextKey(StrEnum):
+    """标准上下文 Key 定义，新增公共字段时统一在这里扩展。"""
+
+    USER_ID = "user_id"
+    TRACE_ID = "trace_id"
+
+
+type ContextKeyType = str | ContextKey
+
+
+def _normalize_key(key: ContextKeyType) -> str:
+    return key.value if isinstance(key, ContextKey) else key
 
 
 class _RequestContextManager:
@@ -21,19 +36,21 @@ class _RequestContextManager:
         return ctx
 
     @staticmethod
-    def get(key: str, default: Any = None) -> Any:
+    def get(key: ContextKeyType, default: Any = None) -> Any:
+        normalized_key = _normalize_key(key)
         try:
             ctx = _request_context_var.get()
-            return ctx.get(key, default)
+            return ctx.get(normalized_key, default)
         except LookupError:
             # 如果没有 init，返回 default，兼容非 Web 环境调用
             return default
 
     @staticmethod
-    def set(key: str, value: Any):
+    def set(key: ContextKeyType, value: Any):
+        normalized_key = _normalize_key(key)
         try:
             ctx = _request_context_var.get()
-            ctx[key] = value
+            ctx[normalized_key] = value
         except LookupError as e:
             # 修改：移除自动 init，直接报错或记录严重错误
             # 如果这是一个纯 Web 包，应该 raise 异常。
@@ -67,20 +84,20 @@ def clear():
     _ctx_manager.clear()
 
 
-def set_val(key: str, value: Any):
+def set_val(key: ContextKeyType, value: Any):
     _ctx_manager.set(key, value)
 
 
-def get_val(key: str, default: Any = None):
+def get_val(key: ContextKeyType, default: Any = None):
     return _ctx_manager.get(key, default)
 
 
 def set_user_id(user_id: int):
-    _ctx_manager.set("user_id", user_id)
+    _ctx_manager.set(ContextKey.USER_ID, user_id)
 
 
 def get_user_id() -> int:
-    user_id = _ctx_manager.get("user_id")
+    user_id = _ctx_manager.get(ContextKey.USER_ID)
     if user_id is None:
         raise LookupError("user_id is not set")
     return user_id
@@ -93,11 +110,11 @@ def set_trace_id(trace_id: str):
     if not isinstance(trace_id, str):
         raise ValueError("trace_id must be a string")
 
-    _ctx_manager.set("trace_id", trace_id)
+    _ctx_manager.set(ContextKey.TRACE_ID, trace_id)
 
 
 def get_trace_id() -> str:
-    trace_id = _ctx_manager.get("trace_id")
+    trace_id = _ctx_manager.get(ContextKey.TRACE_ID)
 
     if not is_valid_trace_id(trace_id):
         raise LookupError(f"trace_id is invalid or not set, current value: {repr(trace_id)}")
