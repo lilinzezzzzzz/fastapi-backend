@@ -1,5 +1,4 @@
 import time
-from dataclasses import dataclass, field
 
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import Response
@@ -10,30 +9,54 @@ from internal.core import AppException, errors
 from pkg.logger import logger
 from pkg.toolkit import context
 from pkg.toolkit.exc import get_business_exec_tb, get_unexpected_exec_tb
+from pkg.toolkit.middleware import BaseMiddlewareContext
 from pkg.toolkit.response import error_response
 from pkg.toolkit.string import uuid6_unique_str_id
 
 
-@dataclass
-class _RequestContext:
+class _RequestContext(BaseMiddlewareContext):
     """请求上下文，封装中间件处理过程中的状态变量"""
 
-    path: str
-    method: str
-    client_host: str
-    query_string: str
-    headers: MutableHeaders
-    start_time: float = field(default_factory=time.perf_counter)
-    trace_id: str = field(default_factory=uuid6_unique_str_id)
-    receive: Receive | None = None
-    response_started: bool = False
-    _process_time: float | None = field(default=None, init=False, repr=False)
+    __slots__ = ("_client_host", "_query_string", "_start_time", "_trace_id", "_receive", "_response_started", "_process_time")
 
-    def __post_init__(self):
+    def __init__(self, scope: Scope, *, client_host: str, query_string: str, receive: Receive | None = None) -> None:
+        super().__init__(scope)
+        self._client_host = client_host
+        self._query_string = query_string
+        self._start_time = time.perf_counter()
+        self._trace_id = uuid6_unique_str_id()
+        self._receive = receive
+        self._response_started = False
+        self._process_time: float | None = None
+
         # 优先使用请求头中的 trace_id
         header_trace_id = self.headers.get("X-Trace-ID")
         if header_trace_id:
-            self.trace_id = header_trace_id
+            self._trace_id = header_trace_id
+
+    @property
+    def client_host(self) -> str:
+        return self._client_host
+
+    @property
+    def query_string(self) -> str:
+        return self._query_string
+
+    @property
+    def trace_id(self) -> str:
+        return self._trace_id
+
+    @property
+    def receive(self) -> Receive | None:
+        return self._receive
+
+    @property
+    def response_started(self) -> bool:
+        return self._response_started
+
+    @response_started.setter
+    def response_started(self, value: bool) -> None:
+        self._response_started = value
 
     @property
     def process_time(self) -> float:
@@ -109,11 +132,9 @@ class ASGIRecordMiddleware:
 
         # 初始化请求上下文
         req_ctx = _RequestContext(
-            path=scope["path"],
-            method=scope["method"],
+            scope,
             client_host=scope.get("client", ["unknown"])[0],
             query_string=scope.get("query_string", b"").decode(),
-            headers=MutableHeaders(scope=scope),
             receive=receive,
         )
         send_wrapper: Send = send

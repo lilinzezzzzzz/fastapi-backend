@@ -1,6 +1,3 @@
-from dataclasses import dataclass
-
-from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from internal.core import AppException, errors
@@ -8,9 +5,9 @@ from internal.services.auth import verify_token
 from internal.utils.signature import signature_auth_handler
 from pkg.logger import logger
 from pkg.toolkit import context
+from pkg.toolkit.middleware import BaseMiddlewareContext
 
 
-@dataclass
 class _AuthConstants:
     """认证相关常量配置"""
 
@@ -44,13 +41,8 @@ class _AuthConstants:
 _AUTH_CONST = _AuthConstants()
 
 
-@dataclass
-class _AuthContext:
+class _AuthContext(BaseMiddlewareContext):
     """认证上下文,封装认证过程中的状态变量"""
-
-    path: str
-    method: str
-    headers: MutableHeaders
 
     def is_whitelist(self) -> bool:
         """判断是否在白名单中"""
@@ -92,11 +84,7 @@ class ASGIAuthMiddleware:
             return
 
         # 初始化认证上下文
-        auth_ctx = _AuthContext(
-            path=scope["path"],
-            method=scope["method"],
-            headers=MutableHeaders(scope=scope),
-        )
+        auth_ctx = _AuthContext(scope)
 
         # 1. 白名单放行
         if auth_ctx.is_whitelist():
