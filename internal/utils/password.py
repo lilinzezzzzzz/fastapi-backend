@@ -13,6 +13,8 @@ class PasswordHandler:
     - 不可逆：无法从 hash 还原原始密码
     """
 
+    BCRYPT_ROUNDS = 12
+
     @staticmethod
     def hash_password(password: str) -> str:
         """
@@ -64,6 +66,7 @@ class PasswordHandler:
         except (ValueError, TypeError) as e:
             # 捕获可能的异常：无效格式、编码错误等
             from pkg.logger import logger
+
             logger.error(f"Password verification failed: {e}")
             return False
 
@@ -98,4 +101,3 @@ class PasswordHandler:
 
         # rounds 低于当前策略时需要重哈希
         return rounds < PasswordHandler.BCRYPT_ROUNDS
-    BCRYPT_ROUNDS = 12
