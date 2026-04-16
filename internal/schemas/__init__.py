@@ -1,4 +1,10 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+
+
+class OrmModel(BaseModel):
+    """支持从 ORM 对象转换的基类。"""
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class BaseResponse[T](BaseModel):
@@ -22,6 +28,7 @@ class BaseResponse[T](BaseModel):
         # 错误响应
         return BaseResponse(code=400, message="参数错误", data=None)
     """
+
     code: int = 200
     message: str = ""
     data: T | None = None
@@ -49,6 +56,7 @@ class BaseListResponse[T](BaseModel):
                 total=100
             )
     """
+
     code: int = 200
     message: str = ""
     data: list[T] = []
