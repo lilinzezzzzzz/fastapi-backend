@@ -258,10 +258,11 @@ class LoggerHandler:
         )
 
         # 检查 json_content 是否存在且不为 None
-        if record["extra"].get("json_content") is not None:
-            # 换行并以青色显示 JSON 内容
-            # loguru 会自动调用字典的 __str__ 或 __repr__
-            fmt += "\n<cyan>{extra[json_content]}</cyan>"
+        json_content = record["extra"].get("json_content")
+        if json_content is not None:
+            serialized = orjson_dumps(json_content, default=str)
+            record["extra"]["_console_json"] = serialized
+            fmt += " | <cyan>{extra[_console_json]}</cyan>"
         return fmt + "\n"
 
     def _text_formatter(self, record: Any) -> str:
@@ -286,8 +287,7 @@ class LoggerHandler:
             # 序列化为 JSON 字符串并存入 extra，避免直接输出 dict
             serialized = orjson_dumps(json_content, default=str)
             record["extra"]["_text_json"] = serialized
-            # 这里选择换行追加，保持与 Console 视觉一致，且避免单行过长
-            fmt += "\n{extra[_text_json]}"
+            fmt += " | {extra[_text_json]}"
 
         return fmt + "\n"
 
@@ -297,6 +297,7 @@ class LoggerHandler:
 
         extra_data = record["extra"].copy()
         json_content = extra_data.pop("json_content", None)
+        extra_data.pop("_console_json", None)
         extra_data.pop("_json_out", None)
         extra_data.pop("_text_json", None)
 
@@ -379,10 +380,8 @@ class LoggerHandler:
         if span_seq is None:
             return ""
 
-        parent_span_seq = record["extra"].get("parent_span_seq")
-        span_name = cls._escape_format_value(str(record["extra"].get("span_name") or "-"))
         span_path = cls._escape_format_value(str(record["extra"].get("span_path") or "-"))
-        return f" | {span_seq} p={parent_span_seq if parent_span_seq is not None else '-'} {span_name} {span_path}"
+        return f" | {span_path}"
 
     @classmethod
     def _safe_get_trace_id(cls) -> str:

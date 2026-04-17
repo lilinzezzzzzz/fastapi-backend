@@ -17,7 +17,9 @@ import os
 import sys
 import types
 from collections.abc import AsyncGenerator, Generator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -68,14 +70,17 @@ if not _skip_logger_mock:
     mock_logger_module.init_logger = MagicMock()
 
     # Mock LogFormat 枚举
-    from enum import StrEnum
-
     class MockLogFormat(StrEnum):
         JSON = "json"
         TEXT = "text"
 
+    @asynccontextmanager
+    async def noop_span_context(_span_name: str):
+        yield None
+
     mock_logger_module.LogFormat = MockLogFormat
     mock_logger_module.LoggerHandler = MagicMock  # Mock LoggerHandler class
+    mock_logger_module.span_context = noop_span_context
 
     # 为了让 LazyProxy 正常工作，需要 mock 整个模块
     sys.modules["pkg.logger"] = mock_logger_module
@@ -91,7 +96,12 @@ else:
 
 # Mock pkg.toolkit.context 模块
 if not _skip_context_mock:
+    class MockContextKey(StrEnum):
+        USER_ID = "user_id"
+        TRACE_ID = "trace_id"
+
     mock_context = types.ModuleType("pkg.toolkit.context")
+    mock_context.ContextKey = MockContextKey
     mock_context.get_user_id = MagicMock(return_value=999)
     mock_context.get_trace_id = MagicMock(return_value="test-trace-id")
     mock_context.set_user_id = MagicMock()

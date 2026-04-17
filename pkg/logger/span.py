@@ -36,6 +36,7 @@ class _SpanRuntime:
 _span_stack_var: ContextVar[tuple[SpanFrame, ...]] = ContextVar("logger_span_stack", default=())
 _span_runtime_var: ContextVar[_SpanRuntime | None] = ContextVar("logger_span_runtime", default=None)
 _SPAN_NAME_PATTERN = re.compile(r"^[A-Za-z0-9]+([._-][A-Za-z0-9]+)*$")
+_SPAN_PATH_SEPARATOR = "|"
 
 
 class _SpanLogger(Protocol):
@@ -165,7 +166,7 @@ class _AsyncSpanContext:
         span_seq = runtime.next_seq()
         parent_span_seq = current_stack[-1].span_seq if current_stack else None
         path_segment = f"{span_seq}:{self._span_name}"
-        span_path = f"{current_stack[-1].span_path}/{path_segment}" if current_stack else path_segment
+        span_path = f"{current_stack[-1].span_path}{_SPAN_PATH_SEPARATOR}{path_segment}" if current_stack else path_segment
 
         self._frame = SpanFrame(
             span_seq=span_seq,

@@ -131,12 +131,12 @@ async def test_instrument_span_supports_explicit_names(tmp_path):
     default_record = _find_record(records, "decorated.default")
     assert default_record["parent_span_seq"] == outer_span.span_seq
     assert default_record["span_name"] == "decorated.default"
-    assert default_record["span_path"] == f"{outer_span.span_path}/2:decorated.default"
+    assert default_record["span_path"] == f"{outer_span.span_path}|2:decorated.default"
 
     custom_record = _find_record(records, "decorated.custom")
     assert custom_record["parent_span_seq"] == outer_span.span_seq
     assert custom_record["span_name"] == "custom.db.query"
-    assert custom_record["span_path"] == f"{outer_span.span_path}/3:custom.db.query"
+    assert custom_record["span_path"] == f"{outer_span.span_path}|3:custom.db.query"
 
 
 @pytest.mark.asyncio
@@ -159,7 +159,7 @@ async def test_nested_error_logs_and_restores_parent_span(tmp_path):
     error_record = _find_record(records, "span.error")
     assert error_record["parent_span_seq"] == outer_span.span_seq
     assert error_record["span_name"] == "inner"
-    assert error_record["span_path"] == "1:outer/2:inner"
+    assert error_record["span_path"] == "1:outer|2:inner"
     assert error_record["json_content"]["error_type"] == "RuntimeError"
     assert error_record["json_content"]["elapsed_ms"] >= 0
 
@@ -189,8 +189,8 @@ async def test_asyncio_create_task_inherits_parent_span_and_keeps_siblings_isola
     assert {results["left"][0], results["right"][0]} == {2, 3}
     assert results["left"][1] == root_span.span_seq
     assert results["right"][1] == root_span.span_seq
-    assert results["left"][2].startswith("1:root/")
-    assert results["right"][2].startswith("1:root/")
+    assert results["left"][2].startswith("1:root|")
+    assert results["right"][2].startswith("1:root|")
 
     loguru_logger.complete()
     records = _read_json_records(_default_log_file(base_log_dir))
@@ -234,8 +234,8 @@ async def test_anyio_task_group_shares_seq_runtime_without_stack_pollution(tmp_p
     assert beta_record["parent_span_seq"] == root_span.span_seq
     assert alpha_record["span_path"] == results["alpha"][2]
     assert beta_record["span_path"] == results["beta"][2]
-    assert alpha_record["span_path"].startswith("1:root/")
-    assert beta_record["span_path"].startswith("1:root/")
+    assert alpha_record["span_path"].startswith("1:root|")
+    assert beta_record["span_path"].startswith("1:root|")
 
 
 @pytest.mark.asyncio
@@ -252,8 +252,24 @@ async def test_text_formatter_only_adds_span_segment_for_active_span(tmp_path):
     inside_line = next(line for line in lines if "text.inside" in line)
     outside_line = next(line for line in lines if "text.outside" in line)
 
-    assert "1 p=- text-root 1:text-root" in inside_line
-    assert "1 p=- text-root 1:text-root" not in outside_line
+    assert " | 1:text-root | " in inside_line
+    assert " | 1:text-root | " not in outside_line
+
+
+@pytest.mark.asyncio
+async def test_text_formatter_keeps_json_content_inline(tmp_path):
+    _, base_log_dir = _configure_logger(tmp_path, log_format=LogFormat.TEXT, enqueue=False)
+
+    async with span_context("inline-json"):
+        pass
+
+    loguru_logger.complete()
+    lines = _default_log_file(base_log_dir).read_text(encoding="utf-8").splitlines()
+
+    end_line = next(line for line in lines if "span.end" in line)
+
+    assert ' | {"elapsed_ms":' in end_line
+    assert end_line.count("span.end") == 1
 
 
 @pytest.mark.asyncio
