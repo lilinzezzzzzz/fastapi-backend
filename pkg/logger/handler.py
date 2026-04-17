@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 
 import loguru
 
-from pkg.logger.span import get_span_record_extra
+from pkg.logger.span import configure_span_logger, get_span_record_extra
 from pkg.toolkit import context
 from pkg.toolkit.json import orjson_dumps
 from pkg.toolkit.timer import format_iso_datetime
@@ -72,7 +72,7 @@ class LoggerHandler:
         # --- 根据 log_format 确定格式化器 ---
         is_json = self.log_format == LogFormat.JSON
         self.console_format = self._json_formatter if is_json else self._console_formatter
-        self.file_format = self._json_formatter if is_json else self._file_formatter
+        self.file_format = self._json_formatter if is_json else self._text_formatter
         self.colorize = not is_json
 
         # --- 时区处理 ---
@@ -161,6 +161,7 @@ class LoggerHandler:
         应用配置并初始化系统日志。
         注意：setup 不再接收配置参数，而是使用 __init__ 中保存的属性。
         """
+        configure_span_logger(None)
         self._logger.remove()
 
         # 1. 准备基础配置
@@ -169,9 +170,8 @@ class LoggerHandler:
                 "json_content": None,
                 "trace_id": "-",
                 "span_seq": None,
+                "parent_span_seq": None,
                 "span_name": None,
-                "span_type": None,
-                "span_depth": None,
                 "span_path": None,
             },
         }
@@ -210,6 +210,7 @@ class LoggerHandler:
                 format=self.file_format,
             )
 
+        configure_span_logger(self._logger)
         tz_name = self.timezone.key if hasattr(self.timezone, "key") else str(self.timezone)
         self._logger.info(
             f"Logger initialized. Timezone: {tz_name} | Format: {self.log_format} | Rotation: {self.rotation} | Level: {self.level}"
@@ -263,9 +264,9 @@ class LoggerHandler:
             fmt += "\n<cyan>{extra[json_content]}</cyan>"
         return fmt + "\n"
 
-    def _file_formatter(self, record: Any) -> str:
+    def _text_formatter(self, record: Any) -> str:
         """
-        File 文本动态格式化器 (log_format='text' 时使用)
+        TEXT 动态格式化器 (log_format='text' 时使用)
         """
         trace_id = self._escape_format_value(self._get_record_trace_id(record))
         formatted_time = self._format_record_time(record)
@@ -301,9 +302,8 @@ class LoggerHandler:
 
         trace_id = self._get_record_trace_id(record)
         span_seq = extra_data.pop("span_seq", None)
+        parent_span_seq = extra_data.pop("parent_span_seq", None)
         span_name = extra_data.pop("span_name", None)
-        span_type = extra_data.pop("span_type", None)
-        span_depth = extra_data.pop("span_depth", None)
         span_path = extra_data.pop("span_path", None)
         extra_data.pop("trace_id", None)
 
@@ -315,11 +315,10 @@ class LoggerHandler:
             "level": record["level"].name,
             "trace_id": trace_id,
             "span_seq": span_seq,
+            "parent_span_seq": parent_span_seq,
             "span_name": span_name,
-            "span_type": span_type,
-            "span_depth": span_depth,
             "span_path": span_path,
-            "location": f"{record['name']}.{record['function']}:{record['line']}",
+            "location": f"{record["name"]}.{record["function"]}:{record["line"]}",
             "text": "",
             "message": record["message"],
             **extra_data,
@@ -380,10 +379,10 @@ class LoggerHandler:
         if span_seq is None:
             return ""
 
+        parent_span_seq = record["extra"].get("parent_span_seq")
         span_name = cls._escape_format_value(str(record["extra"].get("span_name") or "-"))
-        span_depth = record["extra"].get("span_depth")
         span_path = cls._escape_format_value(str(record["extra"].get("span_path") or "-"))
-        return f" | {span_seq} {span_name} d={span_depth} {span_path}"
+        return f" | {span_seq} p={parent_span_seq if parent_span_seq is not None else '-'} {span_name} {span_path}"
 
     @classmethod
     def _safe_get_trace_id(cls) -> str:
