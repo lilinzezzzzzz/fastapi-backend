@@ -23,7 +23,6 @@ def setup_logging(tmp_path):
     # 创建新的 LoggerHandler 实例
     _test_manager = LoggerHandler(
         base_log_dir=base_log_dir,
-        use_subdir=True,  # 测试中使用子目录
     )
     _test_manager.setup(write_to_file=True, write_to_console=False)
 
@@ -79,70 +78,9 @@ def test_default_logging(setup_logging):
     _test_manager._logger.info(msg)
     loguru_logger.complete()
 
-    # 路径：logs/default/YYYY-MM-DD.log (use_subdir=True)
-    expected = base_log_dir / "default" / f"{get_today_str()}.log"
+    expected = base_log_dir / f"{get_today_str()}.log"
 
     assert expected.exists(), f"默认日志文件未创建: {expected}"
 
     # 验证文本内容
     assert find_text_log(expected, msg), "未在文本日志中找到目标消息"
-
-
-def test_dynamic_logger_creation(setup_logging):
-    """测试动态 Logger 创建 (格式由 LoggerHandler 的 log_format 参数决定)"""
-    base_log_dir = setup_logging
-    dev_id = "device_test_01"
-    msg = "Connect success"
-
-    # 使用测试 manager 的 get_dynamic_logger 方法
-    assert _test_manager is not None
-    dev_logger = _test_manager.get_dynamic_logger(dev_id)
-    dev_logger.info(msg)
-    loguru_logger.complete()
-
-    # 路径：logs/device_test_01/YYYY-MM-DD.log
-    expected = base_log_dir / dev_id / f"{get_today_str()}.log"
-    assert expected.exists(), f"设备日志文件未创建: {expected}"
-
-    # 验证文本内容（默认 log_format="text"）
-    assert find_text_log(expected, msg), "未在日志文件中找到目标消息"
-
-
-def test_create_failure_fallback(setup_logging, monkeypatch):
-    """测试创建目录失败时的降级逻辑"""
-    base_log_dir = setup_logging
-    dev_id = "device_error"
-    msg = "Should fallback to system log"
-
-    # 模拟 mkdir 抛出权限错误
-    # 注意：我们要 Patch 的是 LoggerHandler 内部调用的静态方法 _ensure_dir
-    def mock_ensure_dir(path):
-        # 只针对 device_error 的路径抛错，避免影响 default log 的创建
-        if dev_id in str(path):
-            raise PermissionError("Mock permission denied")
-        # 其他路径正常创建 (比如 default log)
-        if not path.exists():
-            path.mkdir(parents=True, exist_ok=True)
-
-    monkeypatch.setattr(LoggerHandler, "_ensure_dir", mock_ensure_dir)
-
-    # 触发日志
-    assert _test_manager is not None
-    dev_logger = _test_manager.get_dynamic_logger(dev_id)
-    dev_logger.info(msg)
-    loguru_logger.complete()
-
-    # 验证：设备目录不应该存在（因为创建失败）
-    assert not (base_log_dir / dev_id).exists()
-
-    # 验证：日志应该出现在 default 目录
-    default_log = base_log_dir / "default" / f"{get_today_str()}.log"
-    assert default_log.exists()
-
-    # 注意：降级到 default log 后，格式与 Default Logger 一致
-    # 同时 context log_namespace 会变成 "default"
-    assert find_text_log(default_log, msg), "未在降级日志中找到消息"
-
-    # 验证它是作为 "default" 命名空间记录的
-    content = default_log.read_text(encoding="utf-8")
-    assert f"default - {msg}" in content or f"| default - {msg}" in content

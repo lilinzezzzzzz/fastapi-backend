@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pkg.logger.handler import LogFormat, LoggerHandler, RetentionType, RotationType, TimezoneType
+from pkg.logger.span import span_context, with_span
 from pkg.toolkit.types import lazy_proxy
 
 if TYPE_CHECKING:
@@ -55,14 +56,12 @@ def init_logger(
     log_format: LogFormat = LogFormat.TEXT,
     write_to_file: bool = True,
     write_to_console: bool = True,
-    use_subdir: bool = False,
 ) -> "Logger":
     """
     初始化应用层 Logger。
 
     :param level: 日志等级 (e.g., "INFO", "DEBUG")
     :param base_log_dir: 日志存放的根目录
-    :param use_subdir: 是否使用子目录分隔日志，True 则按 log_namespace 创建子目录，False 则所有日志存放在 base_log_dir 下
     :param rotation: 轮转策略 (默认: 每天 00:00, UTC时间)
     :param retention: 保留策略 (默认: 30天)
     :param compression: 压缩格式 (e.g., "zip")
@@ -78,7 +77,6 @@ def init_logger(
     _logger_manager = LoggerHandler(
         level=level,
         base_log_dir=base_log_dir,
-        use_subdir=use_subdir,
         rotation=rotation,
         retention=retention,
         compression=compression,
@@ -114,4 +112,6 @@ __all__ = [
     "get_logger_manager",
     # Logger 实例
     "logger",
+    "span_context",
+    "with_span",
 ]

@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 import loguru
 
+from pkg.logger.span import get_span_record_extra
 from pkg.toolkit import context
 from pkg.toolkit.json import orjson_dumps
 from pkg.toolkit.timer import format_iso_datetime
@@ -33,14 +34,11 @@ class LoggerHandler:
     配置在实例化 (__init__) 时传入，并在 setup() 时生效。
     """
 
-    DEFAULT_LOG_NAMESPACE: str = "default"
-
     def __init__(
         self,
         *,
         level: str = "INFO",
         base_log_dir: Path | None = None,
-        use_subdir: bool = False,
         rotation: RotationType = time(0, 0, 0, tzinfo=UTC),
         retention: RetentionType = timedelta(days=30),
         compression: str | None = None,
@@ -53,7 +51,6 @@ class LoggerHandler:
 
         :param level: 日志等级 (e.g., "INFO", "DEBUG")
         :param base_log_dir: 日志存放的根目录，默认为当前文件父级路径下的 logs 目录
-        :param use_subdir: 是否使用子目录分隔日志，True 则按 log_namespace 创建子目录，False 则所有日志存放在 base_log_dir 下
         :param rotation: 轮转策略 (默认: 每天 00:00, UTC时间)
         :param retention: 保留策略 (默认: 30天)
         :param compression: 压缩格式 (e.g., "zip")
@@ -63,13 +60,10 @@ class LoggerHandler:
         """
 
         self._logger = loguru.logger
-        self._registered_namespaces: dict[str, dict[str, Any]] = {}
-        self._is_initialized = False
 
         # --- 配置属性 ---
         self.level = level
         self.base_log_dir = base_log_dir or _DEFAULT_BASE_LOG_DIR
-        self.use_subdir = use_subdir
         self.retention = retention
         self.compression = compression
         self.enqueue = enqueue
@@ -153,20 +147,14 @@ class LoggerHandler:
             )
         return rotation
 
-    def _get_log_dir(self, log_namespace: str) -> Path:
+    def _get_log_dir(self) -> Path:
         """
-        获取指定命名空间的日志目录。
-
-        Args:
-            log_namespace: 日志命名空间
+        获取默认系统日志目录。
 
         Returns:
             日志目录路径
         """
-        if self.use_subdir:
-            return self.base_log_dir / log_namespace
-        else:
-            return self.base_log_dir
+        return self.base_log_dir
 
     def setup(self, *, write_to_file: bool = True, write_to_console: bool = True) -> "loguru.Logger":
         """
@@ -174,20 +162,24 @@ class LoggerHandler:
         注意：setup 不再接收配置参数，而是使用 __init__ 中保存的属性。
         """
         self._logger.remove()
-        self._registered_namespaces.clear()
 
         # 1. 准备基础配置
         config_params: dict[str, Any] = {
             "extra": {
-                "log_namespace": self.DEFAULT_LOG_NAMESPACE,
                 "json_content": None,
+                "trace_id": "-",
+                "span_seq": None,
+                "span_name": None,
+                "span_type": None,
+                "span_depth": None,
+                "span_path": None,
             },
         }
 
         # 2. 根据时区配置挂载 patcher
         # 注意：patcher 影响日志文件名 {time:YYYY-MM-DD}.log 的时区
         # 保持文件名时间与日志内容时间一致
-        config_params["patcher"] = self._make_timezone_patcher()
+        config_params["patcher"] = self._make_record_patcher()
 
         self._logger.configure(**config_params)
 
@@ -200,12 +192,11 @@ class LoggerHandler:
                 colorize=self.colorize,
                 diagnose=True,
                 format=self.console_format,
-                filter=self._filter_system,
             )
 
         # 4. File 输出 (System Log)
         if write_to_file:
-            log_dir = self._get_log_dir(self.DEFAULT_LOG_NAMESPACE)
+            log_dir = self._get_log_dir()
             self._ensure_dir(log_dir)
             sink_path = log_dir / "{time:YYYY-MM-DD}.log"
 
@@ -217,92 +208,13 @@ class LoggerHandler:
                 compression=self.compression,
                 enqueue=self.enqueue,
                 format=self.file_format,
-                filter=self._filter_system,
             )
-
-            self._registered_namespaces[self.DEFAULT_LOG_NAMESPACE] = {"sink_registered": True}
 
         tz_name = self.timezone.key if hasattr(self.timezone, "key") else str(self.timezone)
         self._logger.info(
             f"Logger initialized. Timezone: {tz_name} | Format: {self.log_format} | Rotation: {self.rotation} | Level: {self.level}"
         )
-        self._is_initialized = True
         return self._logger
-
-    def get_dynamic_logger(
-        self,
-        log_namespace: str,
-        *,
-        write_to_console: bool = False,
-    ) -> "loguru.Logger":
-        """
-        获取动态命名空间的 Logger。
-        使用实例属性 (self.rotation, self.retention, self.log_format 等) 创建新的 Sink。
-
-        :param log_namespace: 日志命名空间标识
-        :param write_to_console: 是否输出到控制台（仅针对该日志命名空间，不会重复输出）
-        """
-        if not self._is_initialized:
-            raise RuntimeError("LoggerHandler is not initialized! Call setup() first.")
-
-        if not log_namespace:
-            raise ValueError(f"log_namespace cannot be empty, value = {log_namespace}")
-
-        # 定义该命名空间专属的过滤器 (闭包)
-        def _specific_filter(record):
-            return record["extra"].get("log_namespace") == log_namespace
-
-        # 获取或初始化配置
-        if log_namespace not in self._registered_namespaces:
-            self._registered_namespaces[log_namespace] = {
-                "write_to_console": False,
-                "sink_registered": False,
-            }
-
-        config = self._registered_namespaces[log_namespace]
-
-        # 1. 检查并添加文件 Sink
-        if not config["sink_registered"]:
-            try:
-                log_dir = self._get_log_dir(log_namespace)
-                self._ensure_dir(log_dir)
-                sink_path = log_dir / "{time:YYYY-MM-DD}.log"
-
-                self._logger.add(
-                    sink=sink_path,
-                    level=self.level,
-                    rotation=self.rotation,
-                    retention=self.retention,
-                    compression=self.compression,
-                    enqueue=self.enqueue,
-                    format=self.file_format,
-                    serialize=False,
-                    filter=_specific_filter,
-                )
-
-                config["sink_registered"] = True
-                self._logger.info(f"System: Registered {self.log_format} sink for log_namespace '{log_namespace}'")
-
-            except Exception as e:
-                self._logger.error(f"System: Failed to register sink for '{log_namespace}'. Error: {e}")
-                return self._logger.bind(log_namespace=self.DEFAULT_LOG_NAMESPACE, original_namespace=log_namespace)
-
-        # 2. 检查并添加控制台 Sink
-        if write_to_console and not config["write_to_console"]:
-            self._logger.add(
-                sink=sys.stderr,
-                format=self.console_format,
-                level=self.level,
-                enqueue=self.enqueue,
-                colorize=self.colorize,
-                diagnose=True,
-                filter=_specific_filter,
-            )
-            config["write_to_console"] = True
-            self._logger.info(f"System: Added console sink for log_namespace '{log_namespace}'")
-
-        # 返回绑定 log_namespace 的 logger
-        return self._logger.bind(log_namespace=log_namespace)
 
     # --- 时间格式化 ---
 
@@ -332,16 +244,16 @@ class LoggerHandler:
 
     def _console_formatter(self, record: Any) -> str:
         """控制台格式化器，仅输出纯文本，不包含 json_content"""
-        # 获取 trace_id 和格式化时间
-        trace_id = self._get_trace_id(record)
+        trace_id = self._escape_format_value(self._get_record_trace_id(record))
         formatted_time = self._format_record_time(record)
+        span_segment = self._build_text_span_segment(record)
 
         fmt = (
             f"<green>{formatted_time}</green> | "
             "<level>{level: <8}</level> | "
             "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
-            f"<magenta>{trace_id}</magenta> | "
-            "<yellow>{extra[log_namespace]}</yellow> - <level>{message}</level>"
+            f"<magenta>{trace_id}</magenta>{span_segment} | "
+            "<level>{message}</level>"
         )
 
         # 检查 json_content 是否存在且不为 None
@@ -355,15 +267,16 @@ class LoggerHandler:
         """
         File 文本动态格式化器 (log_format='text' 时使用)
         """
-        trace_id = self._get_trace_id(record)
+        trace_id = self._escape_format_value(self._get_record_trace_id(record))
         formatted_time = self._format_record_time(record)
+        span_segment = self._build_text_span_segment(record)
 
         fmt = (
             f"{formatted_time} | "
             "{level: <8} | "
             "{name}:{function}:{line} | "
-            f"{trace_id} | "
-            "{extra[log_namespace]} - {message}"
+            f"{trace_id}{span_segment} | "
+            "{message}"
         )
 
         # 检查并追加 json_content
@@ -379,13 +292,19 @@ class LoggerHandler:
 
     def _json_formatter(self, record: Any) -> str:
         """JSON Lines 格式化器 (log_format='json' 时使用)"""
-        trace_id = self._get_trace_id(record)
         formatted_time = self._format_record_time(record)
 
         extra_data = record["extra"].copy()
         json_content = extra_data.pop("json_content", None)
         extra_data.pop("_json_out", None)
-        # trace_id 固定由 context 提供，不接受 extra 覆盖
+        extra_data.pop("_text_json", None)
+
+        trace_id = self._get_record_trace_id(record)
+        span_seq = extra_data.pop("span_seq", None)
+        span_name = extra_data.pop("span_name", None)
+        span_type = extra_data.pop("span_type", None)
+        span_depth = extra_data.pop("span_depth", None)
+        span_path = extra_data.pop("span_path", None)
         extra_data.pop("trace_id", None)
 
         if not isinstance(json_content, (dict, list, str, type(None))):
@@ -395,6 +314,11 @@ class LoggerHandler:
             "time": formatted_time,
             "level": record["level"].name,
             "trace_id": trace_id,
+            "span_seq": span_seq,
+            "span_name": span_name,
+            "span_type": span_type,
+            "span_depth": span_depth,
+            "span_path": span_path,
             "location": f"{record['name']}.{record['function']}:{record['line']}",
             "text": "",
             "message": record["message"],
@@ -409,41 +333,62 @@ class LoggerHandler:
         return "{extra[_json_out]}\n\n"
 
     # --- 辅助方法 ---
-    def _make_timezone_patcher(self):
+    def _make_record_patcher(self):
         """
-        创建时区补丁函数。
+        创建日志记录补丁函数。
 
-        此补丁将 record["time"] 转换为配置的目标时区。
+        此补丁在日志入队前执行：
+        1. 将 record["time"] 转换为配置的目标时区
+        2. 注入标准 trace_id 字段
+        3. 注入当前活跃 span 的字段
+
         影响：
         1. 日志文件名 {time:YYYY-MM-DD}.log 的时区
         2. 保持文件名时间与日志内容时间一致
 
         Returns:
-            时区补丁函数
+            日志记录补丁函数
         """
         target_tz = self.timezone
 
         def patcher(record: Any):
             record["time"] = record["time"].astimezone(target_tz)
+            record["extra"]["trace_id"] = self._safe_get_trace_id()
+            record["extra"].update(get_span_record_extra())
 
         return patcher
-
-    @staticmethod
-    def _filter_system(record: Any) -> bool:
-        return record["extra"].get("log_namespace") == LoggerHandler.DEFAULT_LOG_NAMESPACE
 
     @staticmethod
     def _ensure_dir(path: Path):
         """确保目录存在，如果父目录不存在则自动创建"""
         path.mkdir(parents=True, exist_ok=True)
 
+    @staticmethod
+    def _escape_format_value(value: str) -> str:
+        return value.replace("{", "{{").replace("}", "}}")
+
     @classmethod
-    def _get_trace_id(cls, _record: Any) -> str:
+    def _get_record_trace_id(cls, record: Any) -> str:
+        trace_id = record["extra"].get("trace_id")
+        if isinstance(trace_id, str) and trace_id:
+            return trace_id
+        return "-"
+
+    @classmethod
+    def _build_text_span_segment(cls, record: Any) -> str:
+        span_seq = record["extra"].get("span_seq")
+        if span_seq is None:
+            return ""
+
+        span_name = cls._escape_format_value(str(record["extra"].get("span_name") or "-"))
+        span_depth = record["extra"].get("span_depth")
+        span_path = cls._escape_format_value(str(record["extra"].get("span_path") or "-"))
+        return f" | {span_seq} {span_name} d={span_depth} {span_path}"
+
+    @classmethod
+    def _safe_get_trace_id(cls) -> str:
         """
         获取 trace_id，仅从 context.get_trace_id() 读取，未设置时返回 "-"
-
-        Args:
-            record: 日志记录对象
 
         Returns:
             trace_id 字符串
