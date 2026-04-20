@@ -84,3 +84,72 @@ def test_default_logging(setup_logging):
 
     # 验证文本内容
     assert find_text_log(expected, msg), "未在文本日志中找到目标消息"
+
+
+def test_text_formatter_only_shows_current_span():
+    handler = LoggerHandler()
+
+    record = {
+        "time": datetime(2026, 4, 20, 2, 51, 41, 837000, tzinfo=UTC),
+        "level": type("Level", (), {"name": "ERROR"})(),
+        "name": "pkg.logger.span",
+        "function": "__aexit__",
+        "line": 211,
+        "message": "span.error",
+        "extra": {
+            "trace_id": "019da8cd058b76ed8a4a52141c1c6b38",
+            "span_seq": 2,
+            "span_name": "middleware.auth.token",
+            "span_path": "1:middleware.request|2:middleware.auth.token",
+            "json_content": {
+                "elapsed_ms": 0.554,
+                "error_type": "AppException",
+            },
+        },
+    }
+
+    formatted = handler._text_formatter(record)
+
+    assert formatted == (
+        "{extra[_formatted_time]} | "
+        "{level: <8} | "
+        "{name}:{function}:{line} | "
+        "{extra[_formatted_trace_id]}{extra[_formatted_span_segment]} | "
+        "{message} | {extra[_text_json]}\n"
+    )
+    assert record["extra"]["_formatted_time"] == "2026-04-20T02:51:41.837Z"
+    assert record["extra"]["_formatted_trace_id"] == "019da8cd058b76ed8a4a52141c1c6b38"
+    assert record["extra"]["_formatted_span_segment"] == " | 2:middleware.auth.token"
+    assert "1:middleware.request|2:middleware.auth.token" not in record["extra"]["_formatted_span_segment"]
+
+
+def test_text_formatter_keeps_braces_in_dynamic_values():
+    handler = LoggerHandler()
+
+    record = {
+        "time": datetime(2026, 4, 20, 2, 51, 41, 837000, tzinfo=UTC),
+        "level": type("Level", (), {"name": "INFO"})(),
+        "name": "pkg.logger.span",
+        "function": "__aenter__",
+        "line": 181,
+        "message": "span.start",
+        "extra": {
+            "trace_id": "trace-{raw}",
+            "span_seq": 2,
+            "span_name": "span-{raw}",
+            "span_path": "1:outer|2:span-{raw}",
+            "json_content": None,
+        },
+    }
+
+    formatted = handler._text_formatter(record)
+
+    assert formatted == (
+        "{extra[_formatted_time]} | "
+        "{level: <8} | "
+        "{name}:{function}:{line} | "
+        "{extra[_formatted_trace_id]}{extra[_formatted_span_segment]} | "
+        "{message}\n"
+    )
+    assert record["extra"]["_formatted_trace_id"] == "trace-{raw}"
+    assert record["extra"]["_formatted_span_segment"] == " | 2:span-{raw}"

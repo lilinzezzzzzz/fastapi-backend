@@ -245,15 +245,13 @@ class LoggerHandler:
 
     def _console_formatter(self, record: Any) -> str:
         """控制台格式化器，仅输出纯文本，不包含 json_content"""
-        trace_id = self._escape_format_value(self._get_record_trace_id(record))
-        formatted_time = self._format_record_time(record)
-        span_segment = self._build_text_span_segment(record)
+        self._populate_text_format_extra(record)
 
         fmt = (
-            f"<green>{formatted_time}</green> | "
+            "<green>{extra[_formatted_time]}</green> | "
             "<level>{level: <8}</level> | "
             "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
-            f"<magenta>{trace_id}</magenta>{span_segment} | "
+            "<magenta>{extra[_formatted_trace_id]}</magenta>{extra[_formatted_span_segment]} | "
             "<level>{message}</level>"
         )
 
@@ -269,15 +267,13 @@ class LoggerHandler:
         """
         TEXT 动态格式化器 (log_format='text' 时使用)
         """
-        trace_id = self._escape_format_value(self._get_record_trace_id(record))
-        formatted_time = self._format_record_time(record)
-        span_segment = self._build_text_span_segment(record)
+        self._populate_text_format_extra(record)
 
         fmt = (
-            f"{formatted_time} | "
+            "{extra[_formatted_time]} | "
             "{level: <8} | "
             "{name}:{function}:{line} | "
-            f"{trace_id}{span_segment} | "
+            "{extra[_formatted_trace_id]}{extra[_formatted_span_segment]} | "
             "{message}"
         )
 
@@ -300,6 +296,9 @@ class LoggerHandler:
         extra_data.pop("_console_json", None)
         extra_data.pop("_json_out", None)
         extra_data.pop("_text_json", None)
+        extra_data.pop("_formatted_time", None)
+        extra_data.pop("_formatted_trace_id", None)
+        extra_data.pop("_formatted_span_segment", None)
 
         trace_id = self._get_record_trace_id(record)
         span_seq = extra_data.pop("span_seq", None)
@@ -363,10 +362,6 @@ class LoggerHandler:
         """确保目录存在，如果父目录不存在则自动创建"""
         path.mkdir(parents=True, exist_ok=True)
 
-    @staticmethod
-    def _escape_format_value(value: str) -> str:
-        return value.replace("{", "{{").replace("}", "}}")
-
     @classmethod
     def _get_record_trace_id(cls, record: Any) -> str:
         trace_id = record["extra"].get("trace_id")
@@ -374,14 +369,19 @@ class LoggerHandler:
             return trace_id
         return "-"
 
+    def _populate_text_format_extra(self, record: Any) -> None:
+        record["extra"]["_formatted_time"] = self._format_record_time(record)
+        record["extra"]["_formatted_trace_id"] = self._get_record_trace_id(record)
+        record["extra"]["_formatted_span_segment"] = self._build_text_span_segment(record)
+
     @classmethod
     def _build_text_span_segment(cls, record: Any) -> str:
         span_seq = record["extra"].get("span_seq")
         if span_seq is None:
             return ""
 
-        span_path = cls._escape_format_value(str(record["extra"].get("span_path") or "-"))
-        return f" | {span_path}"
+        span_name = str(record["extra"].get("span_name") or "-")
+        return f" | {span_seq}:{span_name}"
 
     @classmethod
     def _safe_get_trace_id(cls) -> str:
