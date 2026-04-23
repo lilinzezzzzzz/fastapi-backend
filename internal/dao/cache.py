@@ -64,4 +64,12 @@ class CacheDao:
         return await self._redis.set_dict(key, value, ex=ex)
 
 
-cache_dao = CacheDao(redis_cli=redis_client)
+# 全局单例（懒加载）
+_cache_dao: CacheDao | None = None
+
+
+def new_cache_dao() -> CacheDao:
+    global _cache_dao
+    if _cache_dao is None:
+        _cache_dao = CacheDao(redis_cli=redis_client)
+    return _cache_dao

@@ -21,10 +21,15 @@ class UserDao(BaseDao[User]):
         return user is not None
 
 
-# 单例模式 (Singleton)
-# 在简单的应用中，直接实例化一个全局 dao 是没问题的
-# 因为 session_provider 是一个工厂函数，不会在 import 时建立连接
-user_dao = UserDao(
-    session_provider=get_session,
-    read_session_provider=get_read_session,
-)
+# 全局单例（懒加载）
+_user_dao: UserDao | None = None
+
+
+def new_user_dao() -> UserDao:
+    global _user_dao
+    if _user_dao is None:
+        _user_dao = UserDao(
+            session_provider=get_session,
+            read_session_provider=get_read_session,
+        )
+    return _user_dao

@@ -1,7 +1,7 @@
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from internal.core import AppException, errors
-from internal.services.auth import verify_token
+from internal.services.auth import new_auth_service
 from internal.utils.signature import signature_auth_handler
 from pkg.logger import logger, span_context
 from pkg.toolkit import context
@@ -133,7 +133,7 @@ class ASGIAuthMiddleware:
             raise AppException(errors.Unauthorized, message="invalid or missing token")
 
         logger.debug(f"Verifying token: {token[:10]}...")
-        auth_metadata = await verify_token(token)
+        auth_metadata = await new_auth_service().verify_token(token)
 
         user_id = auth_metadata.get("id")
         if not isinstance(user_id, int):

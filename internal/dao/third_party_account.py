@@ -36,8 +36,15 @@ class ThirdPartyAccountDao(BaseDao[ThirdPartyAccount]):
             await self.soft_delete(account)
 
 
-# 单例模式
-third_party_account_dao = ThirdPartyAccountDao(
-    session_provider=get_session,
-    read_session_provider=get_read_session,
-)
+# 全局单例（懒加载）
+_third_party_account_dao: ThirdPartyAccountDao | None = None
+
+
+def new_third_party_account_dao() -> ThirdPartyAccountDao:
+    global _third_party_account_dao
+    if _third_party_account_dao is None:
+        _third_party_account_dao = ThirdPartyAccountDao(
+            session_provider=get_session,
+            read_session_provider=get_read_session,
+        )
+    return _third_party_account_dao

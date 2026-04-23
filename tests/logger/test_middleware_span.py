@@ -145,10 +145,11 @@ def middleware_modules(monkeypatch: pytest.MonkeyPatch) -> Generator[tuple[Modul
     )
     previous_modules = {name: sys.modules.get(name) for name in module_names}
 
-    async def unexpected_verify_token(_token: str) -> dict[str, object]:
-        raise AssertionError("verify_token should be patched in this test")
+    class FakeAuthService:
+        async def verify_token(self, _token: str) -> dict[str, object]:
+            raise AssertionError("verify_token should be patched in this test")
 
-    fake_auth_service.verify_token = unexpected_verify_token
+    fake_auth_service.new_auth_service = lambda: FakeAuthService()
     monkeypatch.setitem(sys.modules, "internal.services.auth", fake_auth_service)
 
     for module_name in module_names:
@@ -225,7 +226,9 @@ async def test_middlewares_create_request_root_and_auth_child_spans(
     if auth_span_name == "middleware.auth.internal":
         monkeypatch.setattr(auth_module, "signature_auth_handler", SimpleNamespace(verify=MagicMock(return_value=True)))
     elif auth_span_name == "middleware.auth.token":
-        monkeypatch.setattr(auth_module, "verify_token", AsyncMock(return_value={"id": 123}))
+        fake_svc = AsyncMock()
+        fake_svc.verify_token = AsyncMock(return_value={"id": 123})
+        monkeypatch.setattr(auth_module, "new_auth_service", lambda: fake_svc)
 
     response = await middleware_client.get(path, headers=headers)
 

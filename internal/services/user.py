@@ -1,14 +1,14 @@
-from internal.dao.third_party_account import third_party_account_dao
-from internal.dao.user import UserDao, user_dao
+from internal.dao.third_party_account import ThirdPartyAccountDao, new_third_party_account_dao
+from internal.dao.user import UserDao, new_user_dao
 from internal.models.user import User
 from internal.utils.password import PasswordHandler
 from pkg.third_party_auth.base import ThirdPartyUserInfo
 
 
 class UserService:
-    def __init__(self, dao: UserDao):
+    def __init__(self, dao: UserDao, third_party_dao: ThirdPartyAccountDao):
         self._user_dao = dao
-        self._third_party_dao = third_party_account_dao
+        self._third_party_dao = third_party_dao
 
     @staticmethod
     async def hello_world():
@@ -162,11 +162,16 @@ class UserService:
             )
 
 
-async def new_user_service() -> UserService:
-    """
-    依赖注入工厂函数，创建 UserService 实例。
+# 全局单例（懒加载）
+_user_service: UserService | None = None
 
-    注意：每次调用都会创建新实例，由 FastAPI 管理生命周期（默认每个请求一个实例）。
-    DAO 使用全局单例 user_dao。
-    """
-    return UserService(user_dao)
+
+def new_user_service() -> UserService:
+    """依赖注入：获取 UserService 单例"""
+    global _user_service
+    if _user_service is None:
+        _user_service = UserService(
+            dao=new_user_dao(),
+            third_party_dao=new_third_party_account_dao(),
+        )
+    return _user_service
