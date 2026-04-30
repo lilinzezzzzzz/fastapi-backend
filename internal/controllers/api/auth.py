@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Header
 from internal.config import settings
 from internal.core import AppException, errors
 from internal.dao.cache import new_cache_dao
+from internal.schemas import BaseResponse
 from internal.schemas.user import (
     UserDetailSchema,
     UserLoginReqSchema,
@@ -49,7 +50,7 @@ def generate_token() -> str:
 UserServiceDep = Annotated[UserService, Depends(new_user_service)]
 
 
-@router.post("/login", response_model=UserLoginRespSchema, summary="用户登录")
+@router.post("/login", response_model=BaseResponse[UserLoginRespSchema], summary="用户登录")
 async def login(
     req: UserLoginReqSchema,
     user_service: UserServiceDep,
@@ -134,7 +135,7 @@ async def logout(authorization: str | None = Header(None)):
     return {"message": "登出成功"}
 
 
-@router.post("/register", response_model=UserLoginRespSchema, summary="用户注册")
+@router.post("/register", response_model=BaseResponse[UserLoginRespSchema], summary="用户注册")
 async def register(
     req: UserRegisterReqSchema,
     user_service: UserServiceDep,
@@ -217,7 +218,7 @@ async def get_current_user():
     return UserDetailSchema(id=user_id, name="unknown", phone="")
 
 
-@router.post("/wechat/login", response_model=UserLoginRespSchema, summary="微信登录")
+@router.post("/wechat/login", response_model=BaseResponse[UserLoginRespSchema], summary="微信登录")
 async def wechat_login(
     req: WeChatLoginReqSchema,
     user_service: UserServiceDep,

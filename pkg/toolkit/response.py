@@ -212,7 +212,6 @@ def wrap_sse_data(content: str | dict) -> str:
     return f"data: {content}\n\n"
 
 
-
 '''
 使用示例
 class GlobalCodes(BaseCodes):
