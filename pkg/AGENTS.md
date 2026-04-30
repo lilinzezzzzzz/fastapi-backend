@@ -24,3 +24,15 @@
 
 - 优先运行被修改包对应的最小测试目录。
 - 涉及多个使用方时补跨层测试或至少运行相关调用方测试。
+
+## 子目录 AGENTS.md 索引
+
+- `pkg/chars_matcher/AGENTS.md`：中文候选字拼音 / 字形匹配、数据文件约定。
+- `pkg/crypter/AGENTS.md`：加密算法抽象和密文兼容性。
+- `pkg/database/AGENTS.md`：ORM 基类、builder、session provider。
+- `pkg/decorators/AGENTS.md`：通用装饰器，零业务依赖。
+- `pkg/logger/AGENTS.md`：Loguru 封装、span 上下文、延迟初始化协议。
+- `pkg/oss/AGENTS.md`：对象存储统一契约、后端注册。
+- `pkg/third_party_auth/AGENTS.md`：第三方登录策略 + 工厂扩展。
+- `pkg/toolkit/AGENTS.md`：细粒度通用工具定位、兼容性和禁忌。
+- `pkg/vectors/AGENTS.md`：向量检索抽象、repository、backend。
