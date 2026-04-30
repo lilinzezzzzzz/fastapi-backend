@@ -1,8 +1,7 @@
-"""数据访问层 (Data Access Object)"""
+"""数据访问层 (Data Access Object)
 
-from internal.dao.cache import CacheDao, new_cache_dao
+DAO 层只放 ORM 相关的持久化数据访问。
+Redis 缓存访问见 `internal/cache/`。
+"""
 
-__all__ = [
-    "CacheDao",
-    "new_cache_dao",
-]
+__all__: list[str] = []

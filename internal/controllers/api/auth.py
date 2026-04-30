@@ -6,9 +6,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header
 
+from internal.cache.auth import new_auth_cache
 from internal.config import settings
 from internal.core import AppException, errors
-from internal.dao.cache import new_cache_dao
 from internal.schemas import BaseResponse
 from internal.schemas.user import (
     UserDetailSchema,
@@ -22,7 +22,7 @@ from pkg.logger import logger
 from pkg.third_party_auth import WeChatAuthStrategy, WeChatConfig
 from pkg.toolkit.context import get_user_id
 
-_cache_dao = new_cache_dao()
+_auth_cache = new_auth_cache()
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -83,12 +83,8 @@ async def login(
         "created_at": int(datetime.now(UTC).timestamp()),
     }
 
-    # 存储 token 到 Redis (key: token, value: user_metadata)
-    await _cache_dao.set_auth_user_metadata(token, user_metadata, ex=TOKEN_EXPIRE_MINUTES * 60)
-
-    # 将 token 添加到用户的 token 列表中 (用于登出时校验和批量管理)
-    token_list_key = _cache_dao.make_auth_user_token_list_key(user.id)
-    await _cache_dao.push_to_list(token_list_key, token)
+    # 存储 token 到 Redis 并加入用户 token 列表
+    await _auth_cache.save_user_session(user.id, token, user_metadata, ex=TOKEN_EXPIRE_MINUTES * 60)
 
     logger.info(f"User {user.id} logged in successfully, token: {token[:10]}...")
 
@@ -120,14 +116,10 @@ async def logout(authorization: str | None = Header(None)):
     if not user_id:
         raise AppException(errors.Unauthorized, message="无效的用户上下文")
 
-    # 从 Redis 删除 token
-    token_key = _cache_dao.make_auth_token_key(token)
-    deleted_count = await _cache_dao.delete_key(token_key)
+    # 撤销会话：删除 metadata 并从 token 列表中移除
+    deleted_count = await _auth_cache.revoke_user_session(user_id, token)
 
     if deleted_count > 0:
-        # 从用户的 token 列表中移除该 token
-        token_list_key = _cache_dao.make_auth_user_token_list_key(user_id)
-        await _cache_dao.remove_from_list(token_list_key, token)
         logger.info(f"User {user_id} logged out successfully")
     else:
         logger.warning(f"Logout failed: token not found, user_id: {user_id}")
@@ -167,13 +159,8 @@ async def register(
             "created_at": int(datetime.now(UTC).timestamp()),
         }
 
-        # 存储 token 到 Redis
-        token_key = _cache_dao.make_auth_token_key(token)
-        await _cache_dao.set_dict(token_key, user_metadata, ex=TOKEN_EXPIRE_MINUTES * 60)
-
-        # 将 token 添加到用户的 token 列表中
-        token_list_key = _cache_dao.make_auth_user_token_list_key(user.id)
-        await _cache_dao.push_to_list(token_list_key, token)
+        # 存储 token 到 Redis 并加入用户 token 列表
+        await _auth_cache.save_user_session(user.id, token, user_metadata, ex=TOKEN_EXPIRE_MINUTES * 60)
 
         logger.info(f"User {user.id} registered successfully, token: {token[:10]}...")
 
@@ -271,17 +258,13 @@ async def wechat_login(
             "created_at": int(datetime.now(UTC).timestamp()),
         }
 
-        # 5. 存储 token 到 Redis
-        token_key = _cache_dao.make_auth_token_key(token)
-        await _cache_dao.set_dict(
-            token_key,
+        # 5. 存储 token 到 Redis 并加入用户 token 列表
+        await _auth_cache.save_user_session(
+            user.id,
+            token,
             user_metadata,
             ex=TOKEN_EXPIRE_MINUTES * 60,
         )
-
-        # 将 token 添加到用户的 token 列表中
-        token_list_key = _cache_dao.make_auth_user_token_list_key(user.id)
-        await _cache_dao.push_to_list(token_list_key, token)
 
         logger.info(f"WeChat user {user.id} logged in successfully, openid: {openid}")
 

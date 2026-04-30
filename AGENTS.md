@@ -32,7 +32,8 @@
 - `internal/middlewares/`：认证、请求记录等 ASGI 中间件。
 - `internal/infra/`：数据库、Redis 等基础设施连接。
 - `internal/services/`：业务逻辑。
-- `internal/dao/`：数据访问层。
+- `internal/dao/`：ORM 数据访问层。
+- `internal/cache/`：业务缓存层（按业务域组织的 Redis 访问）。
 - `internal/models/`：SQLAlchemy ORM 模型。
 - `internal/schemas/`：请求和响应 Schema。
 - `internal/tasks/`：Celery 任务与调度配置。
@@ -135,7 +136,8 @@ Controller / Service / DAO / Schema 分层细则见各子目录 `AGENTS.md`：
 - `pkg/database/AGENTS.md`：ORM 基类、builder、session provider。
 - `internal/infra/AGENTS.md`：连接生命周期和 provider。
 - `internal/models/AGENTS.md`：ORM 模型和表结构约束。
-- `internal/dao/AGENTS.md`：DAO 实现、查询、缓存访问。
+- `internal/dao/AGENTS.md`：ORM DAO 实现、查询 builder。
+- `internal/cache/AGENTS.md`：业务缓存封装、key 约定、TTL 策略。
 
 跨层硬约束：
 
@@ -144,7 +146,7 @@ Controller / Service / DAO / Schema 分层细则见各子目录 `AGENTS.md`：
 
 ## Redis 和 Celery
 
-- 缓存访问细则见 `internal/dao/AGENTS.md`（通过 `internal/dao/cache.py` 或已有 toolkit 封装）。
+- 业务缓存访问见 `internal/cache/AGENTS.md`（依照业务域划分，如 `internal/cache/auth.py`）。
 - Celery 任务、队列、定时调度细则见 `internal/tasks/AGENTS.md`。
 - Redis / DB 连接生命周期见 `internal/infra/AGENTS.md`。
 

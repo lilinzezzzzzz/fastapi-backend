@@ -1,11 +1,9 @@
 """Redis 基础设施模块
 
-注意: CacheDao 和 new_cache_dao 已移动到 internal/dao/cache.py
-此处重新导出是为了向后兼容，新代码请使用: from internal.dao import new_cache_dao
+只负责连接生命周期与 client 实例。
+业务缓存访问见 `internal/cache/`。
 """
 
-# 向后兼容：从 dao 层重新导出
-from internal.dao.cache import CacheDao, new_cache_dao  # noqa: PLC0414
 from internal.infra.redis.connection import (
     close_async_redis,
     get_redis,
@@ -15,13 +13,9 @@ from internal.infra.redis.connection import (
 )
 
 __all__ = [
-    # 连接管理
     "redis_client",
     "init_async_redis",
     "close_async_redis",
     "reset_async_redis",
     "get_redis",
-    # 数据访问 (向后兼容，建议从 internal.dao 导入)
-    "CacheDao",
-    "new_cache_dao",
 ]

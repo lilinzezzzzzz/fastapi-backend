@@ -121,10 +121,10 @@ def warmup_cache(self):
     """
 
     async def _warmup():
-        # TODO: 直接操作 cache_dao 预热缓存
-        # from internal.dao.cache import new_cache_dao
-        # _cache_dao = new_cache_dao()
-        # await _cache_dao.set_dict("warmup_time", {"time": datetime.now(UTC).isoformat()})
+        # TODO: 直接操作业务缓存预热
+        # from internal.cache.auth import new_auth_cache
+        # _auth_cache = new_auth_cache()
+        # await _auth_cache.set_user_metadata("warmup_time", {"time": datetime.now(UTC).isoformat()})
         logger.info("Cache warmup completed")
         return {"status": "warmed"}
 

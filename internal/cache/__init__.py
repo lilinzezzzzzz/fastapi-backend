@@ -1,0 +1,12 @@
+"""业务缓存层
+
+按业务域组织 Redis 缓存访问。每个业务领域独立一个模块：
+- auth: 用户认证 token、会话元数据
+"""
+
+from internal.cache.auth import AuthCache, new_auth_cache
+
+__all__ = [
+    "AuthCache",
+    "new_auth_cache",
+]
