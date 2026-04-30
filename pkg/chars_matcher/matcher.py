@@ -1,316 +1,283 @@
-"""根据拼音查找中文候选字。"""
+"""chars matcher 对外组合入口。
+
+模块概述
+=========
+本模块提供统一的汉字候选匹配 API，组合了拼音匹配和字形匹配两种策略。
+
+支持的匹配模式
+-------------
+1. **拼音匹配** (match_chars_by_pinyin)
+   - 输入法风格模糊匹配
+   - 支持声母/韵母模糊、前缀匹配
+   - 适用于用户知道拼音但可能输入不精确的场景
+
+2. **混合匹配** (match_chars_by_mix)
+   - 先拼音匹配产生候选池
+   - 对候选按字形相似度排序，取 top-N 前置
+   - 其余候选保持拼音原序
+   - 适用于 ASR 姓名场景
+
+使用方式
+---------
+使用默认单例::
+
+    from pkg.chars_matcher import default_chars_matcher
+    candidates = default_chars_matcher.match_chars_by_mix("李", pinyin="li")
+"""
 
 from __future__ import annotations
 
-import json
-import re
-from dataclasses import dataclass
-from functools import cached_property
-from pathlib import Path
-from typing import Literal
+import anyio
 
-from wordfreq import zipf_frequency
+from pkg.chars_matcher.pinyin_chars_matcher import PinyinCharsMatcher
+from pkg.chars_matcher.shape_chars_matcher import ShapeCharsMatcher
+from pkg.chars_matcher.types import CharMatchType
+from pkg.chars_matcher.validation import is_han_text, normalize_single_han_char
 
-type PinyinCharMapping = dict[str, list[str]]
-type CharMatchType = Literal["char", "surname"]
-type MatchType = Literal["exact", "fuzzy_exact", "prefix"]
-
-
-@dataclass(frozen=True)
-class _FuzzyVariant:
-    token: str
-    fuzzy_edits: int
-
-
-@dataclass(frozen=True)
-class _MatchedPinyinKey:
-    key: str
-    match_type: MatchType
-    fuzzy_edits: int
-    prefix_extra_chars: int = 0
-
-
-@dataclass(frozen=True)
-class _RankedCandidate:
-    char: str
-    score: float
-    first_seen: int
+_SHAPE_BOOST_TOP_N = 3
 
 
 class CharsMatcher:
-    """按拼音匹配普通汉字或姓氏候选字，并对候选结果进行全局排序。"""
+    """组合字形与拼音 matcher，对外暴露统一 API。
 
-    _PINYIN_SPLIT_PATTERN = re.compile(r"[\s,，;；/|]+")
-    _NON_ALPHA_PATTERN = re.compile(r"[^a-z]")
-    _DEFAULT_CHARS_DIR = Path(__file__).resolve().parent / "chars"
+    该类将拼音匹配器和字形匹配器组合在一起，提供统一的接口。
+    支持单独使用拼音或字形匹配，也支持混合匹配。
 
-    # 输入法风格的模糊音映射表
-    # 声母模糊：z/zh, c/ch, s/sh, l/n, f/h, r/l
-    # 韵母模糊：an/ang, en/eng, in/ing, ian/iang, uan/uang
-    _FUZZY_INITIALS: dict[str, list[str]] = {
-        "z": ["zh"],
-        "zh": ["z"],
-        "c": ["ch"],
-        "ch": ["c"],
-        "s": ["sh"],
-        "sh": ["s"],
-        "l": ["n", "r"],
-        "n": ["l"],
-        "r": ["l"],
-        "f": ["h"],
-        "h": ["f"],
-    }
-    _FUZZY_FINALS: dict[str, list[str]] = {
-        "an": ["ang"],
-        "ang": ["an"],
-        "en": ["eng"],
-        "eng": ["en"],
-        "in": ["ing"],
-        "ing": ["in"],
-        "ian": ["iang"],
-        "iang": ["ian"],
-        "uan": ["uang"],
-        "uang": ["uan"],
-    }
+    Args:
+        pinyin_chars_matcher: 自定义拼音匹配器实例,默认使用标准配置
+        shape_chars_matcher: 自定义字形匹配器实例，默认使用标准配置
 
-    _MATCH_TYPE_SCORES: dict[MatchType, float] = {
-        "exact": 24.0,
-        "fuzzy_exact": 12.0,
-        "prefix": 0.0,
-    }
-    _CHAR_FREQUENCY_WEIGHT = 12.0
-    _FUZZY_EDIT_PENALTY = 4.0
-    _PREFIX_EXTRA_CHAR_PENALTY = 2.0
+    Example:
+        >>> matcher = CharsMatcher()
+        >>> matcher.match_chars_by_pinyin("li")
+        ['李', '理', '里', ...]
+        >>> matcher.match_chars_by_mix("李", pinyin="li")
+        ['李', '季', '杏', '理', ...]
+    """
 
-    def __init__(self, *, chars_dir: Path | None = None) -> None:
-        self._chars_dir = chars_dir or self._DEFAULT_CHARS_DIR
-        self._char_frequency_cache: dict[str, float] = {}
-
-    @cached_property
-    def _char_mapping(self) -> PinyinCharMapping:
-        return self._load_char_mapping("chars.json")
-
-    @cached_property
-    def _surname_mapping(self) -> PinyinCharMapping:
-        return self._load_char_mapping("surname_chars.json")
-
-    def _load_char_mapping(self, file_name: str) -> PinyinCharMapping:
-        data = json.loads((self._chars_dir / file_name).read_text(encoding="utf-8"))
-        if not isinstance(data, dict):
-            raise ValueError(f"{file_name} 内容格式无效，期望 dict[str, list[str]]")
-
-        normalized: PinyinCharMapping = {}
-        for key, value in data.items():
-            if not isinstance(key, str) or not isinstance(value, list):
-                raise ValueError(f"{file_name} 内容格式无效，期望 dict[str, list[str]]")
-            normalized[key] = [item for item in value if isinstance(item, str)]
-        return normalized
-
-    @classmethod
-    def _normalize_pinyin_token(cls, token: str) -> str:
-        """规范化单个拼音片段，生成后续匹配使用的查询 key。
-
-        处理规则:
-            1. 去除首尾空白。
-            2. 统一转为小写。
-            3. 删除所有非 a-z 字符，因此数字、分隔符、标点会被移除。
-
-        注意:
-            这里做的是字符级清洗，不负责带音调拼音或特殊字符的音译转换。
-            例如 ``ni4`` 会变成 ``ni``，但 ``nǐ`` 会变成 ``n``，``lü`` 会变成 ``l``。
-        """
-        return cls._NON_ALPHA_PATTERN.sub("", token.strip().lower())
-
-    @classmethod
-    def _split_pinyin_query(cls, pinyin: str) -> list[str]:
-        """将用户输入拆分为规范化拼音 token 列表，供后续逐个匹配。"""
-        if not pinyin.strip():
-            return []
-
-        return [
-            normalized
-            for normalized in (
-                cls._normalize_pinyin_token(part) for part in cls._PINYIN_SPLIT_PATTERN.split(pinyin.strip())
-            )
-            if normalized
-        ]
-
-    @classmethod
-    def _generate_fuzzy_variants(cls, token: str) -> list[_FuzzyVariant]:
-        """生成拼音的模糊音变体，并记录变体与原始 token 的编辑距离。"""
-        variants: dict[str, int] = {token: 0}
-
-        initial = ""
-        final = token
-        if token.startswith(("zh", "ch", "sh")):
-            initial = token[:2]
-            final = token[2:]
-        elif token and token[0] in "bpmfdtnlgkhjqxrzcsyw":
-            initial = token[0]
-            final = token[1:]
-
-        initial_variants: list[tuple[str, int]] = [(initial, 0)]
-        if initial in cls._FUZZY_INITIALS:
-            initial_variants.extend((candidate, 1) for candidate in cls._FUZZY_INITIALS[initial])
-
-        final_variants: list[tuple[str, int]] = [(final, 0)]
-        for fuzzy_final, replacements in cls._FUZZY_FINALS.items():
-            if final.endswith(fuzzy_final):
-                prefix = final[: -len(fuzzy_final)]
-                final_variants.extend((prefix + replacement, 1) for replacement in replacements)
-
-        for init, init_edits in initial_variants:
-            for fin, final_edits in final_variants:
-                variant = init + fin
-                edits = init_edits + final_edits
-                if variant and edits < variants.get(variant, edits + 1):
-                    variants[variant] = edits
-
-        return [
-            _FuzzyVariant(token=variant_token, fuzzy_edits=fuzzy_edits)
-            for variant_token, fuzzy_edits in variants.items()
-        ]
-
-    def _char_frequency_score(self, char: str) -> float:
-        """返回候选汉字的中文通用语料频率分数。"""
-        cached_score = self._char_frequency_cache.get(char)
-        if cached_score is not None:
-            return cached_score
-
-        score = zipf_frequency(char, "zh")
-        self._char_frequency_cache[char] = score
-        return score
-
-    def _score_candidate(self, *, char: str, matched_key: _MatchedPinyinKey) -> float:
-        """综合匹配类型与汉字频率，为单个候选字打分。"""
-        return (
-            self._MATCH_TYPE_SCORES[matched_key.match_type]
-            + (self._char_frequency_score(char) * self._CHAR_FREQUENCY_WEIGHT)
-            - (matched_key.fuzzy_edits * self._FUZZY_EDIT_PENALTY)
-            - (matched_key.prefix_extra_chars * self._PREFIX_EXTRA_CHAR_PENALTY)
-        )
-
-    def _match_pinyin_keys(
+    def __init__(
         self,
-        token: str,
-        mapping: PinyinCharMapping,
         *,
-        allow_prefix_after_exact: bool = False,
-    ) -> list[_MatchedPinyinKey]:
-        """输入法风格的模糊拼音匹配。"""
-        matched_keys: list[_MatchedPinyinKey] = []
-        seen: set[str] = set()
+        pinyin_chars_matcher: PinyinCharsMatcher | None = None,
+        shape_chars_matcher: ShapeCharsMatcher | None = None,
+    ) -> None:
+        self._pinyin_chars_matcher = pinyin_chars_matcher or PinyinCharsMatcher()
+        self._shape_chars_matcher = shape_chars_matcher or ShapeCharsMatcher()
 
-        def add(match: _MatchedPinyinKey) -> None:
-            if match.key not in seen:
-                matched_keys.append(match)
-                seen.add(match.key)
-
-        if token in mapping:
-            add(_MatchedPinyinKey(key=token, match_type="exact", fuzzy_edits=0))
-
-        fuzzy_variants = self._generate_fuzzy_variants(token)
-        for variant in fuzzy_variants[1:]:
-            if variant.token in mapping:
-                add(
-                    _MatchedPinyinKey(
-                        key=variant.token,
-                        match_type="fuzzy_exact",
-                        fuzzy_edits=variant.fuzzy_edits,
-                    )
-                )
-
-        if allow_prefix_after_exact or not matched_keys:
-            for variant in fuzzy_variants:
-                for key in mapping:
-                    if key.startswith(variant.token):
-                        add(
-                            _MatchedPinyinKey(
-                                key=key,
-                                match_type="prefix",
-                                fuzzy_edits=variant.fuzzy_edits,
-                                prefix_extra_chars=len(key) - len(variant.token),
-                            )
-                        )
-
-        return matched_keys
-
-    def _get_mapping(self, char_type: CharMatchType) -> PinyinCharMapping:
+    @staticmethod
+    def _normalize_text_for_char_type(
+        text: str,
+        *,
+        char_type: CharMatchType,
+        matcher_name: str,
+    ) -> str:
+        normalized_text = text.strip()
+        if not normalized_text:
+            return ""
         if char_type == "char":
-            return self._char_mapping
+            return normalize_single_han_char(normalized_text, matcher_name=matcher_name)
         if char_type == "surname":
-            return self._surname_mapping
+            if len(normalized_text) > 2:
+                raise ValueError(f"{matcher_name} 只支持 1 到 2 个汉字姓氏查询")
+            if not is_han_text(normalized_text):
+                raise ValueError(f"{matcher_name} 只支持 1 到 2 个汉字姓氏查询")
+            return normalized_text
         raise ValueError(f"不支持的 char_type: {char_type}")
+
+    async def preload(self) -> None:
+        """异步预加载所有匹配器数据与排序依赖，避免首次请求时的阻塞。
+
+        并行加载拼音和字形数据，避免首个请求触发懒加载。
+
+        建议在应用启动时调用，例如：
+
+            from pkg.chars_matcher import default_chars_matcher
+
+            async def lifespan(app: FastAPI):
+                await default_chars_matcher.preload()
+                yield
+
+        多次调用是安全的，后续调用会立即返回。
+        """
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(self._pinyin_chars_matcher.preload)
+            tg.start_soon(self._shape_chars_matcher.preload)
 
     def match_chars_by_pinyin(
         self,
         pinyin: str,
         *,
         char_type: CharMatchType = "char",
+        query_text: str | None = None,
     ) -> list[str]:
-        """根据拼音匹配普通汉字或姓氏候选字。"""
-        mapping = self._get_mapping(char_type)
-        tokens = self._split_pinyin_query(pinyin)
-        if not tokens:
+        """根据拼音匹配普通汉字或姓氏候选字。
+
+        ✅ **支持多字输入**：拼音可通过空格/逗号分隔多个 token（如 "li ming"）。
+
+        Args:
+            pinyin: 用户输入的拼音（支持多 token，如 "li" 或 "li ming"）
+            char_type: "char" 普通汉字，"surname" 姓氏
+            query_text: 原始查询文本，用于精确匹配加权
+
+        Returns:
+            排序后的候选字列表
+        """
+        return self._pinyin_chars_matcher.match_chars_by_pinyin(
+            pinyin,
+            char_type=char_type,
+            query_text=query_text,
+        )
+
+    def resolve_text_to_pinyin(
+        self,
+        text: str,
+        *,
+        char_type: CharMatchType = "char",
+    ) -> str:
+        """返回文本在当前匹配上下文中的首选展示拼音。"""
+        normalized_text = self._normalize_text_for_char_type(
+            text,
+            char_type=char_type,
+            matcher_name="chars matcher",
+        )
+        if not normalized_text:
+            return ""
+        return self._pinyin_chars_matcher.preferred_text_pinyin_key(
+            normalized_text,
+            char_type=char_type,
+        )
+
+    def _match_single_char_with_shape_boost(
+        self,
+        text: str,
+        *,
+        pinyin_candidates: list[str],
+    ) -> list[str]:
+        """单字候选融合策略：shape top-N 前置，其余保持拼音原序。
+
+        管道流程：
+        1. 用 heapq.nsmallest 从拼音候选中取字形最相似的前 N 个
+        2. 原字始终置顶，shape boost 紧随其后
+        3. 剩余候选保持拼音匹配器的原始排序
+        """
+        shape_top = self._shape_chars_matcher.top_n_by_shape(
+            text,
+            candidates=pinyin_candidates,
+            n=_SHAPE_BOOST_TOP_N,
+        )
+        # 合并：原字 > shape top-N > 剩余拼音候选（保持原序）
+        boosted: set[str] = set(shape_top)
+        boosted.add(text)
+        result = [text]
+        result.extend(shape_top)
+        result.extend(char for char in pinyin_candidates if char not in boosted)
+        return result
+
+    def match_surname_chars_by_text(self, text: str) -> list[str]:
+        """根据中文姓氏文本返回候选姓氏。
+
+        匹配策略：
+        - 单字姓（len==1）：先拼音匹配，再按字形相似度重排
+        - 多字姓（len==2）：只走 surname pinyin
+        """
+        normalized_text = self._normalize_text_for_char_type(
+            text,
+            char_type="surname",
+            matcher_name="surname matcher",
+        )
+        if not normalized_text:
             return []
 
-        ranked_candidates: dict[str, _RankedCandidate] = {}
-        first_seen = 0
-        allow_prefix_after_exact = char_type == "surname"
-        for token in tokens:
-            for matched_key in self._match_pinyin_keys(
-                token,
-                mapping,
-                allow_prefix_after_exact=allow_prefix_after_exact,
-            ):
-                for char in mapping.get(matched_key.key, []):
-                    first_seen += 1
-                    score = self._score_candidate(char=char, matched_key=matched_key)
-                    existing = ranked_candidates.get(char)
-                    if existing is None or score > existing.score:
-                        ranked_candidates[char] = _RankedCandidate(
-                            char=char,
-                            score=score,
-                            first_seen=first_seen,
-                        )
-
-        return [
-            candidate.char
-            for candidate in sorted(
-                ranked_candidates.values(),
-                key=lambda candidate: (-candidate.score, candidate.first_seen),
+        # 单字姓：shape + pinyin 合并匹配
+        if len(normalized_text) == 1:
+            pinyin_candidates = self._pinyin_chars_matcher.match_surname_chars_by_text(normalized_text)
+            return self._match_single_char_with_shape_boost(
+                normalized_text,
+                pinyin_candidates=pinyin_candidates,
             )
-        ]
 
-    def match_surname_chars_by_pinyin(self, pinyin: str) -> list[str]:
-        """根据姓氏拼音模糊匹配候选中文姓氏字符。"""
-        return self.match_chars_by_pinyin(pinyin, char_type="surname")
+        # 多字姓：只走拼音匹配
+        return self._pinyin_chars_matcher.match_surname_chars_by_text(normalized_text)
+
+    def match_chars_by_mix(
+        self,
+        text: str,
+        *,
+        pinyin: str | None = None,
+    ) -> list[str]:
+        """先拼音匹配，再用字形相似度 boost 前置，返回单字候选。
+
+        ⚠️ **限制**：仅支持单个汉字输入，不支持多字查询。
+
+        匹配策略：
+        1. 原字本身始终排在第一位
+        2. 拼音候选作为完整候选池
+        3. 对拼音候选按字形相似度排序，取 top-N 前置
+        4. 其余候选保持拼音匹配器的原始排序
+
+        适用场景：
+        - ASR 姓名输入补全
+        - 已知中文文本，想在同音候选里优先返回更像的字
+
+        Args:
+            text: 单个汉字查询（如 "李"）
+            pinyin: 可选拼音，用于拼音匹配补充；若未提供则自动转换
+
+        Returns:
+            去重后的候选字列表（按字形相似度排序）
+
+        Raises:
+            ValueError: 输入不是单个汉字
+        """
+        normalized_text = normalize_single_han_char(text, matcher_name="mix matcher")
+        if not normalized_text:
+            return []
+
+        resolved_pinyin = pinyin.strip() if pinyin is not None else ""
+        if resolved_pinyin:
+            pinyin_candidates = self._pinyin_chars_matcher.match_chars_by_pinyin(
+                resolved_pinyin,
+                query_text=normalized_text,
+            )
+        else:
+            pinyin_candidates = self._pinyin_chars_matcher.match_chars_by_text(
+                normalized_text,
+                char_type="char",
+            )
+        return self._match_single_char_with_shape_boost(
+            normalized_text,
+            pinyin_candidates=pinyin_candidates,
+        )
 
 
+# 默认全局单例，供模块级函数使用
 default_chars_matcher = CharsMatcher()
 
 
-def match_chars_by_pinyin(
-    pinyin: str,
-    *,
-    char_type: CharMatchType = "char",
-) -> list[str]:
-    """模块级普通汉字匹配入口。"""
-    return default_chars_matcher.match_chars_by_pinyin(
-        pinyin,
-        char_type=char_type,
-    )
+async def preload() -> None:
+    """模块级异步预加载入口。
 
+    预加载默认单例的所有数据，避免首次请求时的阻塞。
 
-def match_surname_chars_by_pinyin(pinyin: str) -> list[str]:
-    """模块级姓氏拼音匹配入口。"""
-    return default_chars_matcher.match_surname_chars_by_pinyin(pinyin)
+    建议在应用启动时调用：
+
+        from pkg.chars_matcher import preload
+
+        async def lifespan(app: FastAPI):
+            await preload()
+            yield
+
+    或者直接使用默认单例：
+
+        from pkg.chars_matcher import default_chars_matcher
+        await default_chars_matcher.preload()
+    """
+    await default_chars_matcher.preload()
 
 
 __all__ = [
     "CharMatchType",
     "CharsMatcher",
     "default_chars_matcher",
-    "match_chars_by_pinyin",
-    "match_surname_chars_by_pinyin",
+    "preload",
 ]
