@@ -448,8 +448,7 @@ async def execute_transaction(
         ```
     """
     try:
-        async with session_provider(autoflush=autoflush) as sess:
-            async with sess.begin():
-                await callback(sess)
+        async with session_provider(autoflush=autoflush) as sess, sess.begin():
+            await callback(sess)
     except Exception as e:
         raise RuntimeError(f"Transaction failed: {e}") from e
