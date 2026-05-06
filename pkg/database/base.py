@@ -4,8 +4,22 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Self
 
-from sqlalchemy import BigInteger, DateTime, Executable, Insert, Update, insert, inspect, update
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy import (
+    BigInteger,
+    DateTime,
+    Executable,
+    Insert,
+    Update,
+    insert,
+    inspect,
+    update,
+)
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.orm import DeclarativeBase, InstrumentedAttribute, Mapped, mapped_column
 
 from pkg.database.types import ColumnKey
@@ -43,7 +57,9 @@ def new_async_engine(
 
 
 def new_async_session_maker(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
-    return async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False, autoflush=True)
+    return async_sessionmaker(
+        bind=engine, class_=AsyncSession, expire_on_commit=False, autoflush=True
+    )
 
 
 class Base(DeclarativeBase):
@@ -71,8 +87,12 @@ class ModelMixin(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False))
 
     updater_id: Mapped[int | None] = mapped_column(BigInteger, default=None)
-    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), default=None)
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), default=None)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=False), default=None
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=False), default=None
+    )
 
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
@@ -161,7 +181,9 @@ class ModelMixin(Base):
     def build_soft_delete_stmt(self) -> Update | None:
         if not self.has_deleted_at_column():
             return None
-        return self.build_update_stmt(updates={self.deleted_at_column_name(): utc_now_naive()})
+        return self.build_update_stmt(
+            updates={self.deleted_at_column_name(): utc_now_naive()}
+        )
 
     def build_restore_stmt(self) -> Update | None:
         """[Soft Delete] 构造恢复已删除对象的 UPDATE 语句。"""
@@ -208,7 +230,9 @@ class ModelMixin(Base):
             data[self.updater_id_column_name()] = defaults.user_id
 
     @classmethod
-    def fill_dict_insert_fields(cls, raw_data: dict[str, Any], defaults: ContextDefaults) -> dict[str, Any]:
+    def fill_dict_insert_fields(
+        cls, raw_data: dict[str, Any], defaults: ContextDefaults
+    ) -> dict[str, Any]:
         """[Dict Insert] 补全字典插入所需的字段"""
         data = raw_data.copy()
 
@@ -218,7 +242,11 @@ class ModelMixin(Base):
         if "id" not in data:
             data["id"] = snowflake_id_generator.generate()
 
-        if cls.has_creator_id_column() and "creator_id" not in data and defaults.user_id:
+        if (
+            cls.has_creator_id_column()
+            and "creator_id" not in data
+            and defaults.user_id
+        ):
             data["creator_id"] = defaults.user_id
 
         if cls.has_updater_id_column() and "updater_id" not in data:
@@ -237,14 +265,15 @@ class ModelMixin(Base):
         return values
 
     @staticmethod
-    async def execute_stmt(stmt: Executable, session_provider: SessionProvider, error_context: str) -> None:
+    async def execute_stmt(
+        stmt: Executable, session_provider: SessionProvider, error_context: str
+    ) -> None:
         """
         统一执行 SQL 语句。
         """
         try:
-            async with session_provider() as sess:
-                async with sess.begin():
-                    await sess.execute(stmt)
+            async with session_provider() as sess, sess.begin():
+                await sess.execute(stmt)
         except Exception as e:
             raise RuntimeError(f"{error_context} failed: {e}") from e
 

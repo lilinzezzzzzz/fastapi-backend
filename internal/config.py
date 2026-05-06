@@ -8,7 +8,14 @@ from typing import Literal
 
 from dotenv import dotenv_values
 from loguru import logger
-from pydantic import MySQLDsn, PostgresDsn, RedisDsn, SecretStr, field_validator, model_validator
+from pydantic import (
+    MySQLDsn,
+    PostgresDsn,
+    RedisDsn,
+    SecretStr,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from internal import BASE_DIR
@@ -52,6 +59,10 @@ class Settings(BaseSettings):
 
     # --- CORS ---
     BACKEND_CORS_ORIGINS: list[str] = ["*"]
+
+    # --- 第三方登录 ---
+    WECHAT_APP_ID: str = ""
+    WECHAT_APP_SECRET: SecretStr = SecretStr("")
 
     # --- Database ---
     DB_TYPE: DBType  # 数据库类型: mysql, postgresql, oracle (必填)

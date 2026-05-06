@@ -11,7 +11,9 @@ router = APIRouter(prefix="/user", tags=["api user"])
 UserServiceDep = Annotated[UserService, Depends(new_user_service)]
 
 
-@router.get("/hello-world", response_model=BaseResponse[None], summary="用户 Hello World")
+@router.get(
+    "/hello-world", response_model=BaseResponse[None], summary="用户 Hello World"
+)
 async def hello_world(service: UserServiceDep):
     await service.hello_world()
     return success_response()

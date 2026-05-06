@@ -1,4 +1,7 @@
-from internal.dao.third_party_account import ThirdPartyAccountDao, new_third_party_account_dao
+from internal.dao.third_party_account import (
+    ThirdPartyAccountDao,
+    new_third_party_account_dao,
+)
 from internal.dao.user import UserDao, new_user_dao
 from internal.models.user import User
 from internal.utils.password import PasswordHandler
@@ -22,7 +25,8 @@ class UserService:
         """根据用户名查询用户"""
         return await self._user_dao.get_by_username(username)
 
-    async def verify_password(self, user: User, password: str) -> bool:
+    @staticmethod
+    async def verify_password(user: User, password: str) -> bool:
         """
         验证用户密码
 
@@ -38,7 +42,9 @@ class UserService:
 
         return PasswordHandler.verify_password(password, user.password_hash)
 
-    async def create_user(self, username: str, account: str, phone: str, password: str) -> User:
+    async def create_user(
+        self, username: str, account: str, phone: str, password: str
+    ) -> User:
         """
         创建新用户（带密码加密）
 
@@ -68,7 +74,9 @@ class UserService:
 
         return user
 
-    async def get_or_create_user_by_third_party(self, platform: str, third_party_info: ThirdPartyUserInfo) -> User:
+    async def get_or_create_user_by_third_party(
+        self, platform: str, third_party_info: ThirdPartyUserInfo
+    ) -> User:
         """
         根据第三方用户信息获取或创建用户
 
@@ -80,7 +88,9 @@ class UserService:
             User: 用户对象
         """
         # 查询第三方账号是否已存在
-        existing_account = await self._third_party_dao.get_by_platform_and_openid(platform, third_party_info.open_id)
+        existing_account = await self._third_party_dao.get_by_platform_and_openid(
+            platform, third_party_info.open_id
+        )
 
         # 如果账号已存在，返回关联的用户
         if existing_account:
@@ -90,7 +100,9 @@ class UserService:
             return user
 
         # 否则创建新用户并绑定第三方账号
-        username = third_party_info.nickname or f"{platform}_{third_party_info.open_id[:8]}"
+        username = (
+            third_party_info.nickname or f"{platform}_{third_party_info.open_id[:8]}"
+        )
 
         # 创建用户
         user = self._user_dao.create(
@@ -116,7 +128,9 @@ class UserService:
 
         return user
 
-    async def bind_third_party_account(self, user: User, platform: str, third_party_info: ThirdPartyUserInfo) -> None:
+    async def bind_third_party_account(
+        self, user: User, platform: str, third_party_info: ThirdPartyUserInfo
+    ) -> None:
         """
         将第三方账号绑定到现有用户
 
@@ -129,7 +143,9 @@ class UserService:
             ValueError: 当该第三方账号已被其他用户绑定时
         """
         # 检查该第三方账号是否已被绑定
-        existing_account = await self._third_party_dao.get_by_platform_and_openid(platform, third_party_info.open_id)
+        existing_account = await self._third_party_dao.get_by_platform_and_openid(
+            platform, third_party_info.open_id
+        )
 
         if existing_account and existing_account.user_id != user.id:
             raise ValueError(f"该{platform}账号已被其他用户绑定")

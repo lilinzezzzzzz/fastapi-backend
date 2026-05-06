@@ -36,7 +36,9 @@ class AuthCache:
 
         return orjson_loads(val)
 
-    async def set_user_metadata(self, token: str, metadata: dict, ex: int | None = None) -> bool:
+    async def set_user_metadata(
+        self, token: str, metadata: dict, ex: int | None = None
+    ) -> bool:
         """按 token 存储用户元数据。"""
         json_str = orjson_dumps(metadata)
         return await self._redis.set_value(self._token_key(token), json_str, ex=ex)
@@ -51,7 +53,9 @@ class AuthCache:
         """读取某用户的有效 token 列表。"""
         val = await self._redis.get_list(self._user_token_list_key(user_id))
         if not val:
-            logger.warning(f"Token verification failed: token list not found, user_id: {user_id}")
+            logger.warning(
+                f"Token verification failed: token list not found, user_id: {user_id}"
+            )
             return []
 
         return val
@@ -62,17 +66,24 @@ class AuthCache:
 
     async def remove_user_token(self, user_id: int, token: str) -> int:
         """从用户 token 列表移除指定 token。"""
-        return await self._redis.remove_from_list(self._user_token_list_key(user_id), token)
+        return await self._redis.remove_from_list(
+            self._user_token_list_key(user_id), token
+        )
 
     # ---------- 组合操作 ----------
 
-    async def save_user_session(self, user_id: int, token: str, metadata: dict, ex: int | None = None) -> None:
+    async def save_user_session(
+        self, user_id: int, token: str, metadata: dict, ex: int | None = None
+    ) -> None:
         """保存一次会话：写入 metadata 并把 token 追加到用户 token 列表。"""
         await self.set_user_metadata(token, metadata, ex=ex)
         await self.add_user_token(user_id, token)
 
     async def revoke_user_session(self, user_id: int, token: str) -> int:
-        """撤销一次会话：删除 metadata 并从用户 token 列表中移除。返回 metadata 删除数量。"""
+        """
+        撤销一次会话：
+        删除 metadata 并从用户 token 列表中移除。返回 metadata 删除数量。
+        """
         deleted = await self.delete_user_metadata(token)
         if deleted > 0:
             await self.remove_user_token(user_id, token)

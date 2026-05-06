@@ -50,7 +50,9 @@ def generate_token() -> str:
 UserServiceDep = Annotated[UserService, Depends(new_user_service)]
 
 
-@router.post("/login", response_model=BaseResponse[UserLoginRespSchema], summary="用户登录")
+@router.post(
+    "/login", response_model=BaseResponse[UserLoginRespSchema], summary="用户登录"
+)
 async def login(
     req: UserLoginReqSchema,
     user_service: UserServiceDep,
@@ -84,7 +86,9 @@ async def login(
     }
 
     # 存储 token 到 Redis 并加入用户 token 列表
-    await _auth_cache.save_user_session(user.id, token, user_metadata, ex=TOKEN_EXPIRE_MINUTES * 60)
+    await _auth_cache.save_user_session(
+        user.id, token, user_metadata, ex=TOKEN_EXPIRE_MINUTES * 60
+    )
 
     logger.info(f"User {user.id} logged in successfully, token: {token[:10]}...")
 
@@ -127,7 +131,9 @@ async def logout(authorization: str | None = Header(None)):
     return {"message": "登出成功"}
 
 
-@router.post("/register", response_model=BaseResponse[UserLoginRespSchema], summary="用户注册")
+@router.post(
+    "/register", response_model=BaseResponse[UserLoginRespSchema], summary="用户注册"
+)
 async def register(
     req: UserRegisterReqSchema,
     user_service: UserServiceDep,
@@ -154,18 +160,20 @@ async def register(
         # 构建用户元数据
         user_metadata = {
             "id": user.id,
-            "username": user.name,
+            "username": user.username,
             "phone": user.phone,
             "created_at": int(datetime.now(UTC).timestamp()),
         }
 
         # 存储 token 到 Redis 并加入用户 token 列表
-        await _auth_cache.save_user_session(user.id, token, user_metadata, ex=TOKEN_EXPIRE_MINUTES * 60)
+        await _auth_cache.save_user_session(
+            user.id, token, user_metadata, ex=TOKEN_EXPIRE_MINUTES * 60
+        )
 
         logger.info(f"User {user.id} registered successfully, token: {token[:10]}...")
 
         return UserLoginRespSchema(
-            user=UserDetailSchema(id=user.id, name=user.name, phone=user.phone),
+            user=UserDetailSchema(id=user.id, name=user.username, phone=user.phone),
             token=token,
         )
 
@@ -173,7 +181,7 @@ async def register(
         # 手机号已存在等错误
         raise AppException(errors.BadRequest, message=str(e)) from e
     except Exception as e:
-        raise AppException(errors.InternalError, message="注册失败，请稍后重试") from e
+        raise AppException(errors.InternalServerError, message="注册失败，请稍后重试") from e
 
 
 @router.get("/me", response_model=UserDetailSchema, summary="获取当前用户信息")
@@ -205,7 +213,11 @@ async def get_current_user():
     return UserDetailSchema(id=user_id, name="unknown", phone="")
 
 
-@router.post("/wechat/login", response_model=BaseResponse[UserLoginRespSchema], summary="微信登录")
+@router.post(
+    "/wechat/login",
+    response_model=BaseResponse[UserLoginRespSchema],
+    summary="微信登录",
+)
 async def wechat_login(
     req: WeChatLoginReqSchema,
     user_service: UserServiceDep,
@@ -224,7 +236,7 @@ async def wechat_login(
     strategy = WeChatAuthStrategy(
         config=WeChatConfig(
             app_id=settings.WECHAT_APP_ID,
-            app_secret=settings.WECHAT_APP_SECRET,
+            app_secret=settings.WECHAT_APP_SECRET.get_secret_value(),
         )
     )
 
@@ -253,7 +265,7 @@ async def wechat_login(
         # 构建用户元数据
         user_metadata = {
             "id": user.id,
-            "username": user.name,
+            "username": user.username,
             "phone": user.phone,
             "created_at": int(datetime.now(UTC).timestamp()),
         }
@@ -269,7 +281,7 @@ async def wechat_login(
         logger.info(f"WeChat user {user.id} logged in successfully, openid: {openid}")
 
         return UserLoginRespSchema(
-            user=UserDetailSchema(id=user.id, name=user.name, phone=user.phone),
+            user=UserDetailSchema(id=user.id, name=user.username, phone=user.phone),
             token=token,
         )
 
@@ -278,7 +290,9 @@ async def wechat_login(
         raise AppException(errors.BadRequest, message=str(e)) from e
     except Exception as e:
         logger.error(f"WeChat login unexpected error: {e}")
-        raise AppException(errors.InternalError, message="微信登录失败，请稍后重试") from e
+        raise AppException(
+            errors.InternalServerError, message="微信登录失败，请稍后重试"
+        ) from e
     finally:
         # 关闭策略资源
         await strategy.close()

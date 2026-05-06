@@ -15,7 +15,7 @@ class UserRegisterReqSchema(BaseModel):
 
     username: str = Field(..., description="用户名", min_length=1, max_length=50)
     password: str = Field(..., description="密码", min_length=6, max_length=100)
-    phone: str | None = Field(None, description="手机号", pattern=r"^1[3-9]\d{9}$")
+    phone: str = Field(..., description="手机号", pattern=r"^1[3-9]\d{9}$")
 
 
 class ThirdPartyLoginReqSchema(BaseModel):

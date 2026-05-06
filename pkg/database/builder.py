@@ -100,7 +100,9 @@ class BaseBuilder[T: ModelMixin]:
         return self.where(or_(*conditions)) if conditions else self
 
     def _apply_delete_at_is_none(self) -> None:
-        if deleted_column := self._model_cls.get_column_or_none(self._model_cls.deleted_at_column_name()):
+        if deleted_column := self._model_cls.get_column_or_none(
+            self._model_cls.deleted_at_column_name()
+        ):
             self._stmt = self.stmt.where(deleted_column.is_(None))
 
 
@@ -160,7 +162,9 @@ class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
                 await sess.commit()
                 return cast(list[T], result.scalars().all())
         except Exception as e:
-            raise RuntimeError(f"Error when querying all data, {self._model_cls.__name__}: {e}") from e
+            raise RuntimeError(
+                f"Error when querying all data, {self._model_cls.__name__}: {e}"
+            ) from e
 
     async def first(self) -> T | None:
         try:
@@ -169,7 +173,9 @@ class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
                 await sess.commit()
                 return result.scalars().first()
         except Exception as e:
-            raise RuntimeError(f"Error when querying first data, {self._model_cls.__name__}: {e}") from e
+            raise RuntimeError(
+                f"Error when querying first data, {self._model_cls.__name__}: {e}"
+            ) from e
 
     async def values(self) -> list[tuple]:
         """返回列查询的元组列表
@@ -196,7 +202,9 @@ class QueryBuilder[T: ModelMixin](BaseBuilder[T]):
                 await sess.commit()
                 return cast(list[tuple], result.all())
         except Exception as e:
-            raise RuntimeError(f"Error when querying values, {self._model_cls.__name__}: {e}") from e
+            raise RuntimeError(
+                f"Error when querying values, {self._model_cls.__name__}: {e}"
+            ) from e
 
     async def exists(self) -> bool:
         """Check if any record matches the current query conditions
@@ -243,7 +251,9 @@ class CountBuilder[T: ModelMixin](BaseBuilder[T]):
                 await sess.commit()
                 return total if total is not None else 0
         except Exception as e:
-            raise RuntimeError(f"Error when querying count data, {self._model_cls.__name__}: {e}") from e
+            raise RuntimeError(
+                f"Error when querying count data, {self._model_cls.__name__}: {e}"
+            ) from e
 
 
 class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
@@ -258,7 +268,9 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
         if model_cls is None and model_ins is None:
             raise ValueError("UpdateBuilder requires either model_cls or model_ins")
 
-        target_cls: type[T] = model_cls if model_cls is not None else cast(type[T], model_ins.__class__)
+        target_cls: type[T] = (
+            model_cls if model_cls is not None else cast(type[T], model_ins.__class__)
+        )
         super().__init__(target_cls, session_provider=session_provider)
         self._stmt = update(self._model_cls)
         self._update_dict = {}
@@ -279,7 +291,9 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
             column_name = self._model_cls.normalize_update_column_name(key)
 
             if not self._model_cls.has_column(column_name):
-                logger.warning(f"{column_name} is not a {self._model_cls.__name__} column")
+                logger.warning(
+                    f"{column_name} is not a {self._model_cls.__name__} column"
+                )
                 continue
 
             if isinstance(value, datetime) and value.tzinfo:
@@ -291,7 +305,9 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
 
     def soft_delete(self) -> Self:
         if self._model_cls.has_deleted_at_column():
-            self._update_dict[self._model_cls.deleted_at_column_name()] = utc_now_naive()
+            self._update_dict[self._model_cls.deleted_at_column_name()] = (
+                utc_now_naive()
+            )
 
         return self
 
@@ -324,7 +340,9 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
         # 自动同步更新字典到模型实例
         self._sync_update_dict_to_instance()
 
-        return self._update_stmt.values(**self._update_dict).execution_options(synchronize_session=False)
+        return self._update_stmt.values(**self._update_dict).execution_options(
+            synchronize_session=False
+        )
 
     async def execute(self):
         if not self._update_dict:
@@ -335,7 +353,9 @@ class UpdateBuilder[T: ModelMixin](BaseBuilder[T]):
                 await sess.execute(self.update_stmt)
                 await sess.commit()
         except Exception as e:
-            raise RuntimeError(f"Error when updating data, {self._model_cls.__name__}: {e}") from e
+            raise RuntimeError(
+                f"Error when updating data, {self._model_cls.__name__}: {e}"
+            ) from e
 
     def _sync_update_dict_to_instance(self) -> None:
         """将更新字典同步到模型实例
