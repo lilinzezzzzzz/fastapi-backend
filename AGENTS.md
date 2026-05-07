@@ -1,6 +1,6 @@
 # AGENTS.md
 
-本文件适用于整个仓库，定位为**项目特定约束**，补充全局 `~/.qoder/AGENTS.md` 中的通用工程规范。全局文件已覆盖的内容（如 Execution Protocol、Engineering Standards、Python 编码通用规则、测试金字塔、调度/执行規则）不再在本文件重复。更深层目录的 `AGENTS.md` 以更深说明为准。
+本文件适用于整个仓库，定位为**项目特定约束**
 
 ## 项目概览
 
