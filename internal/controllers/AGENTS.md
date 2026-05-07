@@ -21,6 +21,13 @@
 - 业务错误使用 `internal.core.AppException` 和 `internal.core.errors`。
 - 路由 prefix、tags、summary 要与现有风格一致。
 - 新增公开接口时确认认证中间件白名单或路由前缀是否符合预期。
+- 每个 Router 方法必须编写详细的 docstring，按固定结构组织，便于生成 OpenAPI 描述与人工 review：
+  - **业务摘要**：一句话描述该接口完成的业务动作（动词开头，避免技术实现细节）。
+  - **权限边界**：说明认证要求（匿名 / 普通 token / 内部签名）、所需角色或资源归属校验（如仅本人、仅管理员、仅租户成员）。
+  - **业务边界**：说明该接口的副作用范围、幂等性、对外部系统（DB、Redis、Celery、第三方）的影响，以及明确**不**承担的职责。
+  - **Args**：列出路径参数、查询参数、请求体字段与依赖项，逐项说明含义、取值范围与必填性。
+  - **Returns**：说明成功响应的数据结构（引用对应 schema）以及主要错误码（对应 `internal.core.errors`）。
+- 业务逻辑、参数、返回结构、权限规则、错误码或副作用发生变动时，必须在同一次改动中同步更新对应 Router 的 `summary` 与 docstring（业务摘要 / 权限边界 / 业务边界 / Args / Returns），保持代码与 OpenAPI 描述一致，禁止让 docstring 滞后于实现。
 
 ## 代码最小正确形态
 
@@ -50,6 +57,27 @@ async def get_user(
     user_id: int,
     user_service: UserServiceDep,
 ) -> CustomORJSONResponse:
+    """获取指定用户的详情信息。
+
+    业务摘要:
+        根据 user_id 查询单个用户的基础信息与展示字段，用于个人主页等场景。
+
+    权限边界:
+        需要有效的用户 token（`/v1` 前缀默认认证）；仅允许查询本人或公开可见的用户资料，
+        非本人且非公开字段由 Service 层过滤。
+
+    业务边界:
+        只读接口，无写副作用；仅读取用户主表与必要缓存，不触发第三方同步，
+        不承担鉴权决策以外的权限下发。
+
+    Args:
+        user_id: 目标用户的唯一 ID，路径参数，必填，正整数。
+        user_service: 通过依赖注入获取的 `UserService` 实例。
+
+    Returns:
+        `BaseResponse[UserDetailSchema]`：成功时返回用户详情；
+        用户不存在返回 `errors.USER_NOT_FOUND`，无权限返回 `errors.PERMISSION_DENIED`。
+    """
     user = await user_service.get_user_detail(user_id=user_id)
     return success_response(data=user)
 ```
@@ -62,6 +90,7 @@ async def get_user(
 - 调用一个明确的 Service 方法完成用例，Service 返回业务数据，Controller 负责通过 `success_response` / `success_list_response` / `error_response` 包装响应。
 - 直接返回响应工厂函数生成的 `CustomORJSONResponse`，不要手动构造 `BaseResponse` 实例。
 - 需要当前用户时只读取上下文，不自行校验 token。
+- 必须提供完整 docstring，至少包含 **业务摘要 / 权限边界 / 业务边界 / Args / Returns** 五个小节，缺一不可。
 
 ## 禁止事项
 
